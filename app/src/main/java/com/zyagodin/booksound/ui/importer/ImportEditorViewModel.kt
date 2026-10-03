@@ -15,6 +15,7 @@ import com.zyagodin.booksound.core.organize.ConversionStrategy
 import com.zyagodin.booksound.core.organize.NameField
 import com.zyagodin.booksound.core.organize.NameTemplate
 import com.zyagodin.booksound.core.torrent.AudiobookLayout
+import com.zyagodin.booksound.cover.CoverSearchRepository
 import com.zyagodin.booksound.cover.CoverSearchResult
 import com.zyagodin.booksound.cover.OnlineCover
 import com.zyagodin.booksound.data.settings.AppSettings
@@ -337,7 +338,7 @@ class ImportEditorViewModel(
         s.online.value = OnlineCoverState.Loading
         viewModelScope.launch {
             s.online.value = when (val r = container.coverSearch.search(title, author, series)) {
-                is CoverSearchResult.Found -> OnlineCoverState.Results(listOfNotNull(title, author).joinToString(" "), r.covers)
+                is CoverSearchResult.Found -> OnlineCoverState.Results(listOfNotNull(CoverSearchRepository.withSeries(title, series), author).joinToString(" "), r.covers)
                 CoverSearchResult.Offline -> OnlineCoverState.Offline
                 CoverSearchResult.Failed -> OnlineCoverState.Failed
             }

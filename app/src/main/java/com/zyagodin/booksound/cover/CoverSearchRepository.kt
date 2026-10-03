@@ -46,8 +46,9 @@ sealed interface CoverSearchResult {
  * Finds cover images for a query. Web image search (Yandex, Bing, DuckDuckGo) comes first, like a
  * regular image search; book catalogues (Apple, LitRes, Open Library) follow. Each source is
  * queried in parallel and a failing source does not hide results from the others. A book in a
- * series is also searched by series name (the series' covers often share one design), after the
- * title results. When nothing is found with the author, the queries are tried without it.
+ * series is searched as "series title" first (a volume title like "Childhood — Home Tutor" means
+ * little on its own), then by its title alone. When nothing is found with the author, the
+ * queries are tried without it.
  *
  * Google Books is only used with an API key: without one its quota is zero.
  */
@@ -57,7 +58,7 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
     suspend fun search(title: String, author: String?, series: String? = null): CoverSearchResult = withContext(Dispatchers.IO) {
         val cleanTitle = cleanQuery(title)
         val cleanAuthor = author?.let(::cleanQuery)?.takeIf { it.isNotEmpty() }
-        val cleanSeries = series?.let(::cleanQuery)?.takeIf { it.isNotEmpty() && !it.equals(cleanTitle, ignoreCase = true) }
+        val cleanSeries = series?.let(::cleanQuery)?.takeIf { withSeries(cleanTitle, it) != cleanTitle }
         if (cleanTitle.isEmpty()) return@withContext CoverSearchResult.Found(emptyList())
         val first = searchWithSeries(cleanTitle, cleanAuthor, cleanSeries)
         if (first is CoverSearchResult.Found && first.covers.isEmpty() && cleanAuthor != null) {
@@ -67,20 +68,20 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
         }
     }
 
-    /** Title (+ author) and, for a book in a series, series (+ author), side by side. */
+    /** For a book in a series: "series title" (+ author) first, then the title alone, side by side. */
     private suspend fun searchWithSeries(title: String, author: String?, series: String?): CoverSearchResult {
         if (series == null) return searchOnce(title, author)
-        val (byTitle, bySeries) = coroutineScope {
+        val (full, titleOnly) = coroutineScope {
+            val f = async { searchOnce(withSeries(title, series), author) }
             val t = async { searchOnce(title, author) }
-            val s = async { searchOnce(series, author) }
-            t.await() to s.await()
+            f.await() to t.await()
         }
-        if (byTitle !is CoverSearchResult.Found && bySeries !is CoverSearchResult.Found) return byTitle
-        val titled = (byTitle as? CoverSearchResult.Found)?.covers.orEmpty()
-        val serial = (bySeries as? CoverSearchResult.Found)?.covers.orEmpty()
-        // Title matches lead; series matches come before the long tail of title matches.
-        val head = titled.take(MAX_RESULTS * 2 / 3)
-        return CoverSearchResult.Found((head + serial + titled.drop(head.size)).distinctBy { it.fullUrl }.take(MAX_RESULTS))
+        if (full !is CoverSearchResult.Found && titleOnly !is CoverSearchResult.Found) return full
+        val first = (full as? CoverSearchResult.Found)?.covers.orEmpty()
+        val second = (titleOnly as? CoverSearchResult.Found)?.covers.orEmpty()
+        // "Series title" matches lead; title-only matches come before their long tail.
+        val head = first.take(MAX_RESULTS * 2 / 3)
+        return CoverSearchResult.Found((head + second + first.drop(head.size)).distinctBy { it.fullUrl }.take(MAX_RESULTS))
     }
 
     private suspend fun searchOnce(title: String, author: String?): CoverSearchResult {
@@ -292,6 +293,16 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
     }
 
     companion object {
+        /**
+         * "Series Title" for a volume of a series, so that "Childhood — Home Tutor" is searched
+         * as "Mushoku Tensei Childhood — Home Tutor"; the title alone when it already names the
+         * series or there is none.
+         */
+        fun withSeries(title: String, series: String?): String {
+            val s = series?.trim().orEmpty()
+            return if (s.isEmpty() || title.contains(s, ignoreCase = true)) title else "$s $title"
+        }
+
         /** Drops bracketed noise ("(Unabridged)", "[MP3]") that makes catalogue searches miss. */
         fun cleanQuery(text: String): String = text
             .replace(Regex("""[(\[{][^)\]}]*[)\]}]"""), " ")

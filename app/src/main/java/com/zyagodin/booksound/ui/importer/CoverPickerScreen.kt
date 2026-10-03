@@ -73,6 +73,7 @@ import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.organize.CoverCandidate
 import com.zyagodin.booksound.core.organize.CoverOrigin
 import com.zyagodin.booksound.cover.CoverImages
+import com.zyagodin.booksound.cover.CoverSearchRepository
 import com.zyagodin.booksound.cover.CoverSearchResult
 import com.zyagodin.booksound.cover.OnlineCover
 import com.zyagodin.booksound.cover.SquareCrop
@@ -110,14 +111,17 @@ class CoverPickerViewModel(private val container: AppContainer, sessionId: Strin
     val selected: StateFlow<SelectedCover?> = session?.cover ?: MutableStateFlow(null)
     val downloading = MutableStateFlow<String?>(null)
 
-    val initialQuery: String = session?.form?.value?.let { listOf(it.title, it.author).filter { s -> s.isNotBlank() }.joinToString(" ") }.orEmpty()
+    /** "Series Title Author": a volume title alone often finds nothing useful. */
+    val initialQuery: String = session?.form?.value
+        ?.let { listOf(CoverSearchRepository.withSeries(it.title, it.series), it.author).filter { s -> s.isNotBlank() }.joinToString(" ") }
+        .orEmpty()
 
     fun search(query: String) {
         val s = session ?: return
         if (query.isBlank()) return
         s.online.value = OnlineCoverState.Loading
-        // The suggested "title author" query also searches by the book's series; a query the
-        // user typed is searched as typed.
+        // The suggested "series title author" query is searched in its parts (also by title
+        // alone); a query the user typed is searched as typed.
         val form = s.form.value
         val suggested = query.trim() == initialQuery.trim()
         viewModelScope.launch {
