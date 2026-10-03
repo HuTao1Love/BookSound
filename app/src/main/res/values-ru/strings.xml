@@ -421,4 +421,9 @@
         <item quantity="many">%1$d торрентов</item>
         <item quantity="other">%1$d торрента</item>
     </plurals>
+
+    <!-- Обрезка обложки -->
+    <string name="crop_title">Обрезка до квадрата</string>
+    <string name="crop_hint">Двигайте и масштабируйте двумя пальцами</string>
+    <string name="action_done">Готово</string>
 </resources>

@@ -70,4 +70,32 @@ class CoverSearchParsingTest {
         assertEquals("https://www.litres.ru/pub/c/cover_max1500/123.jpg", covers[0].fullUrl)
         assertEquals("Сергей Лукьяненко", covers[0].author)
     }
+
+    @Test
+    fun `bing image results`() {
+        val html = """
+            <ul><li><div class="imgpt"><a class="iusc" style="height:180px" m="{&quot;cid&quot;:&quot;x1&quot;,&quot;purl&quot;:&quot;https://hedgehog.example/book&quot;,&quot;murl&quot;:&quot;https://hedgehog.example/img/cover.jpg?a=1&amp;b=2&quot;,&quot;turl&quot;:&quot;https://tse2.mm.bing.net/th?id=OIP.abc&amp;pid=Api&quot;,&quot;t&quot;:&quot;Детство - Домашний учитель&quot;}" href="/images/search?view=detailV2"></a></div></li>
+            <li><a class="iusc" m='{"murl":"https://ruli.example/2.webp","turl":"https://tse1.mm.bing.net/th?id=OIP.def"}'></a></li>
+            <li><a class="iusc" m="{&quot;purl&quot;:&quot;https://no.image/&quot;}"></a></li></ul>
+        """
+        val covers = CoverSearchRepository.parseBing(html)
+        assertEquals(2, covers.size)
+        assertEquals("https://hedgehog.example/img/cover.jpg?a=1&b=2", covers[0].fullUrl)
+        assertEquals("https://tse2.mm.bing.net/th?id=OIP.abc&pid=Api", covers[0].thumbnailUrl)
+        assertEquals("Детство - Домашний учитель", covers[0].title)
+        assertTrue(covers.all { it.fromWeb })
+        assertEquals("https://ruli.example/2.webp", covers[1].fullUrl)
+    }
+
+    @Test
+    fun `duckduckgo token and results`() {
+        assertEquals("4-123456789012345678901234567890", CoverSearchRepository.parseDuckDuckGoToken("""<script>vqd="4-123456789012345678901234567890";</script>"""))
+        assertEquals("4-98765_abc", CoverSearchRepository.parseDuckDuckGoToken("""nrj('/d.js?q=x&vqd=4-98765_abc&p=1')"""))
+        val covers = CoverSearchRepository.parseDuckDuckGo(
+            parse("""{"results":[{"image":"https://site.example/full.png","thumbnail":"https://tse4.mm.bing.net/th?id=1","title":"Cover"},{"title":"no image"}]}"""),
+        )
+        assertEquals(1, covers.size)
+        assertEquals("https://tse4.mm.bing.net/th?id=1", covers[0].thumbnailUrl)
+        assertEquals("DuckDuckGo", covers[0].source)
+    }
 }

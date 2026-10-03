@@ -417,4 +417,9 @@
         <item quantity="one">%1$d torrent</item>
         <item quantity="other">%1$d torrents</item>
     </plurals>
+
+    <!-- Cover crop -->
+    <string name="crop_title">Crop to a square</string>
+    <string name="crop_hint">Drag and pinch to fit the cover</string>
+    <string name="action_done">Done</string>
 </resources>

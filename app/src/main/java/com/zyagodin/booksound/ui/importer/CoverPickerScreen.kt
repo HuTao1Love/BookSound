@@ -1,6 +1,5 @@
 package com.zyagodin.booksound.ui.importer
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -70,11 +69,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.organize.CoverCandidate
 import com.zyagodin.booksound.core.organize.CoverOrigin
 import com.zyagodin.booksound.cover.CoverImages
 import com.zyagodin.booksound.cover.CoverSearchResult
 import com.zyagodin.booksound.cover.OnlineCover
+import com.zyagodin.booksound.cover.SquareCrop
 import com.zyagodin.booksound.importer.OnlineCoverState
 import com.zyagodin.booksound.importer.SelectedCover
 import com.zyagodin.booksound.ui.AppNavigator
@@ -132,31 +133,37 @@ class CoverPickerViewModel(private val container: AppContainer, sessionId: Strin
         }
     }
 
-    fun chooseOnline(cover: OnlineCover, onResult: (Boolean) -> Unit) {
-        val s = session ?: return
+    /** Downloads an online result; the screen crops it to a square if needed, then calls [useCover]. */
+    fun downloadOnline(cover: OnlineCover, onResult: (EmbeddedPicture?) -> Unit) {
         viewModelScope.launch {
             downloading.value = cover.fullUrl
             val picture = container.coverSearch.download(cover)
             downloading.value = null
-            if (picture != null) {
-                val file = withContext(Dispatchers.IO) { container.covers.draftFile(s.id, picture) }
-                s.cover.value = SelectedCover(picture, file, CoverCandidate(picture, CoverOrigin.ONLINE, cover.source))
-            }
-            onResult(picture != null)
+            onResult(picture)
         }
     }
 
-    fun chooseFromDevice(context: Context, uri: Uri, onResult: (Boolean) -> Unit) {
-        val s = session ?: return
+    /**
+     * Reads a picture from the gallery. Square pictures are normalized right away; others are
+     * returned as they are so the crop works on the full resolution.
+     */
+    fun readFromDevice(uri: Uri, onResult: (EmbeddedPicture?) -> Unit) {
         viewModelScope.launch {
             val picture = withContext(Dispatchers.IO) {
-                container.documents.readBytes(uri, 25 * 1024 * 1024)?.let { CoverImages.normalize(it) }
+                val bytes = container.documents.readBytes(uri, 25 * 1024 * 1024) ?: return@withContext null
+                val (w, h) = CoverImages.dimensions(bytes) ?: return@withContext null
+                if (SquareCrop.isSquare(w, h)) CoverImages.normalize(bytes)
+                else EmbeddedPicture(bytes, EmbeddedPicture.sniffMimeType(bytes) ?: "image/jpeg")
             }
-            if (picture != null) {
-                val file = withContext(Dispatchers.IO) { container.covers.draftFile(s.id, picture) }
-                s.cover.value = SelectedCover(picture, file, CoverCandidate(picture, CoverOrigin.USER, context.getString(R.string.cover_from_device)))
-            }
-            onResult(picture != null)
+            onResult(picture)
+        }
+    }
+
+    fun useCover(picture: EmbeddedPicture, origin: CoverOrigin, label: String) {
+        val s = session ?: return
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) { container.covers.draftFile(s.id, picture) }
+            s.cover.value = SelectedCover(picture, file, CoverCandidate(picture, origin, label))
         }
     }
 
@@ -178,12 +185,36 @@ fun CoverPickerScreen(sessionId: String, navigator: AppNavigator) {
     var query by rememberSaveable { mutableStateOf(vm.initialQuery) }
     val focus = LocalFocusManager.current
 
+    var cropping by remember { mutableStateOf<PendingCover?>(null) }
+
+    /** Uses the picture, asking for a square crop first when it isn't square. */
+    fun offer(picture: EmbeddedPicture, origin: CoverOrigin, label: String) {
+        if (needsCrop(picture)) {
+            cropping = PendingCover(picture, origin, label)
+        } else {
+            vm.useCover(picture, origin, label)
+            navigator.back()
+        }
+    }
+
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            vm.chooseFromDevice(context, uri) { ok ->
-                if (ok) navigator.back() else scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_invalid_image)) }
+            vm.readFromDevice(uri) { picture ->
+                if (picture != null) offer(picture, CoverOrigin.USER, context.getString(R.string.cover_from_device))
+                else scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_invalid_image)) }
             }
         }
+    }
+    cropping?.let { pending ->
+        SquareCropDialog(
+            picture = pending.picture,
+            onCropped = { cropped ->
+                cropping = null
+                vm.useCover(cropped, pending.origin, pending.label)
+                navigator.back()
+            },
+            onDismiss = { cropping = null },
+        )
     }
 
     Scaffold(
@@ -300,8 +331,9 @@ fun CoverPickerScreen(sessionId: String, navigator: AppNavigator) {
                             busy = downloading == cover.fullUrl,
                             onClick = {
                                 if (downloading == null) {
-                                    vm.chooseOnline(cover) { ok ->
-                                        if (ok) navigator.back() else scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_download_failed)) }
+                                    vm.downloadOnline(cover) { picture ->
+                                        if (picture != null) offer(picture, CoverOrigin.ONLINE, cover.source)
+                                        else scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_download_failed)) }
                                     }
                                 }
                             },
@@ -312,6 +344,9 @@ fun CoverPickerScreen(sessionId: String, navigator: AppNavigator) {
         }
     }
 }
+
+/** A picture waiting for the user to crop it to a square. */
+private class PendingCover(val picture: EmbeddedPicture, val origin: CoverOrigin, val label: String)
 
 private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }

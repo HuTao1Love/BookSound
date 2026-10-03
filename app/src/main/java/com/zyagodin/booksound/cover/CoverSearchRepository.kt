@@ -32,6 +32,8 @@ data class OnlineCover(
     val source: String,
     val title: String?,
     val author: String?,
+    /** Found by web image search (any website) rather than in a book catalogue. */
+    val fromWeb: Boolean = false,
 )
 
 sealed interface CoverSearchResult {
@@ -41,9 +43,10 @@ sealed interface CoverSearchResult {
 }
 
 /**
- * Searches public book catalogues. Each source is queried in parallel; a failing source does not
- * hide results from the others. When nothing is found for title + author (authors are often
- * spelled differently in catalogues), the title alone is tried.
+ * Finds cover images for a query. Web image search (Bing, DuckDuckGo) comes first, like a regular
+ * image search; book catalogues (Apple, LitRes, Open Library) follow. Each source is queried in
+ * parallel and a failing source does not hide results from the others. When nothing is found for
+ * title + author, the title alone is tried.
  *
  * Google Books is only used with an API key: without one its quota is zero.
  */
@@ -66,7 +69,11 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
         val query = listOfNotNull(title, author).joinToString(" ")
         val country = Locale.getDefault().country.takeIf { it.length == 2 } ?: "US"
         val networkErrors = java.util.concurrent.atomic.AtomicInteger()
-        val sources = buildList<suspend () -> List<OnlineCover>> {
+        val web = listOf<suspend () -> List<OnlineCover>>(
+            { bingImages(query) },
+            { duckDuckGoImages(query) },
+        )
+        val catalogues = buildList<suspend () -> List<OnlineCover>> {
             add { itunes(query, country, "audiobook") }
             if (country != "US") add { itunes(query, "US", "audiobook") }
             add { litres(query) }
@@ -75,40 +82,94 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
             add { itunes(query, country, "ebook") }
             if (googleBooksApiKey.isNotBlank()) add { googleBooks(title, author) }
         }
-        val results = coroutineScope {
-            sources.map { source ->
-                async {
-                    try {
-                        source()
-                    } catch (e: IOException) {
-                        networkErrors.incrementAndGet()
-                        Log.i(TAG, "Cover source failed: ${e.message}")
-                        emptyList()
-                    } catch (e: RuntimeException) {
-                        Log.w(TAG, "Cover source returned unexpected data", e)
-                        emptyList()
-                    }
-                }
-            }.awaitAll()
+        val (webResults, catalogueResults) = coroutineScope {
+            val w = web.map { async { runSource(it, networkErrors) } }
+            val c = catalogues.map { async { runSource(it, networkErrors) } }
+            w.awaitAll() to c.awaitAll()
         }
-        // Interleave sources so the first screen shows variety, then drop duplicates.
-        val merged = mutableListOf<OnlineCover>()
-        val maxLen = results.maxOfOrNull { it.size } ?: 0
-        for (i in 0 until maxLen) for (list in results) list.getOrNull(i)?.let { merged += it }
-        val unique = merged.distinctBy { it.fullUrl }
+        val unique = (interleave(webResults) + interleave(catalogueResults)).distinctBy { it.fullUrl }
         return when {
             unique.isNotEmpty() -> CoverSearchResult.Found(unique.take(MAX_RESULTS))
-            networkErrors.get() == sources.size -> CoverSearchResult.Offline
+            networkErrors.get() == web.size + catalogues.size -> CoverSearchResult.Offline
             else -> CoverSearchResult.Found(emptyList())
         }
     }
 
-    /** Downloads and validates an image; returns null if it is not a usable picture. */
+    private suspend fun runSource(source: suspend () -> List<OnlineCover>, networkErrors: java.util.concurrent.atomic.AtomicInteger): List<OnlineCover> =
+        try {
+            source()
+        } catch (e: IOException) {
+            networkErrors.incrementAndGet()
+            Log.i(TAG, "Cover source failed: ${e.message}")
+            emptyList()
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Cover source returned unexpected data", e)
+            emptyList()
+        }
+
+    /** Takes results from each source in turn so the first screen shows variety. */
+    private fun interleave(lists: List<List<OnlineCover>>): List<OnlineCover> {
+        val merged = mutableListOf<OnlineCover>()
+        val maxLen = lists.maxOfOrNull { it.size } ?: 0
+        for (i in 0 until maxLen) for (list in lists) list.getOrNull(i)?.let { merged += it }
+        return merged
+    }
+
+    /**
+     * Downloads and validates an image; returns null if it is not a usable picture. Web results
+     * often point to sites that refuse direct downloads or use plain http; the search engine's
+     * own thumbnail is used then.
+     */
     suspend fun download(cover: OnlineCover): EmbeddedPicture? = withContext(Dispatchers.IO) {
-        val bytes = get(cover.fullUrl)?.takeIf { it.size in 1..MAX_IMAGE_BYTES }
-            ?: get(cover.thumbnailUrl)
-            ?: return@withContext null
-        CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }
+        val candidates = listOfNotNull(
+            cover.fullUrl,
+            cover.fullUrl.takeIf { it.startsWith("http://") }?.replaceFirst("http://", "https://"),
+            cover.thumbnailUrl,
+        ).distinct()
+        for (url in candidates) {
+            val bytes = try {
+                get(url, browser = cover.fromWeb)
+            } catch (e: IOException) {
+                Log.i(TAG, "Image download failed: ${e.message}")
+                null
+            } ?: continue
+            CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }?.let { return@withContext it }
+        }
+        null
+    }
+
+    private suspend fun bingImages(query: String): List<OnlineCover> {
+        val url = "https://www.bing.com/images/async".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("first", "0")
+            .addQueryParameter("count", "35")
+            .addQueryParameter("mmasync", "1")
+            .addQueryParameter("adlt", "moderate")
+            .build()
+        val html = get(url.toString(), browser = true)?.decodeToString() ?: return emptyList()
+        return parseBing(html)
+    }
+
+    /** DuckDuckGo needs a per-query token ("vqd") from its search page before the image API answers. */
+    private suspend fun duckDuckGoImages(query: String): List<OnlineCover> {
+        val page = "https://duckduckgo.com/".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("iax", "images")
+            .addQueryParameter("ia", "images")
+            .build()
+        val html = get(page.toString(), browser = true)?.decodeToString() ?: return emptyList()
+        val vqd = parseDuckDuckGoToken(html) ?: return emptyList()
+        val api = "https://duckduckgo.com/i.js".toHttpUrl().newBuilder()
+            .addQueryParameter("l", if (Locale.getDefault().language == "ru") "ru-ru" else "wt-wt")
+            .addQueryParameter("o", "json")
+            .addQueryParameter("q", query)
+            .addQueryParameter("vqd", vqd)
+            .addQueryParameter("f", ",,,,,")
+            .addQueryParameter("p", "1")
+            .build()
+        val body = get(api.toString(), browser = true, referer = "https://duckduckgo.com/") ?: return emptyList()
+        val root = json.parseToJsonElement(body.decodeToString()) as? JsonObject ?: return emptyList()
+        return parseDuckDuckGo(root)
     }
 
     private suspend fun itunes(query: String, country: String, media: String): List<OnlineCover> {
@@ -164,11 +225,30 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
         return json.parseToJsonElement(body.decodeToString()) as? JsonObject
     }
 
-    private suspend fun get(url: String): ByteArray? {
-        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-        val call = http.newCall(request)
-        val response = call.await()
-        return response.use { if (it.isSuccessful) it.body.bytes() else null }
+    /** GETs [url]; null for an error status or a body larger than [MAX_IMAGE_BYTES]. */
+    private suspend fun get(url: String, browser: Boolean = false, referer: String? = null): ByteArray? {
+        val request = Request.Builder().url(url)
+            .header("User-Agent", if (browser) BROWSER_USER_AGENT else USER_AGENT)
+            .header("Accept-Language", Locale.getDefault().toLanguageTag() + ",en;q=0.8")
+            .apply { if (referer != null) header("Referer", referer) }
+            .build()
+        val response = http.newCall(request).await()
+        return response.use { r ->
+            if (!r.isSuccessful) return@use null
+            val body = r.body
+            if (body.contentLength() > MAX_IMAGE_BYTES) return@use null
+            val out = java.io.ByteArrayOutputStream()
+            body.byteStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    if (out.size() > MAX_IMAGE_BYTES) return@use null
+                }
+            }
+            out.toByteArray()
+        }
     }
 
     private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
@@ -192,6 +272,35 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
             .replace(Regex("""\s+"""), " ")
             .trim()
             .trim('-', '.', ',', ':', ' ')
+
+        /** Bing marks each result with an HTML-escaped JSON attribute: m="{&quot;murl&quot;:…}". */
+        fun parseBing(html: String): List<OnlineCover> {
+            val parser = Json { ignoreUnknownKeys = true; isLenient = true }
+            return Regex("""\bm=(?:"(\{[^"]*\})"|'(\{[^']*\})')""").findAll(html).mapNotNull { match ->
+                val raw = match.groupValues[1].ifEmpty { match.groupValues[2] }
+                val o = runCatching { parser.parseToJsonElement(unescapeHtml(raw)) as? JsonObject }.getOrNull() ?: return@mapNotNull null
+                val full = o.str("murl") ?: return@mapNotNull null
+                val thumb = o.str("turl") ?: full
+                OnlineCover(thumb, full, "Bing", o.str("t"), null, fromWeb = true)
+            }.toList()
+        }
+
+        fun parseDuckDuckGoToken(html: String): String? =
+            Regex("""vqd=["']?([0-9]+-[0-9a-zA-Z_-]+)""").find(html)?.groupValues?.get(1)
+
+        fun parseDuckDuckGo(root: JsonObject): List<OnlineCover> = (root["results"] as? JsonArray).orEmpty().mapNotNull { r ->
+            val o = r as? JsonObject ?: return@mapNotNull null
+            val full = o.str("image") ?: return@mapNotNull null
+            OnlineCover(o.str("thumbnail") ?: full, full, "DuckDuckGo", o.str("title"), null, fromWeb = true)
+        }
+
+        private fun unescapeHtml(text: String): String = text
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&#x27;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
 
         fun parseItunes(root: JsonObject): List<OnlineCover> = (root["results"] as? JsonArray).orEmpty().mapNotNull { r ->
             val o = r as? JsonObject ?: return@mapNotNull null
@@ -264,8 +373,12 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
 
         private const val ARTWORK_SIZE = "100x100bb"
         private const val TAG = "CoverSearch"
-        private const val MAX_RESULTS = 36
+        private const val MAX_RESULTS = 60
         private const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
         private const val USER_AGENT = "BookSound/1.0 (Android audiobook player)"
+
+        /** Image search sites serve their regular pages only to browsers. */
+        private const val BROWSER_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     }
 }

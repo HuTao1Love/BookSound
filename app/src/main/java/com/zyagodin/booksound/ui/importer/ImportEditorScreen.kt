@@ -77,6 +77,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.organize.ConversionStrategy
 import com.zyagodin.booksound.core.organize.CoverOrigin
+import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.torrent.AudiobookLayout
 import com.zyagodin.booksound.core.torrent.TorrentContentProblem
 import com.zyagodin.booksound.torrent.TorrentPhase
@@ -129,6 +130,7 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
     var conflict by remember { mutableStateOf<ImportConflict?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var confirmLeaveTorrent by remember { mutableStateOf(false) }
+    var cropPicture by remember { mutableStateOf<EmbeddedPicture?>(null) }
     var renamePart by remember { mutableStateOf<Int?>(null) }
     var renameChapter by remember { mutableStateOf<Int?>(null) }
 
@@ -261,6 +263,7 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                         onRenamePart = { renamePart = it },
                         onRenameChapter = { renameChapter = it },
                         onCoverFailed = { scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_download_failed)) } },
+                        onOnlineCover = { picture -> if (needsCrop(picture)) cropPicture = picture else vm.useCover(picture) },
                     )
                 }
             }
@@ -291,6 +294,16 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                 onDismiss = { conflict = null },
             )
         }
+    }
+    cropPicture?.let { picture ->
+        SquareCropDialog(
+            picture = picture,
+            onCropped = {
+                vm.useCover(it)
+                cropPicture = null
+            },
+            onDismiss = { cropPicture = null },
+        )
     }
     if (confirmLeaveTorrent) {
         ChoiceDialog(
@@ -392,6 +405,7 @@ private fun EditorContent(
     onRenamePart: (Int) -> Unit,
     onRenameChapter: (Int) -> Unit,
     onCoverFailed: () -> Unit,
+    onOnlineCover: (EmbeddedPicture) -> Unit,
 ) {
     val window = rememberWindowLayout()
     val listState = rememberLazyListState()
@@ -406,7 +420,7 @@ private fun EditorContent(
     )
     val details: LazyListScope.() -> Unit = {
         item(key = "cover") {
-            CoverSection(ui, onPickCover, vm::removeCover, onSuggestion = { cover -> vm.chooseOnline(cover) { ok -> if (!ok) onCoverFailed() } })
+            CoverSection(ui, onPickCover, vm::removeCover, onSuggestion = { cover -> vm.downloadOnline(cover) { picture -> if (picture == null) onCoverFailed() else onOnlineCover(picture) } })
         }
         item(key = "fields") { MetadataFields(form, ui.seriesIndexInvalid, vm::update) }
         item(key = "destination") { DestinationCard(ui) }

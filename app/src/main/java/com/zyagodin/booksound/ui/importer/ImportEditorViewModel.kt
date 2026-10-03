@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.core.model.BookMetadata
 import com.zyagodin.booksound.core.model.ChapterMark
+import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.model.SeriesIndex
 import com.zyagodin.booksound.core.naming.LibraryLayout
 import com.zyagodin.booksound.core.organize.ChapterPlanner
@@ -269,16 +270,20 @@ class ImportEditorViewModel(
     }
 
     /** Downloads [cover] and makes it the selected cover. Returns false if it could not be used. */
-    fun chooseOnline(cover: OnlineCover, onResult: (Boolean) -> Unit) {
-        val s = session ?: return
+    /** Downloads an online result; the UI crops it to a square if needed, then calls [useCover]. */
+    fun downloadOnline(cover: OnlineCover, onResult: (EmbeddedPicture?) -> Unit) {
         viewModelScope.launch {
             downloading.value = true
             val picture = container.coverSearch.download(cover)
             downloading.value = false
-            if (picture != null) {
-                s.cover.value = SelectedCover(picture, withContext(Dispatchers.IO) { container.covers.draftFile(s.id, picture) }, null)
-            }
-            onResult(picture != null)
+            onResult(picture)
+        }
+    }
+
+    fun useCover(picture: EmbeddedPicture) {
+        val s = session ?: return
+        viewModelScope.launch {
+            s.cover.value = SelectedCover(picture, withContext(Dispatchers.IO) { container.covers.draftFile(s.id, picture) }, null)
         }
     }
 
