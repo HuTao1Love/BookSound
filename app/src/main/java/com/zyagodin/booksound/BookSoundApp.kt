@@ -25,7 +25,7 @@ import com.zyagodin.booksound.sync.SyncCoordinator
 import com.zyagodin.booksound.torrent.NetworkMonitor
 import com.zyagodin.booksound.torrent.TorrentEngine
 import com.zyagodin.booksound.torrent.TorrentManager
-import com.zyagodin.booksound.torrent.TorrentService
+import com.zyagodin.booksound.torrent.TorrentKeepAlive
 import com.zyagodin.booksound.torrent.TorrentStore
 import android.util.Log
 import com.zyagodin.booksound.data.library.BookDetails
@@ -60,7 +60,7 @@ class BookSoundApp : Application(), ImageLoaderFactory {
             container.torrents.start()
         }
         container.appScope.launch {
-            container.torrents.needsForeground.collect { needed -> if (needed) TorrentService.start(this@BookSoundApp) }
+            container.torrents.needsForeground.collect { needed -> if (needed) TorrentKeepAlive.start(this@BookSoundApp) }
         }
     }
 
@@ -90,7 +90,7 @@ class AppContainer(app: Application) {
     val documents = DocumentStore(app)
     val covers = CoverStore(app)
     val library = LibraryRepository(database, documents, covers, settings)
-    val sleepTimer = SleepTimer(appScope)
+    val sleepTimer = SleepTimer(app, appScope)
     val player = PlayerConnection(app, appScope) { settings.state.value.lastBookId }
     val coverSearch = CoverSearchRepository(http, BuildConfig.GOOGLE_BOOKS_API_KEY)
     val importSessions = ImportSessionStore()

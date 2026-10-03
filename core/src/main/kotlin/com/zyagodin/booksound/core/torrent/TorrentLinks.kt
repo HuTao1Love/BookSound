@@ -36,6 +36,13 @@ object TorrentLinks {
         return null
     }
 
+    /**
+     * Splits pasted text into one candidate link per line, for adding several torrents at once.
+     * Blank lines are dropped and repeated lines kept once, in their original order.
+     */
+    fun splitLines(text: String): List<String> =
+        text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.distinct().toList()
+
     fun parseMagnet(uri: String): TorrentLink.Magnet? {
         val query = uri.substringAfter('?', "").takeIf { it.isNotEmpty() } ?: return null
         var v1: String? = null

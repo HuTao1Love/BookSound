@@ -1,6 +1,5 @@
 package com.zyagodin.booksound.playback
 
-import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -11,28 +10,43 @@ import java.util.IdentityHashMap
 /**
  * Player wrapper that turns "next/previous" (notification, headset, car, watch) into chapter
  * navigation inside the single m4b file, uses the user's skip intervals, and rewinds a little
- * when resuming after a pause ("smart rewind").
+ * when resuming after a pause ("smart rewind") so the listener can pick up the thread again.
  */
 @OptIn(UnstableApi::class)
 class AudiobookPlayer(
     player: Player,
     private val skipBackMs: () -> Long,
     private val skipForwardMs: () -> Long,
-    private val smartRewindEnabled: () -> Boolean,
+    private val smartRewind: () -> SmartRewind?,
 ) : ForwardingPlayer(player) {
+
+    /** Smart rewind settings: go back [rewindMs] after a pause of at least [afterMs]. */
+    data class SmartRewind(val rewindMs: Long, val afterMs: Long)
 
     @Volatile
     var chapters: List<Chapter> = emptyList()
 
+    /**
+     * Wall-clock time playback was paused, 0 when there is nothing to rewind for. Wall-clock (not
+     * uptime) so a pause can be restored from the database after the service was restarted.
+     */
     private var pausedAt: Long = 0L
     private val wrappers = IdentityHashMap<Player.Listener, Player.Listener>()
 
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying && playbackState == STATE_READY) pausedAt = SystemClock.elapsedRealtime()
+                if (!isPlaying && playbackState == STATE_READY) pausedAt = System.currentTimeMillis()
             }
         })
+    }
+
+    /**
+     * The book about to be loaded was last heard at [lastPlayedAt] (0 = unknown): resuming it
+     * rewinds as if it had been paused then, even though this player instance never played it.
+     */
+    fun restorePause(lastPlayedAt: Long) {
+        pausedAt = lastPlayedAt.coerceAtLeast(0)
     }
 
     // ---------------------------------------------------------------- commands
@@ -111,6 +125,21 @@ class AudiobookPlayer(
 
     // ---------------------------------------------------------------- smart rewind
 
+    override fun seekTo(positionMs: Long) {
+        forgetPauseIfIdle()
+        super.seekTo(positionMs)
+    }
+
+    override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+        forgetPauseIfIdle()
+        super.seekTo(mediaItemIndex, positionMs)
+    }
+
+    /** The listener chose a new spot while paused: start exactly there, don't rewind from it. */
+    private fun forgetPauseIfIdle() {
+        if (!isPlaying) pausedAt = 0L
+    }
+
     override fun play() {
         applySmartRewind()
         super.play()
@@ -122,20 +151,16 @@ class AudiobookPlayer(
     }
 
     private fun applySmartRewind() {
-        if (!smartRewindEnabled() || pausedAt == 0L || isPlaying) return
-        val pausedFor = SystemClock.elapsedRealtime() - pausedAt
+        if (pausedAt == 0L || isPlaying) return
+        val pausedFor = System.currentTimeMillis() - pausedAt
         pausedAt = 0L
-        val rewind = when {
-            pausedFor > 60 * 60_000L -> 30_000L
-            pausedFor > 5 * 60_000L -> 10_000L
-            pausedFor > 30_000L -> 3_000L
-            else -> 0L
-        }
-        if (rewind > 0) {
-            // Never rewind past the start of the current chapter.
-            val chapterStart = chapters.getOrNull(currentChapterIndex())?.startMs ?: 0L
-            seekTo(maxOf(chapterStart, currentPosition - rewind).coerceAtMost(currentPosition))
-        }
+        val config = smartRewind() ?: return
+        if (config.rewindMs <= 0 || pausedFor < config.afterMs) return
+        // Never rewind past the start of the current chapter.
+        val position = currentPosition
+        val chapterStart = chapters.getOrNull(currentChapterIndex(position))?.startMs ?: 0L
+        val target = maxOf(chapterStart, position - config.rewindMs).coerceAtMost(position)
+        if (target < position) super.seekTo(target)
     }
 
     companion object {

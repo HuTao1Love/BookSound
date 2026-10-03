@@ -297,7 +297,7 @@
     <string name="settings_skip_forward">Перемотка вперёд</string>
     <string name="settings_default_speed">Скорость по умолчанию</string>
     <string name="settings_smart_rewind">Умный откат</string>
-    <string name="settings_smart_rewind_hint">Отматывать несколько секунд после долгой паузы</string>
+    <string name="settings_smart_rewind_hint">После паузы немного отматывать назад, чтобы вспомнить, на чём остановились</string>
     <string name="settings_sleep_default">Длительность по умолчанию</string>
     <string name="settings_sleep_fade">Плавное затухание</string>
     <string name="settings_sleep_fade_hint">Мягко убавлять громкость перед паузой</string>
@@ -443,4 +443,47 @@
     <string name="template_problem_unknown">Неизвестная метка %1$s.</string>
     <string name="template_problem_duplicate">%1$s указан дважды.</string>
     <string name="template_problem_adjacent">Между двумя метками должен быть текст, иначе их не различить.</string>
+    <!-- Несколько торрентов -->
+    <string name="action_paste">Вставить</string>
+    <string name="action_close">Закрыть</string>
+    <string name="action_add_count">Добавить %1$d</string>
+    <string name="torrent_links_hint">Несколько ссылок? По одной в строке.</string>
+    <string name="torrent_adding_many">Добавляем %1$d из %2$d…</string>
+    <string name="torrent_batch_failed">Добавлено %1$d из %2$d. Эти строки не добавились и остались в поле:</string>
+    <string name="torrent_clipboard_empty">В буфере обмена нет текста.</string>
+
+    <!-- Таймер сна -->
+    <string name="sleep_end_of_book">До конца книги</string>
+    <string name="sleep_end_of_book_short">Конец книги</string>
+    <string name="sleep_shake_hint">Встряхните телефон, чтобы запустить таймер заново.</string>
+    <string name="sleep_shake_hint_chapter">Встряхните телефон, чтобы дослушать ещё одну главу.</string>
+    <string name="settings_shake">Встряхнуть для сброса</string>
+    <string name="settings_shake_hint">Встряхните телефон, пока идёт таймер, чтобы запустить его заново</string>
+
+    <!-- Умный откат -->
+    <string name="settings_smart_rewind_amount">Отматывать на</string>
+    <string name="settings_smart_rewind_after">После паузы не короче</string>
+
+    <!-- Оформление -->
+    <string name="settings_amoled">AMOLED-чёрный</string>
+    <string name="settings_amoled_hint">Чисто чёрный фон в тёмной теме</string>
+
+    <!-- Эквалайзер под голос -->
+    <string name="voice_title">Голос чтеца</string>
+    <string name="voice_hint">Эквалайзер под тембр чтеца. Запоминается для этой книги.</string>
+    <string name="voice_make_default">Для всех книг</string>
+    <string name="voice_is_default">Используется для всех книг без своего выбора</string>
+    <string name="settings_voice_default">Голос чтеца (эквалайзер)</string>
+    <string name="voice_off">Выключен</string>
+    <string name="voice_off_hint">Запись как есть</string>
+    <string name="voice_deep_male">Глубокий мужской голос</string>
+    <string name="voice_deep_male_hint">Меньше гула и «бочки», слова чётче</string>
+    <string name="voice_bright_female">Звонкий женский голос</string>
+    <string name="voice_bright_female_hint">Мягче шипящие и резкость, чуть больше тепла</string>
+    <string name="voice_no_bass">Убрать басы</string>
+    <string name="voice_no_bass_hint">Срезает гул, фон и низкое бубнение</string>
+    <string name="voice_old_recording">Старая запись с шумами</string>
+    <string name="voice_old_recording_hint">Оставляет только диапазон речи: меньше фона и шипения</string>
+    <string name="voice_clarity">Разборчивость речи</string>
+    <string name="voice_clarity_hint">Для тихого или невнятного чтения: выводит согласные вперёд</string>
 </resources>

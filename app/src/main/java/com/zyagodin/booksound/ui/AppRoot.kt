@@ -111,7 +111,7 @@ class AppNavigator(
 @Composable
 fun AppRoot(container: AppContainer, intents: Flow<String>) {
     val settings by container.settings.state.collectAsStateWithLifecycle()
-    BookSoundTheme(settings.themeMode) {
+    BookSoundTheme(settings.themeMode, settings.amoledBlack) {
         Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
             val treeUri = settings.libraryTreeUri
             var accessVersion by remember { mutableIntStateOf(0) }
@@ -195,6 +195,10 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     navigator.openImportEditor(container.importSessions.torrent(id).id)
                 },
                 onAlreadyAdded = {
+                    addTorrent = null
+                    navigator.openImports()
+                },
+                onAddedSeveral = {
                     addTorrent = null
                     navigator.openImports()
                 },
