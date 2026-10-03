@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MoreVert
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.playback.PlaybackProblem
@@ -89,10 +91,10 @@ import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSpeed
 
-enum class PlayerSheet { SPEED, SLEEP, CHAPTERS }
+enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE }
 
 /** Derived, display-ready playback values. */
-private class NowPlaying(val details: BookDetails, val state: PlayerUiState, previewMs: Long?) {
+private class NowPlaying(val details: BookDetails, val state: PlayerUiState, previewMs: Long?, val voicePreset: VoicePreset) {
     val position: Long = previewMs ?: state.positionMs
     val duration: Long = details.item.entry.book.durationMs.takeIf { it > 0 } ?: state.durationMs
     val chapters: List<Chapter> = details.chapters
@@ -146,7 +148,7 @@ fun PlayerScreen(navigator: AppNavigator) {
         return
     }
 
-    val now = NowPlaying(details, player, previewMs)
+    val now = NowPlaying(details, player, previewMs, settings.voicePresetFor(details.item.id))
     val callbacks = PlayerCallbacks(
         onClose = navigator::back,
         onTogglePlay = vm::togglePlay,
@@ -191,12 +193,20 @@ fun PlayerScreen(navigator: AppNavigator) {
         )
         PlayerSheet.SLEEP -> SleepSheet(
             state = sleep,
+            shakeToReset = settings.shakeToReset,
             onStart = { minutes -> vm.startSleep(minutes); sheet = null },
             onEndOfChapter = { vm.sleepEndOfChapter(); sheet = null },
             onExtend = vm::extendSleep,
             onCancel = { vm.cancelSleep(); sheet = null },
             onDismiss = { sheet = null },
             hasChapters = details.chapters.size > 1,
+        )
+        PlayerSheet.VOICE -> VoiceSheet(
+            preset = now.voicePreset,
+            defaultPreset = settings.voicePreset,
+            onSelect = { vm.setVoicePreset(details.item.id, it) },
+            onMakeDefault = { vm.makeDefaultVoicePreset(details.item.id, it) },
+            onDismiss = { sheet = null },
         )
         PlayerSheet.CHAPTERS -> ChaptersSheet(
             chapters = details.chapters,
@@ -294,6 +304,7 @@ private fun TabletopPlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<I
             Column(Modifier.weight(1f)) {
                 TitleBlock(now, centered = false)
             }
+            VoiceButton(now, cb)
             IconButton(onClick = cb.onClose) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.action_close_player))
             }
@@ -331,6 +342,8 @@ private fun PlayerTopBar(now: NowPlaying, cb: PlayerCallbacks) {
                 )
             }
         }
+        VoiceButton(now, cb)
+        Spacer(Modifier.width(Spacing.sm))
         Box {
             CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
@@ -340,6 +353,19 @@ private fun PlayerTopBar(now: NowPlaying, cb: PlayerCallbacks) {
             }
         }
     }
+}
+
+/** Voice equalizer; highlighted while a preset is on for this book. */
+@Composable
+private fun VoiceButton(now: NowPlaying, cb: PlayerCallbacks) {
+    val on = now.voicePreset != VoicePreset.OFF
+    CircleIconButton(
+        Icons.Rounded.GraphicEq,
+        stringResource(R.string.voice_title) + if (on) ": " + voicePresetName(now.voicePreset) else "",
+        { cb.onSheet(PlayerSheet.VOICE) },
+        containerColor = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+        contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 @Composable
@@ -455,7 +481,7 @@ private fun ActionChips(now: NowPlaying, sleep: SleepTimerState, cb: PlayerCallb
     val sleepLabel = when (sleep) {
         SleepTimerState.Off -> stringResource(R.string.sleep_off)
         is SleepTimerState.Countdown -> formatClock(sleep.remainingMs)
-        is SleepTimerState.EndOfChapter -> stringResource(R.string.sleep_end_of_chapter_short)
+        is SleepTimerState.EndOfChapter -> stringResource(if (now.chapters.size > 1) R.string.sleep_end_of_chapter_short else R.string.sleep_end_of_book_short)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally)) {
         PlayerChip(Icons.Rounded.Speed, formatSpeed(now.state.speed), stringResource(R.string.speed_title)) { cb.onSheet(PlayerSheet.SPEED) }

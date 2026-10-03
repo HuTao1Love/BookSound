@@ -3,6 +3,7 @@ package com.zyagodin.booksound.ui.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
+import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.data.settings.AppSettings
 import com.zyagodin.booksound.importer.ImportSelection
@@ -34,6 +35,16 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
     fun startSleep(minutes: Int) = viewModelScope.launch {
         container.sleepTimer.start(minutes)
         container.settings.setSleepTimerMinutes(minutes)
+    }
+
+    /** Remembers [preset] for the book; choosing the default preset makes the book follow it again. */
+    fun setVoicePreset(bookId: String, preset: VoicePreset) = viewModelScope.launch {
+        container.settings.setBookVoicePreset(bookId, preset.takeIf { it != container.settings.state.value.voicePreset })
+    }
+
+    fun makeDefaultVoicePreset(bookId: String, preset: VoicePreset) = viewModelScope.launch {
+        container.settings.setVoicePreset(preset)
+        container.settings.setBookVoicePreset(bookId, null)
     }
 
     fun sleepEndOfChapter() = container.sleepTimer.startEndOfChapter()

@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.zyagodin.booksound.torrent.TorrentService
+import com.zyagodin.booksound.torrent.TorrentKeepAlive
 import com.zyagodin.booksound.ui.AppRoot
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -35,8 +35,9 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         container.appVisible = true
         container.player.connect()
-        // Android may have stopped the download service (time budget) while the process lived on.
-        if (container.torrents.needsForeground.value) TorrentService.start(this)
+        // The download job/service may have been stopped while the process lived on. Opening the
+        // app is also when Android allows scheduling the user-initiated download job.
+        if (container.torrents.needsForeground.value) TorrentKeepAlive.start(this)
     }
 
     override fun onStop() {

@@ -10,8 +10,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Torrent downloads as a user-initiated data transfer job: no 6-hour daily limit (Android 14+). -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- A short buzz confirms that shaking the phone restarted the sleep timer. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".BookSoundApp"
@@ -73,11 +77,22 @@
             android:exported="false"
             android:foregroundServiceType="mediaProcessing|dataSync" />
 
-        <!-- Keeps torrent downloads running with the app closed. -->
+        <!-- Keeps torrent downloads running with the app closed (Android 14+). -->
+        <service
+            android:name=".torrent.TorrentTransferJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- Fallback for TorrentTransferJob: Android 13, or when the job can't be scheduled. -->
         <service
             android:name=".torrent.TorrentService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- "Pause all" in the download notification. -->
+        <receiver
+            android:name=".torrent.TorrentActionReceiver"
+            android:exported="false" />
 
         <!-- Lets the system resume the last book from the media controls after a reboot. -->
         <receiver

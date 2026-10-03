@@ -298,7 +298,7 @@
     <string name="settings_skip_forward">Skip forward</string>
     <string name="settings_default_speed">Default speed</string>
     <string name="settings_smart_rewind">Smart rewind</string>
-    <string name="settings_smart_rewind_hint">Go back a few seconds when resuming after a long pause</string>
+    <string name="settings_smart_rewind_hint">Go back a little when resuming after a pause, to recall where you were</string>
     <string name="settings_sleep_default">Default duration</string>
     <string name="settings_sleep_fade">Fade out</string>
     <string name="settings_sleep_fade_hint">Lower the volume gently before pausing</string>
@@ -439,4 +439,47 @@
     <string name="template_problem_unknown">Unknown placeholder %1$s.</string>
     <string name="template_problem_duplicate">%1$s is used twice.</string>
     <string name="template_problem_adjacent">Put some text between two placeholders, otherwise they can\'t be told apart.</string>
+    <!-- Adding several torrents -->
+    <string name="action_paste">Paste</string>
+    <string name="action_close">Close</string>
+    <string name="action_add_count">Add %1$d</string>
+    <string name="torrent_links_hint">Several links? One per line.</string>
+    <string name="torrent_adding_many">Adding %1$d of %2$d…</string>
+    <string name="torrent_batch_failed">Added %1$d of %2$d. These lines were not added and are left in the field:</string>
+    <string name="torrent_clipboard_empty">The clipboard has no text.</string>
+
+    <!-- Sleep timer -->
+    <string name="sleep_end_of_book">End of book</string>
+    <string name="sleep_end_of_book_short">Book end</string>
+    <string name="sleep_shake_hint">Shake the phone to start the timer over.</string>
+    <string name="sleep_shake_hint_chapter">Shake the phone to listen to one more chapter.</string>
+    <string name="settings_shake">Shake to reset</string>
+    <string name="settings_shake_hint">Shake the phone while the timer runs to start it over</string>
+
+    <!-- Smart rewind -->
+    <string name="settings_smart_rewind_amount">Rewind by</string>
+    <string name="settings_smart_rewind_after">After a pause of at least</string>
+
+    <!-- Appearance -->
+    <string name="settings_amoled">AMOLED black</string>
+    <string name="settings_amoled_hint">Pure black background in the dark theme</string>
+
+    <!-- Voice equalizer -->
+    <string name="voice_title">Narrator\'s voice</string>
+    <string name="voice_hint">Equalizer for the narrator\'s voice. Remembered for this book.</string>
+    <string name="voice_make_default">Use for all books</string>
+    <string name="voice_is_default">Used for all books without their own choice</string>
+    <string name="settings_voice_default">Narrator\'s voice (equalizer)</string>
+    <string name="voice_off">Off</string>
+    <string name="voice_off_hint">The recording as it is</string>
+    <string name="voice_deep_male">Deep male voice</string>
+    <string name="voice_deep_male_hint">Less boom and chest resonance, crisper words</string>
+    <string name="voice_bright_female">Bright female voice</string>
+    <string name="voice_bright_female_hint">Softer hissing and sharpness, a little warmth</string>
+    <string name="voice_no_bass">Remove bass</string>
+    <string name="voice_no_bass_hint">Cuts rumble, hum and booming low end</string>
+    <string name="voice_old_recording">Old noisy recording</string>
+    <string name="voice_old_recording_hint">Keeps only the speech range: less hum and hiss</string>
+    <string name="voice_clarity">Speech clarity</string>
+    <string name="voice_clarity_hint">For quiet or mumbled narration: brings consonants forward</string>
 </resources>

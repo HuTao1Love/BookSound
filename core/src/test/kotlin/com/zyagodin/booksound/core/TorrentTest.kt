@@ -134,6 +134,15 @@ class TorrentTest {
         assertNull(TorrentLinks.parse(""))
     }
 
+    @Test
+    fun `pasted text is split into one link per line`() {
+        val a = "magnet:?xt=urn:btih:" + "a".repeat(40)
+        val b = "https://example.org/get?id=5"
+        assertEquals(listOf(a, b), TorrentLinks.splitLines("  $a \r\n\n\t\n$b\n$a\n"))
+        assertEquals(emptyList<String>(), TorrentLinks.splitLines(" \n \n"))
+        assertEquals(listOf(a), TorrentLinks.splitLines(a))
+    }
+
     // ---------------------------------------------------------------- suggestions & merge
 
     @Test

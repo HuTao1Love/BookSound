@@ -16,6 +16,11 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -60,11 +65,13 @@ class PlaybackService : MediaSessionService() {
     private var applyingBookSettings = false
     /** Book whose item has reached READY since it was set; only its position is trustworthy. */
     private var readyBookId: String? = null
+    /** Voice equalizer in the audio path; its preset follows the book being played. */
+    private val voiceEq = VoiceEqAudioProcessor()
 
     override fun onCreate() {
         super.onCreate()
         val settings = container.settings
-        exoPlayer = ExoPlayer.Builder(this)
+        exoPlayer = ExoPlayer.Builder(this, audioOnlyRenderers())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -82,7 +89,10 @@ class PlaybackService : MediaSessionService() {
             exoPlayer,
             skipBackMs = { settings.state.value.skipBackSeconds * 1000L },
             skipForwardMs = { settings.state.value.skipForwardSeconds * 1000L },
-            smartRewindEnabled = { settings.state.value.smartRewind },
+            smartRewind = {
+                settings.state.value.takeIf { it.smartRewind }
+                    ?.let { AudiobookPlayer.SmartRewind(it.smartRewindSeconds * 1000L, it.smartRewindAfterSeconds * 1000L) }
+            },
         )
         player.addListener(PlayerEvents())
 
@@ -102,7 +112,16 @@ class PlaybackService : MediaSessionService() {
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_notification) },
         )
-        container.sleepTimer.attach(player) { container.settings.state.value.sleepFadeOut }
+        container.sleepTimer.attach(
+            player,
+            fadeOut = { settings.state.value.sleepFadeOut },
+            shakeToReset = { settings.state.value.shakeToReset },
+        )
+
+        // The voice equalizer preset can change from the player sheet or settings at any time.
+        scope.launch {
+            settings.state.map { it.voicePresetFor(currentBookId) }.distinctUntilChanged().collect { applyVoicePreset() }
+        }
 
         // Keep notification buttons in sync with the configured skip intervals.
         scope.launch {
@@ -113,6 +132,21 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+
+    /**
+     * Audiobooks only need an audio renderer; building it here puts [voiceEq] into the audio
+     * path (before speed changes, so the filters see the original voice).
+     */
+    private fun audioOnlyRenderers() = RenderersFactory { handler, _, audioListener, _, _ ->
+        val sink = DefaultAudioSink.Builder(this)
+            .setAudioProcessors(arrayOf(voiceEq))
+            .build()
+        arrayOf<Renderer>(MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink))
+    }
+
+    private fun applyVoicePreset() {
+        voiceEq.preset = container.settings.state.value.voicePresetFor(currentBookId)
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         savePosition()
@@ -223,6 +257,7 @@ class PlaybackService : MediaSessionService() {
             }
             if (bookId == currentBookId) return
             currentBookId = bookId
+            applyVoicePreset()
             player.chapters = emptyList()
             if (bookId == null) return
             scope.launch {
@@ -336,6 +371,13 @@ class PlaybackService : MediaSessionService() {
                 else -> state.positionMs.coerceAtMost(((book?.durationMs ?: 0L) - 1_000).coerceAtLeast(0))
             }
             pendingSpeed[bookId] = state?.speed ?: defaultSpeed
+            when {
+                // A chosen position (chapter, bookmark) is played exactly as chosen.
+                explicitStart != null -> player.restorePause(0L)
+                // Another book, or the player was restarted since the pause: smart rewind uses
+                // the time the book was last heard. The same loaded book keeps its own pause time.
+                player.currentMediaItem?.mediaId != bookId -> player.restorePause(state?.takeIf { !it.finished }?.lastPlayedAt ?: 0L)
+            }
             if (bookId == currentBookId) {
                 player.chapters = container.library.chapters(bookId)
             }

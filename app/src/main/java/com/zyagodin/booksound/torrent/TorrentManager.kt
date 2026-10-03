@@ -131,11 +131,23 @@ class TorrentManager(
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** True while something needs the network in the background (keeps the foreground service up). */
+    /**
+     * True while torrents download, or a finished download is being checked and converted, so the
+     * process must stay alive in the background (see [TorrentKeepAlive]).
+     */
     val needsForeground: StateFlow<Boolean> = store.records
-        .map { list -> list.any { !it.paused && (it.phase == TorrentPhase.DOWNLOADING || it.phase == TorrentPhase.FETCHING_METADATA) } }
+        .map(::needsBackgroundWork)
         .distinctUntilChanged()
-        .stateIn(scope, SharingStarted.Eagerly, false)
+        // Start from the stored records, not "false": a job started after a restart must not stop at once.
+        .stateIn(scope, SharingStarted.Eagerly, needsBackgroundWork(store.records.value))
+
+    private fun needsBackgroundWork(records: List<TorrentRecord>): Boolean = records.any {
+        when (it.phase) {
+            TorrentPhase.FETCHING_METADATA, TorrentPhase.DOWNLOADING -> !it.paused
+            TorrentPhase.VERIFYING, TorrentPhase.CONVERTING -> true
+            else -> false
+        }
+    }
 
     fun record(id: String): TorrentRecord? = store[id]
 

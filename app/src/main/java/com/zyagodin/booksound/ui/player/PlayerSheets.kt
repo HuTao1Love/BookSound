@@ -1,6 +1,7 @@
 package com.zyagodin.booksound.ui.player
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -32,10 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.playback.SleepTimerState
 import com.zyagodin.booksound.ui.components.AppBottomSheet
@@ -114,6 +120,7 @@ private val SleepOptions = listOf(5, 10, 15, 30, 45, 60, 90)
 fun SleepSheet(
     state: SleepTimerState,
     hasChapters: Boolean,
+    shakeToReset: Boolean,
     onStart: (Int) -> Unit,
     onEndOfChapter: () -> Unit,
     onExtend: (Int) -> Unit,
@@ -135,7 +142,11 @@ fun SleepSheet(
                                 else -> null
                             }
                             Text(
-                                if (state is SleepTimerState.EndOfChapter) stringResource(R.string.sleep_end_of_chapter) else stringResource(R.string.sleep_pausing_in),
+                                when {
+                                    state !is SleepTimerState.EndOfChapter -> stringResource(R.string.sleep_pausing_in)
+                                    hasChapters -> stringResource(R.string.sleep_end_of_chapter)
+                                    else -> stringResource(R.string.sleep_end_of_book)
+                                },
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                             )
@@ -145,6 +156,14 @@ fun SleepSheet(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                             )
                             Text(stringResource(R.string.sleep_paused_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            if (shakeToReset) {
+                                Text(
+                                    stringResource(if (state is SleepTimerState.EndOfChapter) R.string.sleep_shake_hint_chapter else R.string.sleep_shake_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                             Spacer(Modifier.height(Spacing.md))
                             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                 if (state is SleepTimerState.Countdown) {
@@ -165,7 +184,8 @@ fun SleepSheet(
                 SleepOptions.forEach { minutes ->
                     SleepOption(stringResource(R.string.minutes_short, minutes)) { onStart(minutes) }
                 }
-                if (hasChapters) SleepOption(stringResource(R.string.sleep_end_of_chapter)) { onEndOfChapter() }
+                // Without chapters the book's end is the natural stopping point.
+                SleepOption(stringResource(if (hasChapters) R.string.sleep_end_of_chapter else R.string.sleep_end_of_book)) { onEndOfChapter() }
             }
         }
     }
@@ -177,6 +197,84 @@ private fun SleepOption(label: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.md))
     }
 }
+
+/** Equalizer presets for the narrator's voice; the choice is remembered for the book. */
+@Composable
+fun VoiceSheet(
+    preset: VoicePreset,
+    defaultPreset: VoicePreset,
+    onSelect: (VoicePreset) -> Unit,
+    onMakeDefault: (VoicePreset) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AppBottomSheet(onDismiss = onDismiss) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Spacing.lg).padding(bottom = Spacing.xl)) {
+            Text(stringResource(R.string.voice_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = Spacing.sm))
+            Text(
+                stringResource(R.string.voice_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            VoicePreset.entries.forEach { option ->
+                val selected = option == preset
+                Surface(
+                    onClick = { onSelect(option) },
+                    shape = Radii.card,
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.heightIn(min = 56.dp).padding(horizontal = Spacing.sm, vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selected, onClick = { onSelect(option) })
+                        Spacer(Modifier.width(Spacing.sm))
+                        Column(Modifier.weight(1f)) {
+                            Text(voicePresetName(option), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                voicePresetDescription(option),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(Spacing.md))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (preset != defaultPreset) {
+                    QuietButton(stringResource(R.string.voice_make_default), { onMakeDefault(preset) })
+                } else {
+                    Text(stringResource(R.string.voice_is_default), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun voicePresetName(preset: VoicePreset): String = stringResource(
+    when (preset) {
+        VoicePreset.OFF -> R.string.voice_off
+        VoicePreset.DEEP_MALE -> R.string.voice_deep_male
+        VoicePreset.BRIGHT_FEMALE -> R.string.voice_bright_female
+        VoicePreset.NO_BASS -> R.string.voice_no_bass
+        VoicePreset.OLD_RECORDING -> R.string.voice_old_recording
+        VoicePreset.CLARITY -> R.string.voice_clarity
+    },
+)
+
+@Composable
+private fun voicePresetDescription(preset: VoicePreset): String = stringResource(
+    when (preset) {
+        VoicePreset.OFF -> R.string.voice_off_hint
+        VoicePreset.DEEP_MALE -> R.string.voice_deep_male_hint
+        VoicePreset.BRIGHT_FEMALE -> R.string.voice_bright_female_hint
+        VoicePreset.NO_BASS -> R.string.voice_no_bass_hint
+        VoicePreset.OLD_RECORDING -> R.string.voice_old_recording_hint
+        VoicePreset.CLARITY -> R.string.voice_clarity_hint
+    },
+)
 
 @Composable
 fun ChaptersSheet(

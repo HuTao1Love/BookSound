@@ -66,6 +66,25 @@ private val DarkColors = darkColorScheme(
     scrim = Color.Black,
 )
 
+/**
+ * AMOLED: the dark scheme on pure black. Pixels that are off use no power and blend into the
+ * screen bezel; cards and sheets keep just enough lift to stay distinguishable.
+ */
+private val AmoledColors = DarkColors.copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceVariant = Color(0xFF17181D),
+    surfaceBright = Color(0xFF26282F),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF07080A),
+    surfaceContainer = Color(0xFF0D0E11),
+    surfaceContainerHigh = Color(0xFF15161A),
+    surfaceContainerHighest = Color(0xFF1E2025),
+    outlineVariant = Color(0xFF22242B),
+    inverseOnSurface = Color.Black,
+)
+
 private val LightColors = lightColorScheme(
     primary = AmberDeep,
     onPrimary = Color.White,
@@ -153,6 +172,7 @@ val LocalDarkTheme = staticCompositionLocalOf { true }
 @Composable
 fun BookSoundTheme(
     themeMode: ThemeMode = ThemeMode.DARK,
+    amoledBlack: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val dark = when (themeMode) {
@@ -172,7 +192,11 @@ fun BookSoundTheme(
     }
     CompositionLocalProvider(LocalDarkTheme provides dark, LocalGradients provides Gradients) {
         MaterialTheme(
-            colorScheme = if (dark) DarkColors else LightColors,
+            colorScheme = when {
+                !dark -> LightColors
+                amoledBlack -> AmoledColors
+                else -> DarkColors
+            },
             typography = BookSoundTypography,
             shapes = BookSoundShapes,
             content = content,

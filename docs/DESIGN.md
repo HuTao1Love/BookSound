@@ -17,6 +17,9 @@ graphite with one warm accent. Light theme is available in Settings (Appearance)
 | secondary | `#6EE7C8` mint | `#0E8A6E` | finished state, series progress |
 | tertiary | `#AFA2FF` violet | `#5B4BD6` | sleep timer |
 
+**AMOLED black** (Settings → Appearance) swaps the graphite surfaces of the dark theme for pure
+black (`#000000` background, containers `#07080A` → `#1E2025`); accents stay the same.
+
 Player, book details and series cards use a heavily blurred copy of the cover as a backdrop,
 fading into the background.
 

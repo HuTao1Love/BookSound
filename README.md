@@ -22,7 +22,7 @@ you choose.
   is the book added to the database. Cancellation, failures and crashes clean up temporary files
   (crash recovery via an import journal at startup). Free space is checked up front.
 * **Torrents** — add a magnet link, a link to a .torrent file or a .torrent file (also opened from
-  other apps). Before anything is downloaded the file list must be one audiobook: MP3 files with
+  other apps); several links can be pasted at once, one per line. Before anything is downloaded the file list must be one audiobook: MP3 files with
   optional cover images, or a single M4B; harmless extras (.nfo, .txt, .cue, playlists) are skipped,
   anything else rejects the torrent. The review editor opens right away and the user edits the
   details while only the audio and cover files download (libtorrent via libtorrent4j, no seeding).
@@ -31,12 +31,16 @@ you choose.
   strict validation (decoded length must match the sources), so a damaged book never reaches the
   library. Torrents, their review and libtorrent resume data are persisted: closing the app, a
   crash or losing the connection only pauses the work, which continues on next start. Downloads
-  run in a foreground service and are deleted once the book is in the library.
+  run as a user-initiated data transfer job (Android 14+), which — unlike a `dataSync` foreground
+  service — has no 6-hour daily limit on Android 15+; Android 13 (or a refused job) falls back to
+  the foreground service. Downloads are deleted once the book is in the library.
 * **Identity** — each book has a UUID embedded in the M4B (`----:com.zyagodin.booksound:BOOK_ID`),
   independent of its path; folder rescans re-link moved files and adopt files copied in manually.
 * **Playback** — background playback with MediaSession (notification, lock screen, Bluetooth),
   audio focus, pause on headphone disconnect, chapter navigation, per-book speed, sleep timer
-  (minutes or end of chapter, with fade-out), smart rewind, position saved continuously.
+  (minutes, end of chapter or book, fade-out, shake to start over), smart rewind (configurable
+  amount and pause length, also after the app was closed), voice equalizer presets for the
+  narrator's timbre (remembered per book, DSP in `:core`), position saved continuously.
 * **Sync-ready** — records carry revision/updatedAt/device/dirty stamps; `SyncBackend`,
   `SyncEngine` and `PlaybackConflictResolver` live in `:core`. No backend is required or
   implemented yet (`NoBackend`).
