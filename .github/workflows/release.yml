@@ -37,7 +37,12 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      # The action's default package list still names "tools", which the SDK no longer has.
+      # platform-tools is enough: the Android Gradle plugin downloads the SDK platform itself.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       - uses: gradle/actions/setup-gradle@v4
 
