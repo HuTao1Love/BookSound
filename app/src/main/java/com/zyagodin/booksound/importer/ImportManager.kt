@@ -8,17 +8,22 @@ import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.storage.DocumentStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Queue of imports, processed one at a time in the application scope. The UI and the
- * [ImportService] observe [jobs]; the service only keeps the process in the foreground.
+ * Queue of imports, processed in the application scope, up to [PARALLEL_IMPORTS] books at a time
+ * ([ImportPipeline] shares the codecs between them and writes into the library one book at a
+ * time). The UI and the [ImportService] observe [jobs]; the service only keeps the process in the
+ * foreground.
  */
 class ImportManager(
     private val context: Context,
@@ -33,11 +38,21 @@ class ImportManager(
     val jobs: StateFlow<List<ImportJob>> = _jobs
 
     private val queue = Channel<String>(Channel.UNLIMITED)
-    private var running: Pair<String, Job>? = null
+    private val running = ConcurrentHashMap<String, Job>()
+    private val slots = Semaphore(PARALLEL_IMPORTS)
 
     init {
         scope.launch {
-            for (id in queue) process(id)
+            for (id in queue) {
+                slots.acquire()
+                scope.launch {
+                    try {
+                        process(id)
+                    } finally {
+                        slots.release()
+                    }
+                }
+            }
         }
     }
 
@@ -52,9 +67,9 @@ class ImportManager(
     }
 
     fun cancel(jobId: String) {
-        val current = running
-        if (current != null && current.first == jobId) {
-            current.second.cancel()
+        val worker = running[jobId]
+        if (worker != null) {
+            worker.cancel()
         } else {
             setState(jobId) { if (it.stage == ImportStage.QUEUED) it.copy(stage = ImportStage.CANCELLED, progress = null) else it }
         }
@@ -62,16 +77,17 @@ class ImportManager(
 
     /** Cancels everything, e.g. when Android ends the foreground service time budget. */
     fun failAll(failure: ImportFailure) {
+        val workers = running.toMap()
         _jobs.update { list ->
-            list.map { if (it.isActive && it.id != running?.first) it.copy(stage = ImportStage.FAILED, failure = failure) else it }
+            list.map { if (it.isActive && it.id !in workers) it.copy(stage = ImportStage.FAILED, failure = failure) else it }
         }
-        running?.let { (id, job) ->
+        workers.forEach { (id, job) ->
             pendingFailure[id] = failure
             job.cancel()
         }
     }
 
-    private val pendingFailure = mutableMapOf<String, ImportFailure>()
+    private val pendingFailure = ConcurrentHashMap<String, ImportFailure>()
 
     fun retry(jobId: String) {
         val job = _jobs.value.firstOrNull { it.id == jobId } ?: return
@@ -96,7 +112,8 @@ class ImportManager(
     private suspend fun process(id: String) {
         val job = _jobs.value.firstOrNull { it.id == id } ?: return
         if (job.stage != ImportStage.QUEUED) return
-        val worker = scope.launch {
+        // Registered before it starts, so a cancel arriving right away reaches it.
+        val worker = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val bookId = pipeline.run(job.request) { stage, progress ->
                     setState(id) { it.copy(stage = stage, progress = progress) }
@@ -120,9 +137,13 @@ class ImportManager(
                 setState(id) { it.copy(stage = ImportStage.FAILED, failure = ImportFailure.Unexpected(e.message, e), progress = null) }
             }
         }
-        running = id to worker
-        worker.join()
-        running = null
+        running[id] = worker
+        worker.start()
+        try {
+            worker.join()
+        } finally {
+            running.remove(id)
+        }
     }
 
     private fun releaseSource(job: ImportJob) {
@@ -146,5 +167,8 @@ class ImportManager(
 
     companion object {
         private const val TAG = "ImportManager"
+
+        /** Books processed at the same time; the codec budget in [ImportPipeline] limits encoding further. */
+        private const val PARALLEL_IMPORTS = 3
     }
 }

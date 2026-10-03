@@ -37,7 +37,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -89,6 +91,7 @@ class ImportPipeline(
     suspend fun run(request: ImportRequest, progress: Progress): String = withContext(Dispatchers.IO) {
         val workDir = journal.workDir(request.jobId).apply { mkdirs() }
         val tx = Transaction()
+        var holdsLibrary = false
         var stage = ImportStage.PREPARING
         val weights = StageWeights(request.strategy != ConversionStrategy.REMUX_SINGLE)
         val report = Progress { s, f ->
@@ -120,6 +123,10 @@ class ImportPipeline(
                 }
             }
 
+            // Several books convert side by side; writing into the library folder (choosing the file
+            // name, copying, renaming) happens one book at a time so two books never claim one name.
+            libraryWrites.lock()
+            holdsLibrary = true
             val (expectedDuration, target) = source.use { src ->
                 val duration = runCatching { AudioProbe.probe(src, "source.m4b").durationMs }.getOrNull() ?: request.totalDurationMs
                 val t = prepareTarget(treeUri, request, previousBook?.fileUri)
@@ -187,6 +194,7 @@ class ImportPipeline(
             Log.w(TAG, "Import ${request.jobId} failed at $stage", t)
             throw mapFailure(t, stage, request)
         } finally {
+            if (holdsLibrary) libraryWrites.unlock()
             withContext(NonCancellable) {
                 workDir.deleteRecursively()
                 journal.remove(request.jobId)
@@ -242,8 +250,10 @@ class ImportPipeline(
         }
         val copyFirst = request.strategy == ConversionStrategy.CONCAT_COPY
         try {
-            transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = copyFirst) {
-                report.report(ImportStage.CONVERTING, it)
+            withCodecUnless(copyFirst) {
+                transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = copyFirst) {
+                    report.report(ImportStage.CONVERTING, it)
+                }
             }
         } catch (e: ExportException) {
             if (!copyFirst) throw e
@@ -251,8 +261,10 @@ class ImportPipeline(
             Log.i(TAG, "Concatenation without re-encoding failed, transcoding instead", e)
             output.delete()
             report.report(ImportStage.CONVERTING, 0f)
-            transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = false) {
-                report.report(ImportStage.CONVERTING, it)
+            withCodec {
+                transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = false) {
+                    report.report(ImportStage.CONVERTING, it)
+                }
             }
         }
         report.report(ImportStage.CONVERTING, 1f)
@@ -266,6 +278,22 @@ class ImportPipeline(
     /** Set after parallel encoding hit codec trouble on this phone; one pass is used from then on. */
     @Volatile
     private var parallelUnreliable = false
+
+    /** Codecs in use across every import running side by side (parts of one book or several books). */
+    private val codecs = Semaphore(CODEC_BUDGET)
+
+    /** After codec trouble, one codec at a time across all imports. */
+    private val soloCodec = Mutex()
+
+    /** Held while a book is written into the library folder; see [run]. */
+    private val libraryWrites = Mutex()
+
+    private suspend fun <T> withCodec(block: suspend () -> T): T =
+        codecs.withPermit { if (parallelUnreliable) soloCodec.withLock { block() } else block() }
+
+    /** Stream copy (transmux) uses no codec, so it doesn't wait for one. */
+    private suspend fun <T> withCodecUnless(transmux: Boolean, block: suspend () -> T): T =
+        if (transmux) block() else withCodec(block)
 
     private fun encodesInParallel(request: ImportRequest) = request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1
 
@@ -286,9 +314,8 @@ class ImportPipeline(
         fun publish() = report.report(ImportStage.CONVERTING, (ENCODE_SHARE * progress.indices.sumOf { progress[it] * weights[it] } / total).toFloat())
 
         val files = parts.indices.map { File(workDir, "part-%04d.m4a".format(it)) }
-        val gate = Semaphore(PARALLEL_ENCODERS.coerceAtMost(maxOf(2, Runtime.getRuntime().availableProcessors() / 2)))
         try {
-            encodeParts(parts, files, gate, request, sampleRate, channels, progress, ::publish)
+            encodeParts(parts, files, request, sampleRate, channels, progress, ::publish)
         } catch (t: Throwable) {
             // Free the temporary space before a one-pass retry (or the error).
             files.forEach(File::delete)
@@ -308,7 +335,6 @@ class ImportPipeline(
     private suspend fun encodeParts(
         parts: List<SourcePart>,
         files: List<File>,
-        gate: Semaphore,
         request: ImportRequest,
         sampleRate: Int?,
         channels: Int,
@@ -318,7 +344,7 @@ class ImportPipeline(
         coroutineScope {
             parts.mapIndexed { i, part ->
                 async {
-                    gate.withPermit {
+                    withCodec {
                         try {
                             transcoder.run(
                                 listOf(part.uri), files[i], request.bitrateKbps, downmixToMono = false, transmux = false,
@@ -530,8 +556,11 @@ class ImportPipeline(
         private const val TAG = "ImportPipeline"
         private const val SAFETY_MARGIN = 32L * 1024 * 1024
 
-        /** Upper bound of parts encoded at the same time (codec instances and memory are limited). */
-        private const val PARALLEL_ENCODERS = 4
+        /**
+         * Encodes at the same time across all imports: half the CPU cores (AAC encoding uses one
+         * core each), at least 2, at most 4 (codec instances and memory are limited).
+         */
+        private val CODEC_BUDGET = maxOf(2, Runtime.getRuntime().availableProcessors() / 2).coerceAtMost(4)
 
         /** Codec errors that may come from running several codecs at once rather than from the file. */
         private val CODEC_ERRORS = setOf(

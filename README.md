@@ -20,7 +20,10 @@ you choose.
   re-encoding; anything else: transcoded to AAC. Output is written as a hidden
   `.booksound-partial-*` file, verified (parsed back + SHA-256), then atomically renamed; only then
   is the book added to the database. Cancellation, failures and crashes clean up temporary files
-  (crash recovery via an import journal at startup). Free space is checked up front.
+  (crash recovery via an import journal at startup). Free space is checked up front. Up to three
+  books are imported side by side; encoders are shared between them (half the CPU cores, 2–4 at
+  a time, parts of one book in parallel too) and files are written into the library one at a
+  time.
 * **Torrents** — add a magnet link, a link to a .torrent file or a .torrent file (also opened from
   other apps); several links can be pasted at once, one per line. Before anything is downloaded the file list must be one audiobook: MP3 files with
   optional cover images, or a single M4B; harmless extras (.nfo, .txt, .cue, playlists) are skipped,
