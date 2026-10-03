@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,7 +9,9 @@ plugins {
 
 // Optional Google Books API key for online cover search: put googleBooksApiKey=... into
 // local.properties (not committed). Without a key, Google Books is skipped.
-val localProperties = java.util.Properties().apply {
+// `java.util.Properties` can't be written out here: `java` resolves to the project's `java`
+// extension, not the package.
+val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
 }
 
