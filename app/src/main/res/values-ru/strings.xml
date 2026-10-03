@@ -257,6 +257,12 @@
     <string name="import_stage_cancelled">Отменено</string>
     <string name="import_done_title">Книга добавлена в библиотеку</string>
     <string name="import_failed_title">Импорт не удался</string>
+    <plurals name="import_more_running">
+        <item quantity="one">ещё %1$d в работе</item>
+        <item quantity="few">ещё %1$d в работе</item>
+        <item quantity="many">ещё %1$d в работе</item>
+        <item quantity="other">ещё %1$d в работе</item>
+    </plurals>
     <plurals name="import_more_queued">
         <item quantity="one">ещё %1$d в очереди</item>
         <item quantity="few">ещё %1$d в очереди</item>

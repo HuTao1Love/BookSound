@@ -37,6 +37,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +95,7 @@ class ImportPipeline(
         val workDir = journal.workDir(request.jobId).apply { mkdirs() }
         val tx = Transaction()
         var holdsLibrary = false
+        var reservedTemp = 0L
         var stage = ImportStage.PREPARING
         val weights = StageWeights(request.strategy != ConversionStrategy.REMUX_SINGLE)
         val report = Progress { s, f ->
@@ -112,7 +116,7 @@ class ImportPipeline(
             val source: RandomAccessSource = when (request.strategy) {
                 ConversionStrategy.REMUX_SINGLE -> openSource(request.parts.single().uri, request.parts.single().displayName)
                 ConversionStrategy.CONCAT_COPY, ConversionStrategy.TRANSCODE -> {
-                    checkTemporarySpace(workDir, treeUri, request)
+                    reservedTemp = reserveTemporarySpace(workDir, treeUri, request)
                     val audio = File(workDir, "audio.m4a")
                     convert(request, audio, report)
                     val src = FileChannelSource(FileInputStream(audio).channel)
@@ -195,6 +199,7 @@ class ImportPipeline(
             throw mapFailure(t, stage, request)
         } finally {
             if (holdsLibrary) libraryWrites.unlock()
+            if (reservedTemp > 0) tempReserved.update { it - reservedTemp }
             withContext(NonCancellable) {
                 workDir.deleteRecursively()
                 journal.remove(request.jobId)
@@ -214,15 +219,31 @@ class ImportPipeline(
         throw ImportFailure.SourceUnavailable(name, e)
     }
 
-    private fun checkTemporarySpace(workDir: File, treeUri: Uri, request: ImportRequest) {
-        val available = workDir.usableSpace
+    /**
+     * Checks there is temporary space for this import next to the ones already converting, and
+     * reserves it until the import ends. Returns the bytes reserved. While other imports hold the
+     * space this one needs, waits for them; fails only when this import alone doesn't fit.
+     */
+    private suspend fun reserveTemporarySpace(workDir: File, treeUri: Uri, request: ImportRequest): Long {
         val sameVolume = runCatching { documents.rootDocumentId(treeUri).startsWith("primary:") }.getOrDefault(true)
         // Temporary audio (plus the separately encoded parts while they are joined) and, when the
         // library is on the same volume, the final copy.
         val copies = 1 + (if (encodesInParallel(request)) 1 else 0) + (if (sameVolume) 1 else 0)
         val required = request.estimatedOutputBytes * copies + SAFETY_MARGIN
-        if (available in 1 until required) {
-            throw ImportFailure.InsufficientStorage(required, available, ImportFailure.Location.TEMPORARY)
+        while (true) {
+            val others = tempReservations.withLock {
+                val others = tempReserved.value
+                val available = workDir.usableSpace
+                // Other imports' files written so far are already missing from `available`, so
+                // this errs on the side of waiting.
+                if (available <= 0 || available >= required + others) {
+                    tempReserved.value = others + required
+                    return required
+                }
+                if (others == 0L) throw ImportFailure.InsufficientStorage(required, available, ImportFailure.Location.TEMPORARY)
+                others
+            }
+            tempReserved.first { it < others }
         }
     }
 
@@ -248,26 +269,43 @@ class ImportPipeline(
                 report.report(ImportStage.CONVERTING, 0f)
             }
         }
-        val copyFirst = request.strategy == ConversionStrategy.CONCAT_COPY
-        try {
-            withCodecUnless(copyFirst) {
-                transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = copyFirst) {
+        if (request.strategy == ConversionStrategy.CONCAT_COPY) {
+            // Stream copy uses no codec, so it doesn't wait for one.
+            try {
+                transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = true) {
                     report.report(ImportStage.CONVERTING, it)
                 }
-            }
-        } catch (e: ExportException) {
-            if (!copyFirst) throw e
-            // Stream copy can fail on unusual inputs; re-encoding is slower but robust.
-            Log.i(TAG, "Concatenation without re-encoding failed, transcoding instead", e)
-            output.delete()
-            report.report(ImportStage.CONVERTING, 0f)
-            withCodec {
-                transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = false) {
-                    report.report(ImportStage.CONVERTING, it)
-                }
+                report.report(ImportStage.CONVERTING, 1f)
+                return
+            } catch (e: ExportException) {
+                // Stream copy can fail on unusual inputs; re-encoding is slower but robust.
+                Log.i(TAG, "Concatenation without re-encoding failed, transcoding instead", e)
+                output.delete()
+                report.report(ImportStage.CONVERTING, 0f)
             }
         }
+        transcodeInOnePass(request, uris, output, report)
         report.report(ImportStage.CONVERTING, 1f)
+    }
+
+    private suspend fun transcodeInOnePass(request: ImportRequest, uris: List<Uri>, output: File, report: Progress) {
+        suspend fun encode() = withCodec {
+            transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = false) {
+                report.report(ImportStage.CONVERTING, it)
+            }
+        }
+        val alone = parallelUnreliable
+        try {
+            encode()
+        } catch (e: ExportException) {
+            // Other imports encode at the same time; on some phones that alone makes a codec fail.
+            if (alone || e.errorCode !in CODEC_ERRORS) throw e
+            Log.w(TAG, "Codec failed next to other encodes, transcoding alone", e)
+            parallelUnreliable = true
+            output.delete()
+            report.report(ImportStage.CONVERTING, 0f)
+            encode()
+        }
     }
 
     private class JoinFailed(cause: Throwable) : Exception(cause)
@@ -282,18 +320,30 @@ class ImportPipeline(
     /** Codecs in use across every import running side by side (parts of one book or several books). */
     private val codecs = Semaphore(CODEC_BUDGET)
 
-    /** After codec trouble, one codec at a time across all imports. */
+    /** After codec trouble, one codec at a time across all imports; see [withCodec]. */
     private val soloCodec = Mutex()
+
+    /** Temporary space reserved by the imports converting now; see [reserveTemporarySpace]. */
+    private val tempReserved = MutableStateFlow(0L)
+    private val tempReservations = Mutex()
 
     /** Held while a book is written into the library folder; see [run]. */
     private val libraryWrites = Mutex()
 
-    private suspend fun <T> withCodec(block: suspend () -> T): T =
-        codecs.withPermit { if (parallelUnreliable) soloCodec.withLock { block() } else block() }
-
-    /** Stream copy (transmux) uses no codec, so it doesn't wait for one. */
-    private suspend fun <T> withCodecUnless(transmux: Boolean, block: suspend () -> T): T =
-        if (transmux) block() else withCodec(block)
+    private suspend fun <T> withCodec(block: suspend () -> T): T {
+        if (!parallelUnreliable) return codecs.withPermit { block() }
+        // Alone means alone: wait until codecs started before the trouble was noticed are done too.
+        // Only the holder of soloCodec collects permits, so collecting them can't deadlock.
+        return soloCodec.withLock {
+            var held = 0
+            try {
+                repeat(CODEC_BUDGET) { codecs.acquire(); held++ }
+                block()
+            } finally {
+                repeat(held) { codecs.release() }
+            }
+        }
+    }
 
     private fun encodesInParallel(request: ImportRequest) = request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1
 
