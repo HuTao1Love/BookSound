@@ -53,21 +53,45 @@ you choose.
 
 ## Releases (APK on GitHub)
 
-Publishing a GitHub release (Releases → Draft a new release → tag like `v1.2` → Publish) runs
-`.github/workflows/release.yml`: it tests `:core`, builds a signed release APK and attaches it
-to the release as `BookSound-1.2.apk`. It can also be run by hand from the Actions tab.
+Publishing a GitHub release runs `.github/workflows/release.yml`: it tests `:core`, builds a
+signed release APK and attaches it to the release as `BookSound-<version>.apk`. It can also be
+run by hand: Actions → Release APK → Run workflow (the APK is then under the run's Artifacts).
 
-One-time setup — a release key (keep the file and passwords safe: updates must be signed with
-the same key, otherwise the app has to be uninstalled first):
+### One-time setup
 
+**1. Create a release key.** `keytool` comes with the JDK; on Windows it is inside Android
+Studio. In PowerShell:
+
+```powershell
+& "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
 ```
-keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 booksound.jks          # Windows PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("booksound.jks"))
+
+(macOS/Linux: `keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000`.)
+It asks for a password and a few name fields (any values). Keep `booksound.jks` and the
+password safe and out of the repository: every update must be signed with this same key,
+otherwise Android makes you uninstall the app (and lose its library data) first.
+
+**2. Copy the key as text.** PowerShell (puts it into the clipboard):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("booksound.jks")) | Set-Clipboard
 ```
 
-Add repository secrets (Settings → Secrets and variables → Actions): `KEYSTORE_BASE64` (the
-base64 output), `KEYSTORE_PASSWORD`, `KEY_ALIAS` (`booksound`), `KEY_PASSWORD`, and optionally
-`GOOGLE_BOOKS_API_KEY`. To build the same signed APK locally, put into `local.properties`:
+(macOS/Linux: `base64 -w0 booksound.jks`.)
+
+**3. Add repository secrets** — GitHub → the repository → Settings → Secrets and variables →
+Actions → New repository secret:
+
+| Name | Value |
+|---|---|
+| `KEYSTORE_BASE64` | the text from step 2 |
+| `KEYSTORE_PASSWORD` | the keystore password |
+| `KEY_ALIAS` | `booksound` |
+| `KEY_PASSWORD` | the key password (the same as the keystore password unless you chose another) |
+| `GOOGLE_BOOKS_API_KEY` | optional, for Google Books cover search |
+
+**4. (Optional) the same signed APK on your PC** — add to `local.properties`, then run
+`gradlew :app:assembleRelease` (output: `app/build/outputs/apk/release/app-release.apk`):
 
 ```
 signing.storeFile=C:/path/to/booksound.jks
@@ -75,5 +99,11 @@ signing.storePassword=...
 signing.keyAlias=booksound
 signing.keyPassword=...
 ```
+
+### Publishing a version
+
+GitHub → Releases → Draft a new release → Choose a tag → type e.g. `v1.2` → Create new tag →
+Publish release. A few minutes later `BookSound-1.2.apk` appears under the release's Assets;
+open that link on the phone to install or update.
 
 Design notes: [docs/DESIGN.md](docs/DESIGN.md).
