@@ -57,7 +57,7 @@ Library ──► Book details ──► Player ──► Chapters / Speed / Sle
 
 * Width < 600 dp (cover screen): single pane, full-screen player.
 * Width ≥ 600 dp (inner screen): library + book details side by side (list-detail); two-pane
-  player (cover │ controls + chapter list); two-column import editor; series cards in 2 columns
+  player (cover + controls │ chapter list, or cover │ controls without chapters); two-column import editor; series cards in 2 columns
   on wide windows.
 * Tabletop posture (half folded): player shows the cover above the hinge, controls below.
 * Fold/unfold is handled as a configuration change without recreating the activity; screen state
