@@ -155,8 +155,9 @@ fun ImportsScreen(navigator: AppNavigator) {
     }
     removeTorrent?.let { item ->
         ConfirmDialog(
-            title = stringResource(R.string.torrent_remove_title),
-            message = stringResource(R.string.torrent_remove_message),
+            // A book of a torrent with several books goes alone; the others keep downloading.
+            title = stringResource(if (item.record.group != null) R.string.torrent_remove_book_title else R.string.torrent_remove_title),
+            message = stringResource(if (item.record.group != null) R.string.torrent_remove_book_message else R.string.torrent_remove_message),
             confirmText = stringResource(R.string.action_remove),
             onConfirm = {
                 container.torrents.remove(item.id)

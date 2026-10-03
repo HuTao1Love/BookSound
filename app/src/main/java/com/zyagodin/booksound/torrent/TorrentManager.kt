@@ -375,16 +375,17 @@ class TorrentManager(
         r.importJobId?.let { jobId ->
             if (imports.jobs.value.any { it.id == jobId && it.isActive }) imports.cancel(jobId) else imports.dismiss(jobId)
         }
-        val others = store.records.value.filter { it.id != id && it.downloadKey == r.downloadKey }
-        if (others.isEmpty()) {
-            runCatching { engine.remove(r.infoHash, deleteFiles = true) }
+        // Finished books of the same torrent no longer need its files.
+        val unfinished = store.records.value.filter { it.id != id && it.downloadKey == r.downloadKey && it.phase != TorrentPhase.COMPLETED }
+        if (unfinished.isEmpty()) {
+            deleteDownload(r)
         } else {
-            val downloading = others.filter { it.phase == TorrentPhase.DOWNLOADING }
+            val downloading = unfinished.filter { it.phase == TorrentPhase.DOWNLOADING }
             if (r.phase == TorrentPhase.DOWNLOADING) {
                 if (downloading.isEmpty()) runCatching { engine.remove(r.infoHash, deleteFiles = false) }
                 else runCatching { engine.setWanted(r.infoHash, wantedFlags(downloading)) }
             }
-            deleteOwnFiles(r, others)
+            deleteOwnFiles(r, unfinished)
         }
         store.delete(id)
         live.update { it - id }
@@ -461,7 +462,8 @@ class TorrentManager(
                     fillSession(session, record)
                     val form = session.form.value!!
                     AnalysisState.Ready(
-                        draft = ImportDraft(record.suggested.toMetadata(), form.parts, emptyList(), record.name, null),
+                        // Name templates read a collection book's own folder name, not the whole torrent's.
+                        draft = ImportDraft(record.suggested.toMetadata(), form.parts, emptyList(), record.volume ?: record.name, null),
                         files = emptyList(),
                         skipped = emptyList(),
                     )
@@ -782,7 +784,11 @@ class TorrentManager(
         // The book is in the library as a verified M4B; the download is no longer needed, unless
         // other books of the same torrent still are to be imported from it.
         val others = store.records.value.filter { it.id != r.id && it.downloadKey == r.downloadKey && it.phase != TorrentPhase.COMPLETED }
-        if (others.isNotEmpty()) return deleteOwnFiles(r, others)
+        if (others.isNotEmpty()) deleteOwnFiles(r, others) else deleteDownload(r)
+    }
+
+    /** Deletes the whole download [r] came from: files, .torrent metadata and resume data. */
+    private fun deleteDownload(r: TorrentRecord) {
         runCatching { engine.remove(r.infoHash, deleteFiles = true) }
         File(r.dataDir).deleteRecursively()
         store.resumeFile(r.downloadKey).delete()

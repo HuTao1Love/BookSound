@@ -43,6 +43,7 @@ import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.QuietButton
+import com.zyagodin.booksound.ui.components.titleWithSeries
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.util.formatSize
@@ -70,7 +71,7 @@ fun TorrentCard(item: TorrentItem, actions: TorrentActions, modifier: Modifier =
                 BookCover(item.coverPath, r.title, r.author, Modifier.size(64.dp))
                 Spacer(Modifier.width(Spacing.lg))
                 Column(Modifier.weight(1f)) {
-                    Text(r.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(titleWithSeries(r.title, r.series, r.seriesIndex), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     r.author?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
@@ -244,6 +245,8 @@ fun failureMessage(context: Context, failure: TorrentFailure): String {
 fun TorrentBanner(items: List<TorrentItem>, onClick: () -> Unit) {
     val review = items.firstOrNull { !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED) }
     val first = review ?: items.first()
+    /** The books of one torrent share one download and count as one torrent. */
+    val downloads = items.distinctBy { it.record.downloadKey }.size
     Surface(
         onClick = onClick,
         shape = Radii.card,
@@ -254,14 +257,18 @@ fun TorrentBanner(items: List<TorrentItem>, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (items.size > 1) pluralStringResource(R.plurals.torrent_banner_many, items.size, items.size)
-                        else first.record.title,
+                        when {
+                            downloads > 1 -> pluralStringResource(R.plurals.torrent_banner_many, downloads, downloads)
+                            // Several books of one torrent: name the torrent.
+                            items.size > 1 -> first.record.name
+                            else -> titleWithSeries(first.record.title, first.record.series, first.record.seriesIndex).text
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        if (review != null) stringResource(R.string.torrent_review_needed_short, review.record.title) else statusText(first),
+                        if (review != null) stringResource(R.string.torrent_review_needed_short, titleWithSeries(review.record.title, review.record.series, review.record.seriesIndex).text) else statusText(first),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (review != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

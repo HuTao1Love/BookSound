@@ -343,7 +343,7 @@
     <string name="import_option_torrent">Торрент</string>
     <string name="import_option_torrent_hint">Magnet-ссылка, ссылка на .torrent или файл .torrent</string>
     <string name="torrent_add_title">Добавить торрент</string>
-    <string name="torrent_requirements">В торренте должна быть одна аудиокнига: MP3-файлы (можно с обложкой) или один файл M4B. Текстовые файлы, плейлисты и т. п. пропускаются.</string>
+    <string name="torrent_requirements">В торренте должны быть аудиокниги: MP3-файлы (можно с обложкой) или файлы M4B. Если книг несколько и каждая в своей папке, каждая папка станет отдельной книгой. Текстовые файлы, плейлисты и т. п. пропускаются.</string>
     <string name="torrent_link_label">Magnet-ссылка или ссылка на .torrent</string>
     <string name="action_choose_torrent_file">Выбрать файл .torrent</string>
     <string name="action_add">Добавить</string>
@@ -414,6 +414,8 @@
     <string name="integrity_implausible">повреждён (размер не соответствует длительности)</string>
     <string name="torrent_remove_title">Удалить торрент?</string>
     <string name="torrent_remove_message">Загрузка и её файлы будут удалены. Книги, уже добавленные в библиотеку, не затрагиваются.</string>
+    <string name="torrent_remove_book_title">Убрать эту книгу?</string>
+    <string name="torrent_remove_book_message">Книга не будет импортирована, её файлы удалятся. Остальные книги этого торрента останутся.</string>
     <string name="notification_channel_torrent">Загрузка торрентов</string>
     <string name="torrent_notification_title">Загрузка аудиокниг</string>
     <plurals name="torrent_more_downloading">

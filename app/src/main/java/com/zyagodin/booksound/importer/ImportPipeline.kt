@@ -129,7 +129,12 @@ class ImportPipeline(
 
             // Several books convert side by side; writing into the library folder (choosing the file
             // name, copying, renaming) happens one book at a time so two books never claim one name.
-            libraryWrites.lock()
+            try {
+                libraryWrites.lock()
+            } catch (e: CancellationException) {
+                source.close()
+                throw e
+            }
             holdsLibrary = true
             val (expectedDuration, target) = source.use { src ->
                 val duration = runCatching { AudioProbe.probe(src, "source.m4b").durationMs }.getOrNull() ?: request.totalDurationMs
@@ -199,11 +204,12 @@ class ImportPipeline(
             throw mapFailure(t, stage, request)
         } finally {
             if (holdsLibrary) libraryWrites.unlock()
-            if (reservedTemp > 0) tempReserved.update { it - reservedTemp }
             withContext(NonCancellable) {
                 workDir.deleteRecursively()
                 journal.remove(request.jobId)
             }
+            // Only now is the space really free: an import waiting for it checks the disk right away.
+            if (reservedTemp > 0) tempReserved.update { it - reservedTemp }
         }
     }
 

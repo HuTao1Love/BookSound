@@ -343,7 +343,7 @@
     <string name="import_option_torrent">Torrent</string>
     <string name="import_option_torrent_hint">Magnet link, link to a .torrent file, or a .torrent file</string>
     <string name="torrent_add_title">Add torrent</string>
-    <string name="torrent_requirements">The torrent must contain one audiobook: MP3 files (a cover image is fine) or a single M4B file. Text files, playlists and the like are skipped.</string>
+    <string name="torrent_requirements">The torrent must contain audiobooks: MP3 files (a cover image is fine) or M4B files. A torrent with several books, each in its own folder, gives one book per folder. Text files, playlists and the like are skipped.</string>
     <string name="torrent_link_label">Magnet or .torrent link</string>
     <string name="action_choose_torrent_file">Choose .torrent file</string>
     <string name="action_add">Add</string>
@@ -412,6 +412,8 @@
     <string name="integrity_implausible">damaged (size and length don\'t match)</string>
     <string name="torrent_remove_title">Remove this torrent?</string>
     <string name="torrent_remove_message">The download and its files are deleted. Books already in your library are not affected.</string>
+    <string name="torrent_remove_book_title">Remove this book?</string>
+    <string name="torrent_remove_book_message">The book is not imported and its files are deleted. The other books of this torrent stay.</string>
     <string name="notification_channel_torrent">Torrent downloads</string>
     <string name="torrent_notification_title">Downloading audiobooks</string>
     <plurals name="torrent_more_downloading">
