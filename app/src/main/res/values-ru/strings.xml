@@ -426,4 +426,6 @@
     <string name="crop_title">Обрезка до квадрата</string>
     <string name="crop_hint">Двигайте и масштабируйте двумя пальцами</string>
     <string name="action_done">Готово</string>
+    <string name="torrent_peers_of">пиры: %1$d из %2$d</string>
+    <string name="torrent_tracker_error">Трекер: %1$s</string>
 </resources>

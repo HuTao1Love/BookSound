@@ -519,7 +519,15 @@ class TorrentManager(
             onDownloaded(r)
             return null
         }
-        return TorrentLive(status.progress, status.downloadRate, status.peers, status.seeds, status.state == EngineStatus.State.CHECKING)
+        return TorrentLive(
+            progress = status.progress,
+            downloadRate = status.downloadRate,
+            peers = status.peers,
+            seeds = status.seeds,
+            swarm = status.swarm,
+            checking = status.state == EngineStatus.State.CHECKING,
+            trackerError = status.trackerError,
+        )
     }
 
     private fun startDownload(id: String) {

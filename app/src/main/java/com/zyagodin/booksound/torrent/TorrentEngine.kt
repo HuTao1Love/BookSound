@@ -19,6 +19,8 @@ import org.libtorrent4j.alerts.AlertType
 import org.libtorrent4j.alerts.FileErrorAlert
 import org.libtorrent4j.alerts.SaveResumeDataAlert
 import org.libtorrent4j.alerts.TorrentErrorAlert
+import org.libtorrent4j.alerts.TrackerErrorAlert
+import org.libtorrent4j.alerts.TrackerReplyAlert
 import java.io.File
 
 /** Metadata of a torrent, read from .torrent bytes. */
@@ -34,10 +36,15 @@ data class EngineStatus(
     val wantedBytes: Long,
     val wantedDoneBytes: Long,
     val downloadRate: Int,
+    /** Peers we are connected to. */
     val peers: Int,
     val seeds: Int,
+    /** Peers known in the swarm (from trackers, DHT and peer exchange), connected or not. */
+    val swarm: Int,
     val paused: Boolean,
     val error: String?,
+    /** Last error reported by a tracker, cleared when a tracker answers. */
+    val trackerError: String?,
 ) {
     enum class State { CHECKING, DOWNLOADING, FINISHED, OTHER }
 
@@ -60,6 +67,8 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
     @Volatile var listener: ((Event) -> Unit)? = null
 
     private val session = SessionManager(false)
+    private val trackerErrors = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var lastReopen = 0L
 
     private val alerts = object : AlertListener {
         override fun types(): IntArray = intArrayOf(
@@ -67,11 +76,19 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             AlertType.TORRENT_ERROR.swig(),
             AlertType.FILE_ERROR.swig(),
             AlertType.ADD_TORRENT.swig(),
+            AlertType.TRACKER_ERROR.swig(),
+            AlertType.TRACKER_REPLY.swig(),
         )
 
         override fun alert(alert: Alert<*>) {
             try {
                 when (alert) {
+                    is TrackerErrorAlert -> {
+                        val message = alert.errorMessage().ifBlank { alert.error().message }
+                        trackerErrors[hashOf(alert.handle())] = message
+                        log("Tracker ${alert.trackerUrl()} failed: $message", null)
+                    }
+                    is TrackerReplyAlert -> trackerErrors.remove(hashOf(alert.handle()))
                     is SaveResumeDataAlert -> {
                         val bytes = AddTorrentParams.writeResumeDataBuf(alert.params())
                         listener?.invoke(Event.ResumeData(hashOf(alert.handle()), bytes))
@@ -129,9 +146,15 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
         session.stop()
     }
 
-    /** Called when the device's network changed so listening sockets are rebound immediately. */
+    /**
+     * Called when the device switched networks so sockets are rebound immediately. Reopening drops
+     * peer connections and re-announces to trackers, so it is rate limited.
+     */
     fun onNetworkChanged() {
-        if (session.isRunning) runCatching { session.reopenNetworkSockets() }
+        val now = System.currentTimeMillis()
+        if (!session.isRunning || now - lastReopen < REOPEN_MIN_INTERVAL_MS) return
+        lastReopen = now
+        runCatching { session.reopenNetworkSockets() }
     }
 
     /**
@@ -201,6 +224,7 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
 
     fun remove(infoHash: String, deleteFiles: Boolean) {
         val h = handle(infoHash) ?: return
+        trackerErrors.remove(infoHash)
         if (deleteFiles) session.remove(h, SessionHandle.DELETE_FILES) else session.remove(h)
     }
 
@@ -218,6 +242,8 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
         }
         val wanted = s.totalWanted()
         val done = s.totalWantedDone()
+        // Tracker scrape counts are -1 when unknown; the peer list also holds DHT/PEX peers.
+        val scraped = maxOf(0, s.numComplete()) + maxOf(0, s.numIncomplete())
         return EngineStatus(
             state = state,
             progress = if (wanted > 0) (done.toDouble() / wanted).toFloat().coerceIn(0f, 1f) else 0f,
@@ -226,8 +252,10 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             downloadRate = s.downloadPayloadRate(),
             peers = s.numPeers(),
             seeds = s.numSeeds(),
+            swarm = maxOf(scraped, s.listPeers(), s.numPeers()),
             paused = paused,
             error = s.errorCode().takeIf { it.isError }?.message,
+            trackerError = trackerErrors[infoHash],
         )
     }
 
@@ -241,6 +269,7 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
 
     companion object {
         private const val ENOSPC = 28
+        private const val REOPEN_MIN_INTERVAL_MS = 10_000L
 
         fun hashOf(handle: TorrentHandle): String = handle.infoHash().toHex().lowercase()
 

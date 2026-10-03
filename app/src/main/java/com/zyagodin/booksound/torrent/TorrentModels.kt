@@ -144,9 +144,13 @@ data class TorrentRecord(
 data class TorrentLive(
     val progress: Float,
     val downloadRate: Int,
+    /** Connected peers. */
     val peers: Int,
     val seeds: Int,
+    /** Peers known in the swarm, connected or not. */
+    val swarm: Int,
     val checking: Boolean,
+    val trackerError: String?,
 )
 
 /** Everything the UI shows about one torrent. */

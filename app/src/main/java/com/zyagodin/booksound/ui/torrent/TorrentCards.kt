@@ -85,6 +85,17 @@ fun TorrentCard(item: TorrentItem, actions: TorrentActions, modifier: Modifier =
                 Spacer(Modifier.height(Spacing.md))
                 BookProgressBar(progress, height = 6.dp)
             }
+            // No connections: show why the tracker refused us, if it did.
+            item.live?.takeIf { it.peers == 0 && r.phase == TorrentPhase.DOWNLOADING }?.trackerError?.let { error ->
+                Spacer(Modifier.height(Spacing.sm))
+                Text(
+                    stringResource(R.string.torrent_tracker_error, error),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (needsReview) {
                 Spacer(Modifier.height(Spacing.md))
                 Text(
@@ -179,7 +190,8 @@ fun statusText(item: TorrentItem): String {
                 else -> listOfNotNull(
                     "$percent%",
                     stringResource(R.string.torrent_speed, formatSize(context, live.downloadRate.toLong())),
-                    pluralStringResource(R.plurals.torrent_peers, live.peers, live.peers),
+                    if (live.swarm > live.peers) stringResource(R.string.torrent_peers_of, live.peers, live.swarm)
+                    else pluralStringResource(R.plurals.torrent_peers, live.peers, live.peers),
                 ).joinToString(" · ")
             }
         }

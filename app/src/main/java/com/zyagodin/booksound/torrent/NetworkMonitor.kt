@@ -13,8 +13,13 @@ class NetworkMonitor(context: Context) {
     private val _online = MutableStateFlow(isOnlineNow())
     val online: StateFlow<Boolean> = _online
 
-    /** Called on every change of the default network (connect, disconnect, Wi-Fi ⇄ mobile). */
+    /**
+     * Called when the default network really changes (connect, disconnect, Wi-Fi ⇄ mobile). Not
+     * for capability updates of the same network, which Android reports every few seconds.
+     */
     var onChanged: (() -> Unit)? = null
+
+    private var current: Network? = connectivity.activeNetwork
 
     init {
         connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
@@ -24,11 +29,14 @@ class NetworkMonitor(context: Context) {
         })
     }
 
+    @Synchronized
     private fun publish() {
+        val network = connectivity.activeNetwork
         val now = isOnlineNow()
-        val changed = now != _online.value
+        val changed = now != _online.value || network != current
+        current = network
         _online.value = now
-        if (changed || now) onChanged?.invoke()
+        if (changed) onChanged?.invoke()
     }
 
     private fun isOnlineNow(): Boolean {

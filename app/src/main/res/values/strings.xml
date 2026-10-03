@@ -422,4 +422,6 @@
     <string name="crop_title">Crop to a square</string>
     <string name="crop_hint">Drag and pinch to fit the cover</string>
     <string name="action_done">Done</string>
+    <string name="torrent_peers_of">peers: %1$d of %2$d</string>
+    <string name="torrent_tracker_error">Tracker: %1$s</string>
 </resources>
