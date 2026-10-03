@@ -142,7 +142,7 @@ class ImportEditorViewModel(
                     ) {
                         s.autoSearchDone = true
                         val form = s.form.value ?: return@collect
-                        searchOnline(form.title, form.author)
+                        searchOnline(form.title, form.author, form.series)
                     }
                 }
             }
@@ -332,11 +332,11 @@ class ImportEditorViewModel(
         session?.cover?.value = null
     }
 
-    fun searchOnline(title: String, author: String?) {
+    fun searchOnline(title: String, author: String?, series: String? = null) {
         val s = session ?: return
         s.online.value = OnlineCoverState.Loading
         viewModelScope.launch {
-            s.online.value = when (val r = container.coverSearch.search(title, author)) {
+            s.online.value = when (val r = container.coverSearch.search(title, author, series)) {
                 is CoverSearchResult.Found -> OnlineCoverState.Results(listOfNotNull(title, author).joinToString(" "), r.covers)
                 CoverSearchResult.Offline -> OnlineCoverState.Offline
                 CoverSearchResult.Failed -> OnlineCoverState.Failed

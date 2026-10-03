@@ -43,36 +43,58 @@ sealed interface CoverSearchResult {
 }
 
 /**
- * Finds cover images for a query. Web image search (Bing, DuckDuckGo) comes first, like a regular
- * image search; book catalogues (Apple, LitRes, Open Library) follow. Each source is queried in
- * parallel and a failing source does not hide results from the others. When nothing is found for
- * title + author, the title alone is tried.
+ * Finds cover images for a query. Web image search (Yandex, Bing, DuckDuckGo) comes first, like a
+ * regular image search; book catalogues (Apple, LitRes, Open Library) follow. Each source is
+ * queried in parallel and a failing source does not hide results from the others. A book in a
+ * series is also searched by series name (the series' covers often share one design), after the
+ * title results. When nothing is found with the author, the queries are tried without it.
  *
  * Google Books is only used with an API key: without one its quota is zero.
  */
 class CoverSearchRepository(private val http: OkHttpClient, private val googleBooksApiKey: String = "") {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    suspend fun search(title: String, author: String?): CoverSearchResult = withContext(Dispatchers.IO) {
+    suspend fun search(title: String, author: String?, series: String? = null): CoverSearchResult = withContext(Dispatchers.IO) {
         val cleanTitle = cleanQuery(title)
         val cleanAuthor = author?.let(::cleanQuery)?.takeIf { it.isNotEmpty() }
+        val cleanSeries = series?.let(::cleanQuery)?.takeIf { it.isNotEmpty() && !it.equals(cleanTitle, ignoreCase = true) }
         if (cleanTitle.isEmpty()) return@withContext CoverSearchResult.Found(emptyList())
-        val first = searchOnce(cleanTitle, cleanAuthor)
+        val first = searchWithSeries(cleanTitle, cleanAuthor, cleanSeries)
         if (first is CoverSearchResult.Found && first.covers.isEmpty() && cleanAuthor != null) {
-            searchOnce(cleanTitle, null)
+            searchWithSeries(cleanTitle, null, cleanSeries)
         } else {
             first
         }
+    }
+
+    /** Title (+ author) and, for a book in a series, series (+ author), side by side. */
+    private suspend fun searchWithSeries(title: String, author: String?, series: String?): CoverSearchResult {
+        if (series == null) return searchOnce(title, author)
+        val (byTitle, bySeries) = coroutineScope {
+            val t = async { searchOnce(title, author) }
+            val s = async { searchOnce(series, author) }
+            t.await() to s.await()
+        }
+        if (byTitle !is CoverSearchResult.Found && bySeries !is CoverSearchResult.Found) return byTitle
+        val titled = (byTitle as? CoverSearchResult.Found)?.covers.orEmpty()
+        val serial = (bySeries as? CoverSearchResult.Found)?.covers.orEmpty()
+        // Title matches lead; series matches come before the long tail of title matches.
+        val head = titled.take(MAX_RESULTS * 2 / 3)
+        return CoverSearchResult.Found((head + serial + titled.drop(head.size)).distinctBy { it.fullUrl }.take(MAX_RESULTS))
     }
 
     private suspend fun searchOnce(title: String, author: String?): CoverSearchResult {
         val query = listOfNotNull(title, author).joinToString(" ")
         val country = Locale.getDefault().country.takeIf { it.length == 2 } ?: "US"
         val networkErrors = java.util.concurrent.atomic.AtomicInteger()
-        val web = listOf<suspend () -> List<OnlineCover>>(
-            { bingImages(query) },
-            { duckDuckGoImages(query) },
-        )
+        val russian = Locale.getDefault().language == "ru"
+        val web = buildList<suspend () -> List<OnlineCover>> {
+            // Yandex knows Russian books best; elsewhere it follows the others.
+            if (russian) add { yandexImages(query, russian) }
+            add { bingImages(query) }
+            add { duckDuckGoImages(query) }
+            if (!russian) add { yandexImages(query, russian) }
+        }
         val catalogues = buildList<suspend () -> List<OnlineCover>> {
             add { itunes(query, country, "audiobook") }
             if (country != "US") add { itunes(query, "US", "audiobook") }
@@ -148,6 +170,11 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
             .build()
         val html = get(url.toString(), browser = true)?.decodeToString() ?: return emptyList()
         return parseBing(html)
+    }
+
+    private suspend fun yandexImages(query: String, russian: Boolean): List<OnlineCover> {
+        val html = get(YandexImages.searchUrl(query, russian), browser = true)?.decodeToString() ?: return emptyList()
+        return YandexImages.parse(html)
     }
 
     /** DuckDuckGo needs a per-query token ("vqd") from its search page before the image API answers. */

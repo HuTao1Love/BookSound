@@ -116,8 +116,17 @@ class CoverPickerViewModel(private val container: AppContainer, sessionId: Strin
         val s = session ?: return
         if (query.isBlank()) return
         s.online.value = OnlineCoverState.Loading
+        // The suggested "title author" query also searches by the book's series; a query the
+        // user typed is searched as typed.
+        val form = s.form.value
+        val suggested = query.trim() == initialQuery.trim()
         viewModelScope.launch {
-            s.online.value = when (val r = container.coverSearch.search(query, null)) {
+            val r = if (suggested && form != null) {
+                container.coverSearch.search(form.title, form.author.ifBlank { null }, form.series)
+            } else {
+                container.coverSearch.search(query, null)
+            }
+            s.online.value = when (r) {
                 is CoverSearchResult.Found -> OnlineCoverState.Results(query, r.covers)
                 CoverSearchResult.Offline -> OnlineCoverState.Offline
                 CoverSearchResult.Failed -> OnlineCoverState.Failed
