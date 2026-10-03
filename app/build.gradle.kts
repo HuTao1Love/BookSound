@@ -28,7 +28,7 @@ val releaseKeystore = secret("BOOKSOUND_KEYSTORE", "signing.storeFile")
 val appVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 1
 val appVersionName = providers.gradleProperty("versionName").orNull
     ?: providers.gradleProperty("appVersion").orNull
-    ?: "1.0"
+    ?: "0.1"
 
 android {
     namespace = "com.zyagodin.booksound"

@@ -56,7 +56,7 @@ you choose.
 `.github/workflows/release.yml` tests `:core`, builds a signed release APK and publishes it:
 
 * **Every push to `main`** (each merged pull request) becomes a release tagged
-  `<appVersion>.<run number>`, e.g. `1.0.57`, with `BookSound-1.0.57.apk` attached.
+  `<appVersion>.<run number>`, e.g. `0.1.57`, with `BookSound-0.1.57.apk` attached.
   `appVersion` lives in `gradle.properties`; raise it for a new major/minor version.
 * **A release published by hand** gets its APK attached (tag `v1.2` → `BookSound-1.2.apk`).
 * **Actions → Release APK → Run workflow** keeps the APK under the run's Artifacts.
