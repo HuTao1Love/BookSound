@@ -14,6 +14,7 @@ import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.data.settings.LibraryLayoutMode
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.torrent.TorrentItem
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -34,6 +35,8 @@ data class LibraryUiState(
     val layout: LibraryLayoutMode = LibraryLayoutMode.GRID,
     val continueListening: LibraryItem? = null,
     val activeImports: List<ImportJob> = emptyList(),
+    /** Torrents still downloading, waiting for review or being converted. */
+    val activeTorrents: List<TorrentItem> = emptyList(),
     val scanning: Boolean = false,
     val groups: List<SeriesSection> = emptyList(),
 )
@@ -55,9 +58,9 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         container.library.library,
         query,
         container.settings.state,
-        container.importManager.jobs,
+        combine(container.importManager.jobs, container.torrents.items) { jobs, torrents -> jobs to torrents },
         container.scanner.scanning,
-    ) { items, q, settings, jobs, scanning ->
+    ) { items, q, settings, (jobs, torrents), scanning ->
         val libraryQuery = LibraryQuery(q, settings.librarySort, settings.libraryDescending, settings.libraryFilter)
         val byId = items.associateBy { it.id }
         val ordered = LibrarySearch.apply(items.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
@@ -79,7 +82,9 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             filter = settings.libraryFilter,
             layout = settings.libraryLayout,
             continueListening = continueItem.takeIf { q.isBlank() && settings.libraryFilter == ProgressFilter.ALL },
-            activeImports = jobs.filter { it.isActive },
+            // Torrent conversions are shown by the torrent banner.
+            activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
+            activeTorrents = torrents.filter { it.record.isActive },
             scanning = scanning,
             groups = groups,
         )

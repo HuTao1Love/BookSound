@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Folder
@@ -76,10 +77,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.organize.ConversionStrategy
 import com.zyagodin.booksound.core.organize.CoverOrigin
+import com.zyagodin.booksound.core.model.EmbeddedPicture
+import com.zyagodin.booksound.core.torrent.AudiobookLayout
+import com.zyagodin.booksound.core.torrent.TorrentContentProblem
+import com.zyagodin.booksound.torrent.TorrentPhase
+import com.zyagodin.booksound.ui.torrent.problemMessage
 import com.zyagodin.booksound.cover.OnlineCover
 import com.zyagodin.booksound.importer.AnalysisFailure
 import com.zyagodin.booksound.importer.AnalysisState
 import com.zyagodin.booksound.importer.EditorForm
+import com.zyagodin.booksound.importer.ImportConflict
+import com.zyagodin.booksound.importer.ImportDecision
 import com.zyagodin.booksound.importer.OnlineCoverState
 import com.zyagodin.booksound.importer.SkipReason
 import com.zyagodin.booksound.importer.SkippedFile
@@ -121,6 +129,8 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
     val context = LocalContext.current
     var conflict by remember { mutableStateOf<ImportConflict?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var confirmLeaveTorrent by remember { mutableStateOf(false) }
+    var cropPicture by remember { mutableStateOf<EmbeddedPicture?>(null) }
     var renamePart by remember { mutableStateOf<Int?>(null) }
     var renameChapter by remember { mutableStateOf<Int?>(null) }
 
@@ -129,7 +139,17 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
         navigator.back()
     }
     val ready = ui.analysis is AnalysisState.Ready && ui.form != null
-    BackHandler { if (ready) confirmDiscard = true else close() }
+    val torrent = ui.torrent
+    // A torrent keeps downloading when the review is left; ask whether to keep or remove it.
+    val isTorrent = torrent != null || ui.analysis is AnalysisState.AwaitingTorrent
+    fun onCloseRequest() {
+        when {
+            isTorrent -> confirmLeaveTorrent = true
+            ready -> confirmDiscard = true
+            else -> close()
+        }
+    }
+    BackHandler { onCloseRequest() }
 
     fun handle(outcome: ConfirmOutcome) {
         when (outcome) {
@@ -148,11 +168,17 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                 Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = Spacing.sm, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { if (ready) confirmDiscard = true else close() }) {
+                IconButton(onClick = { onCloseRequest() }) {
                     Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.action_cancel))
                 }
                 Text(
-                    stringResource(if (ui.isEdit) R.string.editor_title_edit else R.string.editor_title_import),
+                    stringResource(
+                        when {
+                            isTorrent -> R.string.editor_title_torrent
+                            ui.isEdit -> R.string.editor_title_edit
+                            else -> R.string.editor_title_import
+                        },
+                    ),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(start = Spacing.sm),
                 )
@@ -166,15 +192,24 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(formatDuration(context, ui.totalDurationMs), style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "≈ " + formatSize(context, ui.estimatedBytes),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (torrent != null) {
+                                Text(torrentDownloadLine(torrent), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    stringResource(R.string.torrent_converted_after_download),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Text(formatDuration(context, ui.totalDurationMs), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "≈ " + formatSize(context, ui.estimatedBytes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         PrimaryButton(
-                            text = stringResource(if (ui.isEdit) R.string.action_save_changes else R.string.action_import),
+                            text = stringResource(if (ui.isEdit || torrent?.reviewed == true) R.string.action_save_changes else R.string.action_import),
                             onClick = { vm.confirm(null, ::handle) },
                             enabled = !ui.busy && !ui.seriesIndexInvalid && !ui.downloadingCover,
                             modifier = Modifier.widthIn(min = 160.dp),
@@ -206,6 +241,17 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                         }
                     }
                 }
+                is AnalysisState.AwaitingTorrent -> Column(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    LoadingState(
+                        title = stringResource(if (analysis.online) R.string.editor_fetching_torrent else R.string.torrent_waiting_network),
+                        message = stringResource(R.string.editor_fetching_torrent_message, analysis.name.orEmpty()),
+                        modifier = Modifier.height(240.dp),
+                    )
+                }
                 is AnalysisState.Failed -> AnalysisFailed(analysis, onBack = ::close)
                 is AnalysisState.Ready -> ui.form?.let { form ->
                     EditorContent(
@@ -217,6 +263,7 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                         onRenamePart = { renamePart = it },
                         onRenameChapter = { renameChapter = it },
                         onCoverFailed = { scope.launch { snackbar.showSnackbar(context.getString(R.string.cover_download_failed)) } },
+                        onOnlineCover = { picture -> if (needsCrop(picture)) cropPicture = picture else vm.useCover(picture) },
                     )
                 }
             }
@@ -230,8 +277,8 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                 message = if (c.existingTitle != null) stringResource(R.string.conflict_book_message, c.path, c.existingTitle)
                 else stringResource(R.string.conflict_file_message, c.path),
                 choices = listOf(
-                    Choice(stringResource(R.string.conflict_keep_both)) { conflict = null; vm.confirm(ImportEditorViewModel.Decision.KEEP_BOTH, ::handle) },
-                    Choice(stringResource(R.string.conflict_replace), ChoiceStyle.DESTRUCTIVE) { conflict = null; vm.confirm(ImportEditorViewModel.Decision.REPLACE, ::handle) },
+                    Choice(stringResource(R.string.conflict_keep_both)) { conflict = null; vm.confirm(ImportDecision.KEEP_BOTH, ::handle) },
+                    Choice(stringResource(R.string.conflict_replace), ChoiceStyle.DESTRUCTIVE) { conflict = null; vm.confirm(ImportDecision.REPLACE, ::handle) },
                     Choice(stringResource(R.string.action_cancel), ChoiceStyle.NEUTRAL) { conflict = null },
                 ),
                 onDismiss = { conflict = null },
@@ -240,13 +287,39 @@ fun ImportEditorScreen(sessionId: String, navigator: AppNavigator) {
                 title = stringResource(R.string.duplicate_title),
                 message = stringResource(R.string.duplicate_message, c.existingTitle),
                 choices = listOf(
-                    Choice(stringResource(R.string.duplicate_replace), ChoiceStyle.DESTRUCTIVE) { conflict = null; vm.confirm(ImportEditorViewModel.Decision.REPLACE, ::handle) },
-                    Choice(stringResource(R.string.duplicate_keep_both)) { conflict = null; vm.confirm(ImportEditorViewModel.Decision.KEEP_BOTH, ::handle) },
+                    Choice(stringResource(R.string.duplicate_replace), ChoiceStyle.DESTRUCTIVE) { conflict = null; vm.confirm(ImportDecision.REPLACE, ::handle) },
+                    Choice(stringResource(R.string.duplicate_keep_both)) { conflict = null; vm.confirm(ImportDecision.KEEP_BOTH, ::handle) },
                     Choice(stringResource(R.string.action_cancel), ChoiceStyle.NEUTRAL) { conflict = null },
                 ),
                 onDismiss = { conflict = null },
             )
         }
+    }
+    cropPicture?.let { picture ->
+        SquareCropDialog(
+            picture = picture,
+            onCropped = {
+                vm.useCover(it)
+                cropPicture = null
+            },
+            onDismiss = { cropPicture = null },
+        )
+    }
+    if (confirmLeaveTorrent) {
+        ChoiceDialog(
+            title = stringResource(R.string.torrent_leave_title),
+            message = stringResource(R.string.torrent_leave_message),
+            choices = listOf(
+                Choice(stringResource(R.string.action_keep_downloading)) { confirmLeaveTorrent = false; close() },
+                Choice(stringResource(R.string.action_remove_torrent), ChoiceStyle.DESTRUCTIVE) {
+                    confirmLeaveTorrent = false
+                    vm.removeTorrent()
+                    navigator.back()
+                },
+                Choice(stringResource(R.string.action_keep_editing), ChoiceStyle.NEUTRAL) { confirmLeaveTorrent = false },
+            ),
+            onDismiss = { confirmLeaveTorrent = false },
+        )
     }
     if (confirmDiscard) {
         ConfirmDialog(
@@ -298,18 +371,25 @@ private fun AnalysisFailed(state: AnalysisState.Failed, onBack: () -> Unit) {
         AnalysisFailure.ALL_FILES_FAILED -> R.string.analysis_all_failed_title to R.string.analysis_all_failed_message
         AnalysisFailure.SOURCE_UNAVAILABLE -> R.string.analysis_unavailable_title to R.string.analysis_unavailable_message
         AnalysisFailure.BOOK_NOT_FOUND -> R.string.analysis_book_missing_title to R.string.analysis_book_missing_message
+        AnalysisFailure.TORRENT_INVALID -> R.string.analysis_torrent_invalid_title to R.string.torrent_requirements
+        AnalysisFailure.TORRENT_UNAVAILABLE -> R.string.analysis_torrent_unavailable_title to R.string.analysis_torrent_unavailable_message
+        AnalysisFailure.TORRENT_BUSY -> R.string.analysis_torrent_busy_title to R.string.analysis_torrent_busy_message
     }
+    val context = LocalContext.current
+    val problem = state.detail?.let { name -> TorrentContentProblem.entries.firstOrNull { it.name == name } }
+    val text = problem?.let { problemMessage(context, it, state.skipped.map { f -> f.name }) } ?: stringResource(message)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
         item {
             ErrorState(
                 icon = Icons.Rounded.ErrorOutline,
                 title = stringResource(title),
-                message = stringResource(message),
+                message = text,
                 modifier = Modifier.height(380.dp),
                 action = { PrimaryButton(stringResource(R.string.action_back), onClick = onBack) },
             )
         }
-        if (state.skipped.isNotEmpty()) {
+        // For torrents the offending files are part of the message.
+        if (state.skipped.isNotEmpty() && state.reason != AnalysisFailure.TORRENT_INVALID) {
             item { SkippedCard(state.skipped, Modifier.widthIn(max = 560.dp)) }
         }
     }
@@ -325,6 +405,7 @@ private fun EditorContent(
     onRenamePart: (Int) -> Unit,
     onRenameChapter: (Int) -> Unit,
     onCoverFailed: () -> Unit,
+    onOnlineCover: (EmbeddedPicture) -> Unit,
 ) {
     val window = rememberWindowLayout()
     val listState = rememberLazyListState()
@@ -339,7 +420,10 @@ private fun EditorContent(
     )
     val details: LazyListScope.() -> Unit = {
         item(key = "cover") {
-            CoverSection(ui, onPickCover, vm::removeCover, onSuggestion = { cover -> vm.chooseOnline(cover) { ok -> if (!ok) onCoverFailed() } })
+            CoverSection(ui, onPickCover, vm::removeCover, onSuggestion = { cover -> vm.downloadOnline(cover) { picture -> if (picture == null) onCoverFailed() else onOnlineCover(picture) } })
+        }
+        if (ui.sourceName.isNotBlank()) {
+            item(key = "templates") { NameTemplateSection(ui, vm::applyTemplate, vm::addTemplate, vm::deleteTemplate) }
         }
         item(key = "fields") { MetadataFields(form, ui.seriesIndexInvalid, vm::update) }
         item(key = "destination") { DestinationCard(ui) }
@@ -356,6 +440,7 @@ private fun EditorContent(
                 )
             }
             itemsIndexed(parts, key = { _, p -> PART_KEY + p.sourceId }) { index, part ->
+                val context = LocalContext.current
                 val key = PART_KEY + part.sourceId
                 val dragging = reorder.draggingKey == key
                 PartRow(
@@ -363,7 +448,7 @@ private fun EditorContent(
                     count = parts.size,
                     title = part.title,
                     fileName = part.displayName,
-                    durationMs = part.durationMs,
+                    detail = ui.torrent?.partSizes?.get(part.sourceId)?.let { formatSize(context, it) } ?: formatClock(part.durationMs),
                     dragging = dragging,
                     handle = Modifier.reorderHandle(reorder, key),
                     onRename = { onRenamePart(index) },
@@ -442,6 +527,7 @@ private fun CoverSection(ui: EditorUi, onPick: () -> Unit, onRemove: () -> Unit,
                 Text(
                     stringResource(
                         when {
+                            cover == null && ui.torrent != null -> R.string.torrent_cover_auto
                             cover == null -> R.string.cover_none
                             cover.source?.origin == CoverOrigin.EMBEDDED -> R.string.cover_from_file
                             cover.source?.origin == CoverOrigin.FOLDER -> R.string.cover_from_folder
@@ -586,13 +672,25 @@ private fun DestinationCard(ui: EditorUi) {
             InfoLine(
                 Icons.Rounded.GraphicEq,
                 stringResource(R.string.conversion_label),
-                when (ui.strategy) {
-                    ConversionStrategy.REMUX_SINGLE -> stringResource(R.string.conversion_copy)
-                    ConversionStrategy.CONCAT_COPY -> stringResource(R.string.conversion_join)
-                    ConversionStrategy.TRANSCODE -> stringResource(R.string.conversion_transcode, ui.bitrateKbps)
+                when {
+                    ui.torrent?.layout == AudiobookLayout.SINGLE_M4B -> stringResource(R.string.torrent_conversion_m4b)
+                    ui.torrent != null -> stringResource(R.string.conversion_transcode, ui.bitrateKbps)
+                    ui.strategy == ConversionStrategy.REMUX_SINGLE -> stringResource(R.string.conversion_copy)
+                    ui.strategy == ConversionStrategy.CONCAT_COPY -> stringResource(R.string.conversion_join)
+                    else -> stringResource(R.string.conversion_transcode, ui.bitrateKbps)
                 },
             )
-            InfoLine(
+            val torrent = ui.torrent
+            if (torrent != null) {
+                InfoLine(
+                    Icons.Rounded.Download,
+                    stringResource(R.string.torrent_download_label),
+                    listOf(
+                        torrentDownloadLine(torrent),
+                        pluralStringResource(R.plurals.parts_count, ui.form?.parts?.size ?: 0, ui.form?.parts?.size ?: 0),
+                    ).joinToString(" · "),
+                )
+            } else InfoLine(
                 Icons.Rounded.Schedule,
                 stringResource(R.string.summary_label),
                 listOf(
@@ -666,7 +764,7 @@ private fun PartRow(
     count: Int,
     title: String,
     fileName: String,
-    durationMs: Long,
+    detail: String,
     dragging: Boolean,
     handle: Modifier,
     onRename: () -> Unit,
@@ -704,7 +802,7 @@ private fun PartRow(
             Column(Modifier.weight(1f).padding(vertical = Spacing.sm)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "$fileName · ${formatClock(durationMs)}",
+                    "$fileName · $detail",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -726,5 +824,16 @@ private fun ChapterEditRow(number: Int, title: String, startMs: Long, onClick: (
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text(formatClock(startMs), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun torrentDownloadLine(torrent: TorrentEditorInfo): String {
+    val context = LocalContext.current
+    val size = formatSize(context, torrent.downloadBytes)
+    return when {
+        torrent.phase == TorrentPhase.DOWNLOADED || torrent.progress >= 1f -> stringResource(R.string.torrent_download_done, size)
+        !torrent.online -> stringResource(R.string.torrent_download_waiting, size)
+        else -> stringResource(R.string.torrent_download_progress, size, (torrent.progress * 100).toInt())
     }
 }

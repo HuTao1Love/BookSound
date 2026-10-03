@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GridView
@@ -99,6 +100,7 @@ import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.data.settings.LibraryLayoutMode
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.ui.torrent.TorrentBanner
 import com.zyagodin.booksound.importer.ImportService
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
@@ -220,6 +222,11 @@ fun LibraryScreen(navigator: AppNavigator) {
                         ImportBanner(state.activeImports, onClick = { navigator.openImports() })
                     }
                 }
+                if (state.activeTorrents.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "torrents") {
+                        TorrentBanner(state.activeTorrents, onClick = { navigator.openImports() })
+                    }
+                }
                 state.continueListening?.let { item ->
                     item(span = { GridItemSpan(maxLineSpan) }, key = "continue") {
                         ContinueListeningCard(
@@ -311,6 +318,11 @@ fun LibraryScreen(navigator: AppNavigator) {
                 showImportSheet = false
                 ensureNotificationPermission()
                 pickFolder.launch(null)
+            },
+            onAddTorrent = {
+                showImportSheet = false
+                ensureNotificationPermission()
+                navigator.addTorrent()
             },
         )
     }
@@ -586,7 +598,7 @@ private fun ImportBanner(jobs: List<ImportJob>, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ImportSourceSheet(onDismiss: () -> Unit, onPickFiles: () -> Unit, onPickFolder: () -> Unit) {
+private fun ImportSourceSheet(onDismiss: () -> Unit, onPickFiles: () -> Unit, onPickFolder: () -> Unit, onAddTorrent: () -> Unit) {
     AppBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl)) {
             Text(stringResource(R.string.import_sheet_title), style = MaterialTheme.typography.headlineSmall)
@@ -600,6 +612,8 @@ private fun ImportSourceSheet(onDismiss: () -> Unit, onPickFiles: () -> Unit, on
             ImportOption(Icons.Rounded.AudioFile, stringResource(R.string.import_option_files), stringResource(R.string.import_option_files_hint), onPickFiles)
             Spacer(Modifier.height(Spacing.md))
             ImportOption(Icons.Rounded.FolderOpen, stringResource(R.string.import_option_folder), stringResource(R.string.import_option_folder_hint), onPickFolder)
+            Spacer(Modifier.height(Spacing.md))
+            ImportOption(Icons.Rounded.Download, stringResource(R.string.import_option_torrent), stringResource(R.string.import_option_torrent_hint), onAddTorrent)
         }
     }
 }

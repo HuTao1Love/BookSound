@@ -13,6 +13,7 @@ import android.system.Os
 import com.zyagodin.booksound.core.io.FileChannelSource
 import com.zyagodin.booksound.core.io.RandomAccessSource
 import com.zyagodin.booksound.core.naming.FileNameSanitizer
+import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -83,8 +84,13 @@ class DocumentStore(private val context: Context) {
     fun entry(treeUri: Uri, documentUri: Uri): DocEntry? =
         query(documentUri) { c -> toEntry(treeUri, c) }.firstOrNull()
 
-    /** Name and size for any openable URI (tree document or single picked document). */
-    fun describe(uri: Uri): Pair<String, Long>? = try {
+    /**
+     * Name and size for any openable URI (tree document, single picked document, or a file:// URI
+     * of app-private storage such as finished torrent downloads).
+     */
+    fun describe(uri: Uri): Pair<String, Long>? = if (uri.scheme == ContentResolver.SCHEME_FILE) {
+        uri.path?.let(::File)?.takeIf { it.isFile }?.let { it.name to it.length() }
+    } else try {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
             if (!c.moveToFirst()) null
             else {

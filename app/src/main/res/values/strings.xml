@@ -326,16 +326,117 @@
     <string name="restore_failed">The file is gone, so the book can\'t be restored</string>
 
     <!-- Onboarding -->
-    <string name="onboarding_title">Your audiobooks, your folder</string>
-    <string name="onboarding_message">Choose the folder where your audiobooks will live. Every book is kept there as a regular M4B file you can copy, back up or play anywhere.</string>
-    <string name="onboarding_feature_files">Real files, organised as Author / Series / Book</string>
-    <string name="onboarding_feature_import">MP3 folders become one book with chapters and cover</string>
-    <string name="onboarding_feature_player">Background playback, speed control and a sleep timer</string>
-    <string name="onboarding_choose_folder">Choose library folder</string>
-    <string name="onboarding_tip">Tip: create a folder named “Audiobooks” in the picker.</string>
-    <string name="onboarding_folder_lost">BookSound lost access to your library folder. Choose it again — your books and progress are kept.</string>
-    <string name="onboarding_permission_failed">That folder can\'t be used. Please choose a folder on your device or SD card.</string>
+    <string name="onboarding_title">Pick a folder for your books</string>
+    <string name="onboarding_message">BookSound saves audiobooks there as regular M4B files.</string>
+    <string name="onboarding_choose_folder">Choose folder</string>
+    <string name="onboarding_folder_lost">BookSound can\'t open your library folder anymore. Pick it again, your progress is safe.</string>
+    <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
     <string name="library_no_series">Without series</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
     <string name="action_show_series">Show by series</string>
+
+    <!-- Torrents -->
+    <string name="import_option_torrent">Torrent</string>
+    <string name="import_option_torrent_hint">Magnet link, link to a .torrent file, or a .torrent file</string>
+    <string name="torrent_add_title">Add torrent</string>
+    <string name="torrent_requirements">The torrent must contain one audiobook: MP3 files (a cover image is fine) or a single M4B file. Text files, playlists and the like are skipped.</string>
+    <string name="torrent_link_label">Magnet or .torrent link</string>
+    <string name="action_choose_torrent_file">Choose .torrent file</string>
+    <string name="action_add">Add</string>
+    <string name="torrent_adding">Checking the torrent…</string>
+    <string name="torrent_error_not_a_link">This isn\'t a magnet link or a link to a .torrent file.</string>
+    <string name="torrent_error_invalid">This isn\'t a valid torrent file.</string>
+    <string name="torrent_error_unreadable">The file can\'t be read.</string>
+    <string name="torrent_error_download">Couldn\'t download the .torrent file from this link.</string>
+    <string name="torrent_error_offline">You\'re offline. Connect to the internet and try again.</string>
+    <string name="torrent_problem_empty">The torrent contains no files.</string>
+    <string name="torrent_problem_unsafe">The torrent contains files with unsafe paths and was rejected.</string>
+    <string name="torrent_problem_unsupported">The torrent contains files that aren\'t part of an MP3 or M4B audiobook: %1$s.</string>
+    <string name="torrent_problem_no_audio">The torrent contains no MP3 or M4B files.</string>
+    <string name="torrent_problem_mixed">The torrent contains both MP3 and M4B files, so it\'s unclear which one is the book.</string>
+    <string name="torrent_problem_multiple_m4b">The torrent contains several M4B files, probably several books. Add a torrent with a single book.</string>
+    <string name="torrent_problem_empty_file">The torrent contains empty audio files: %1$s.</string>
+    <string name="editor_title_torrent">Review torrent</string>
+    <string name="editor_fetching_torrent">Getting the torrent\'s file list…</string>
+    <string name="editor_fetching_torrent_message">“%1$s”. This usually takes a few seconds; you can leave, it continues in the background.</string>
+    <string name="analysis_torrent_invalid_title">This torrent can\'t be added</string>
+    <string name="analysis_torrent_unavailable_title">Torrent not available</string>
+    <string name="analysis_torrent_unavailable_message">It was removed, or its file list couldn\'t be downloaded.</string>
+    <string name="analysis_torrent_busy_title">Already being converted</string>
+    <string name="analysis_torrent_busy_message">This book is being checked and converted, or it\'s already in your library.</string>
+    <string name="torrent_cover_auto">If you don\'t choose one, the cover from the download is used</string>
+    <string name="torrent_conversion_m4b">Copied as is when possible, after the download</string>
+    <string name="torrent_download_label">Download</string>
+    <string name="torrent_download_progress">%1$s · %2$d%% downloaded</string>
+    <string name="torrent_download_done">%1$s · downloaded</string>
+    <string name="torrent_download_waiting">%1$s · waiting for network</string>
+    <string name="torrent_converted_after_download">Converted automatically when the download is done</string>
+    <string name="torrent_leave_title">Leave the review?</string>
+    <string name="torrent_leave_message">The torrent keeps downloading and your changes are kept. The book is converted only after you confirm its details.</string>
+    <string name="action_keep_downloading">Keep downloading</string>
+    <string name="action_remove_torrent">Remove torrent</string>
+    <string name="action_review">Review</string>
+    <string name="action_pause_all">Pause all</string>
+    <string name="torrents_section">Downloads</string>
+    <string name="torrent_fetching_metadata">Getting file list…</string>
+    <string name="torrent_waiting_network">Waiting for network</string>
+    <string name="torrent_checking">Checking files</string>
+    <string name="torrent_downloading">Downloading</string>
+    <string name="torrent_paused">Paused</string>
+    <string name="torrent_speed">%1$s/s</string>
+    <plurals name="torrent_peers">
+        <item quantity="one">%1$d peer</item>
+        <item quantity="other">%1$d peers</item>
+    </plurals>
+    <string name="torrent_downloaded">Downloaded</string>
+    <string name="torrent_review_needed">Review the details: the book is converted after you confirm them.</string>
+    <string name="torrent_review_needed_short">Review needed: %1$s</string>
+    <string name="torrent_waiting_review">Downloaded. Review the details to start the conversion.</string>
+    <string name="torrent_editing">Waiting until you finish editing</string>
+    <string name="torrent_verifying">Checking the audiobook</string>
+    <string name="torrent_failure_metadata">No peer sent the torrent\'s file list. Check the link, or retry later.</string>
+    <string name="torrent_failure_space">Not enough free space for the download: %1$s.</string>
+    <string name="torrent_space_detail">about %1$s needed, %2$s free</string>
+    <string name="torrent_failure_download">Download error: %1$s</string>
+    <string name="torrent_failure_files_missing">Some downloaded files are missing or incomplete. Retry to download them again.</string>
+    <string name="torrent_failure_invalid_audiobook">The downloaded audiobook is damaged or not what the torrent claims, so it wasn\'t added to your library:</string>
+    <string name="torrent_failure_cancelled">The conversion was cancelled.</string>
+    <string name="integrity_wrong_format">not the format its name says</string>
+    <string name="integrity_no_audio">no audio</string>
+    <string name="integrity_no_duration">no playable audio</string>
+    <string name="integrity_implausible">damaged (size and length don\'t match)</string>
+    <string name="torrent_remove_title">Remove this torrent?</string>
+    <string name="torrent_remove_message">The download and its files are deleted. Books already in your library are not affected.</string>
+    <string name="notification_channel_torrent">Torrent downloads</string>
+    <string name="torrent_notification_title">Downloading audiobooks</string>
+    <plurals name="torrent_more_downloading">
+        <item quantity="one">+%1$d more</item>
+        <item quantity="other">+%1$d more</item>
+    </plurals>
+    <plurals name="torrent_banner_many">
+        <item quantity="one">%1$d torrent</item>
+        <item quantity="other">%1$d torrents</item>
+    </plurals>
+
+    <!-- Cover crop -->
+    <string name="crop_title">Crop to a square</string>
+    <string name="crop_hint">Drag and pinch to fit the cover</string>
+    <string name="action_done">Done</string>
+    <string name="torrent_peers_of">peers: %1$d of %2$d</string>
+    <string name="torrent_tracker_error">Tracker: %1$s</string>
+    <string name="torrent_looking_for_peers">looking for peers</string>
+
+    <!-- Name templates -->
+    <string name="template_section">Name template</string>
+    <string name="template_add">Add template</string>
+    <string name="template_hint">Tap a template to fill in the details. Hold it to delete.</string>
+    <string name="template_dialog_title">New template</string>
+    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% to skip a part. Everything else must match the name as written.</string>
+    <string name="template_no_match">Doesn\'t fit this name, but it can still be saved.</string>
+    <string name="template_skipped">Skipped</string>
+    <string name="template_delete_title">Delete template?</string>
+    <string name="template_problem_none">Add at least one placeholder, e.g. %1$s.</string>
+    <string name="template_problem_unknown">Unknown placeholder %1$s.</string>
+    <string name="template_problem_duplicate">%1$s is used twice.</string>
+    <string name="template_problem_adjacent">Put some text between two placeholders, otherwise they can\'t be told apart.</string>
 </resources>

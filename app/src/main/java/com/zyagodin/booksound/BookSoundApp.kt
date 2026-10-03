@@ -15,12 +15,19 @@ import com.zyagodin.booksound.importer.ImportAnalyzer
 import com.zyagodin.booksound.importer.ImportJournal
 import com.zyagodin.booksound.importer.ImportManager
 import com.zyagodin.booksound.importer.ImportPipeline
+import com.zyagodin.booksound.importer.ImportPlanner
 import com.zyagodin.booksound.importer.ImportSessionStore
 import com.zyagodin.booksound.playback.PlayerConnection
 import com.zyagodin.booksound.playback.SleepTimer
 import com.zyagodin.booksound.storage.DocumentStore
 import com.zyagodin.booksound.sync.RoomSyncLocalStore
 import com.zyagodin.booksound.sync.SyncCoordinator
+import com.zyagodin.booksound.torrent.NetworkMonitor
+import com.zyagodin.booksound.torrent.TorrentEngine
+import com.zyagodin.booksound.torrent.TorrentManager
+import com.zyagodin.booksound.torrent.TorrentService
+import com.zyagodin.booksound.torrent.TorrentStore
+import android.util.Log
 import com.zyagodin.booksound.data.library.BookDetails
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,6 +56,11 @@ class BookSoundApp : Application(), ImageLoaderFactory {
             // Undo anything an interrupted import left behind before new work starts.
             container.importJournal.recover()
             container.covers.clearAllDrafts()
+            // Then continue torrent downloads and conversions exactly where they stopped.
+            container.torrents.start()
+        }
+        container.appScope.launch {
+            container.torrents.needsForeground.collect { needed -> if (needed) TorrentService.start(this@BookSoundApp) }
         }
     }
 
@@ -80,7 +92,7 @@ class AppContainer(app: Application) {
     val library = LibraryRepository(database, documents, covers, settings)
     val sleepTimer = SleepTimer(appScope)
     val player = PlayerConnection(app, appScope) { settings.state.value.lastBookId }
-    val coverSearch = CoverSearchRepository(http)
+    val coverSearch = CoverSearchRepository(http, BuildConfig.GOOGLE_BOOKS_API_KEY)
     val importSessions = ImportSessionStore()
     val importJournal = ImportJournal(app, documents)
     val importAnalyzer = ImportAnalyzer(app, documents, library, covers)
@@ -95,6 +107,26 @@ class AppContainer(app: Application) {
     )
 
     val scanner = LibraryScanner(documents, library, covers, settings) { importManager.activeJobIds() }
+
+    val importPlanner = ImportPlanner(app, settings, documents, library)
+    val network = NetworkMonitor(app)
+    private val torrentStore = TorrentStore(app)
+
+    /** Torrent downloads that become books once downloaded and reviewed. */
+    val torrents = TorrentManager(
+        context = app,
+        scope = appScope,
+        store = torrentStore,
+        engine = TorrentEngine(torrentStore.sessionStateFile) { message, error -> Log.w("TorrentEngine", message, error) },
+        network = network,
+        http = http,
+        documents = documents,
+        analyzer = importAnalyzer,
+        planner = importPlanner,
+        imports = importManager,
+        library = library,
+        covers = covers,
+    ).also { manager -> importSessions.torrentSessionStarter = manager::loadSession }
 
     val sync = SyncCoordinator(appScope, RoomSyncLocalStore(database, settings), device = { library.device() })
 

@@ -49,6 +49,41 @@ object CoverImages {
         return EmbeddedPicture(out.toByteArray(), "image/jpeg")
     }
 
+    /** Width and height of an encoded image, or null when it can't be decoded. */
+    fun dimensions(bytes: ByteArray): Pair<Int, Int>? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
+    }
+
+    /**
+     * Decodes for on-screen cropping (EXIF rotation applied), downsampled so the longest edge
+     * stays at most [maxEdge]. Slow for big photos: call off the main thread.
+     */
+    fun decodeForCrop(bytes: ByteArray, maxEdge: Int = 2048): Bitmap? = try {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+            val longest = maxOf(info.size.width, info.size.height)
+            if (longest > maxEdge) {
+                val scale = maxEdge.toFloat() / longest
+                decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
+            }
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Cuts [region] (in [bitmap] pixels) out as a square cover JPEG. */
+    fun crop(bitmap: Bitmap, region: SquareCrop.Region): EmbeddedPicture {
+        val square = Bitmap.createBitmap(bitmap, region.left, region.top, region.size, region.size)
+        val target = if (region.size > MAX_EDGE) Bitmap.createScaledBitmap(square, MAX_EDGE, MAX_EDGE, true) else square
+        val out = ByteArrayOutputStream()
+        target.compress(Bitmap.CompressFormat.JPEG, 92, out)
+        if (target !== square) target.recycle()
+        if (square !== bitmap) square.recycle()
+        return EmbeddedPicture(out.toByteArray(), "image/jpeg")
+    }
+
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
 }
 

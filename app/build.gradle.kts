@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
+// Optional Google Books API key for online cover search: put googleBooksApiKey=... into
+// local.properties (not committed). Without a key, Google Books is skipped.
+val localProperties = java.util.Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.zyagodin.booksound"
     compileSdk {
@@ -19,6 +25,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${localProperties.getProperty("googleBooksApiKey", "").trim()}\"")
     }
 
     buildTypes {
@@ -35,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -75,6 +83,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    // BitTorrent engine (libtorrent via SWIG) with native libraries for ARM devices and x86_64 emulators.
+    implementation(libs.libtorrent4j)
+    implementation(libs.libtorrent4j.android.arm)
+    implementation(libs.libtorrent4j.android.arm64)
+    implementation(libs.libtorrent4j.android.amd64)
     implementation(libs.okhttp)
     testImplementation(libs.androidx.core)
     testImplementation(libs.androidx.junit)

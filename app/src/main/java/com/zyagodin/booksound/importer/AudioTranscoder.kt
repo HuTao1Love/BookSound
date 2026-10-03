@@ -7,7 +7,9 @@ import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
+import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.AudioEncoderSettings
@@ -40,12 +42,18 @@ class AudioTranscoder(private val context: Context) {
 
     data class Result(val durationMs: Long, val sizeBytes: Long)
 
+    /**
+     * [outputSampleRate] / [outputChannels] force one output format (for parts encoded separately
+     * that are joined afterwards); null keeps the input's.
+     */
     suspend fun run(
         inputs: List<Uri>,
         output: File,
         bitrateKbps: Int,
         downmixToMono: Boolean,
         transmux: Boolean,
+        outputSampleRate: Int? = null,
+        outputChannels: Int? = null,
         onProgress: (Float) -> Unit,
     ): Result = withContext(Dispatchers.Main) {
         output.delete()
@@ -61,10 +69,18 @@ class AudioTranscoder(private val context: Context) {
             }
             try {
                 suspendCancellableCoroutine { cont ->
+                    // Audio processors are stateful: each item gets its own instances.
+                    fun processors() = buildList<AudioProcessor> {
+                        if (transmux) return@buildList
+                        val channels = if (downmixToMono) 1 else outputChannels
+                        if (channels != null) add(channelMixer(channels))
+                        if (outputSampleRate != null) add(SonicAudioProcessor().apply { setOutputSampleRateHz(outputSampleRate) })
+                    }
                     val items = inputs.map { uri ->
+                        val effects = processors()
                         EditedMediaItem.Builder(MediaItem.fromUri(uri))
                             .setRemoveVideo(true) // cover art exposed as a video track by some files
-                            .apply { if (downmixToMono && !transmux) setEffects(Effects(listOf(monoMixer()), emptyList())) }
+                            .apply { if (effects.isNotEmpty()) setEffects(Effects(effects, emptyList())) }
                             .build()
                     }
                     val composition = Composition.Builder(EditedMediaItemSequence.withAudioFrom(items))
@@ -101,8 +117,9 @@ class AudioTranscoder(private val context: Context) {
         }
     }
 
-    private fun monoMixer() = ChannelMixingAudioProcessor().apply {
-        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(1, 1))
-        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(2, 1))
+    /** Mixes mono or stereo input to [channels] output channels. */
+    private fun channelMixer(channels: Int) = ChannelMixingAudioProcessor().apply {
+        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(1, channels))
+        putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(2, channels))
     }
 }

@@ -128,13 +128,10 @@ object ImportDraftBuilder {
         val stems = files.map { it.displayName.substringBeforeLast('.') }
         val prefix = if (files.size > 1) commonWordPrefix(stems) else ""
         return files.mapIndexed { i, file ->
-            val fromName = stems[i].removePrefix(prefix).trim().trim('-', '_', '.', ' ')
             val title = when {
                 files.size == 1 -> file.parsed.tags.title ?: stems[i]
                 tagTitlesUsable -> tagTitles[i]!!
-                fromName.any { it.isLetter() } -> fromName
-                stems[i].any { it.isLetter() } && prefix.isEmpty() -> stems[i]
-                else -> untitledPart(i + 1)
+                else -> titleFromName(stems[i], prefix, i, untitledPart)
             }
             DraftPart(
                 sourceId = file.id,
@@ -143,6 +140,26 @@ object ImportDraftBuilder {
                 durationMs = file.parsed.durationMs ?: 0L,
                 chapters = file.parsed.chapters,
             )
+        }
+    }
+
+    /**
+     * Part titles from file names alone, for when the files' tags are not known yet (e.g. a
+     * torrent that has not been downloaded). Same rules as for parts without usable tags.
+     */
+    fun titlesFromFileNames(names: List<String>, untitledPart: (Int) -> String = { "Chapter $it" }): List<String> {
+        val stems = names.map { it.substringBeforeLast('.') }
+        if (stems.size <= 1) return stems
+        val prefix = commonWordPrefix(stems)
+        return stems.mapIndexed { i, stem -> titleFromName(stem, prefix, i, untitledPart) }
+    }
+
+    private fun titleFromName(stem: String, prefix: String, index: Int, untitledPart: (Int) -> String): String {
+        val fromName = stem.removePrefix(prefix).trim().trim('-', '_', '.', ' ')
+        return when {
+            fromName.any { it.isLetter() } -> fromName
+            stem.any { it.isLetter() } && prefix.isEmpty() -> stem
+            else -> untitledPart(index + 1)
         }
     }
 
