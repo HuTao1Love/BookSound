@@ -1,0 +1,4 @@
+# libtorrent4j: SWIG generated classes are called from native code (JNI) and must keep their
+# names and members.
+-keep class org.libtorrent4j.swig.** { *; }
+-keepclassmembers class org.libtorrent4j.** { native <methods>; }

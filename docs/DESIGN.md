@@ -46,6 +46,7 @@ Library ──► Book details ──► Player ──► Chapters / Speed / Sle
    │             └──► Edit book (import editor in edit mode) ──► Cover picker
    ├──► Import: pick files/folder ──► Review & edit ──► Cover picker
    │                                       └──► Imports (progress queue)
+   ├──► Import: torrent (link or file) ──► Review & edit while downloading ──► Imports (Downloads)
    └──► Settings ──► Removed books
 ```
 
@@ -58,3 +59,25 @@ Library ──► Book details ──► Player ──► Chapters / Speed / Sle
 * Tabletop posture (half folded): player shows the cover above the hinge, controls below.
 * Fold/unfold is handled as a configuration change without recreating the activity; screen state
   lives in ViewModels and app-scoped stores, so nothing resets.
+
+## Torrent imports
+
+```
+add link/file ─► (magnet: fetch file list) ─► validate file list ─► DOWNLOADING ──► DOWNLOADED
+                        │                          │                     │  user confirms review
+                        └─ no peers: FAILED        └─ not one book:      ▼
+                                                      rejected      VERIFYING ─► CONVERTING ─► COMPLETED
+                                                                         │            │
+                                                                         └── FAILED ◄─┘ (retry)
+```
+
+* Each torrent is a persisted `TorrentRecord` (`noBackupFilesDir/torrents`), with the .torrent
+  metadata, libtorrent resume data and the chosen cover next to it. A reconcile loop drives every
+  record from its stored phase, so app restarts, crashes and network loss resume where they were.
+* The editor of a torrent is an import session with a deterministic id (`torrent-<id>`), rebuilt
+  from the record if the process was killed while it was open. Edits are saved as they are typed.
+  Fields the user left as suggested may be filled from the downloaded files' tags; edited ones win.
+* Conversion waits while the editor is open and starts automatically once the download is done
+  and the details were confirmed. The library never sees a book that failed a check.
+* The Imports screen shows a "Downloads" section (progress, speed, peers, pause/resume, review,
+  retry, remove); the library shows a banner while torrents are active or need a review.

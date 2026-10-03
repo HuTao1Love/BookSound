@@ -41,8 +41,13 @@ class ImportAnalyzer(
         val result = try {
             when (val selection = session.selection) {
                 is ImportSelection.ExistingBook -> analyzeExisting(session, selection.bookId)
-                is ImportSelection.Documents -> analyzeFiles(session, collectDocuments(session, selection), sourceNameOf(selection))
-                is ImportSelection.Folder -> analyzeFiles(session, collectFolder(session, selection), sourceNameOf(selection))
+                is ImportSelection.Documents -> analyzeFiles(collectDocuments(session, selection), sourceNameOf(selection)) {
+                    session.analysis.value = it
+                }
+                is ImportSelection.Folder -> analyzeFiles(collectFolder(session, selection), sourceNameOf(selection)) {
+                    session.analysis.value = it
+                }
+                is ImportSelection.Torrent -> error("Torrent sessions are loaded by TorrentManager")
             }
         } catch (e: SecurityException) {
             AnalysisState.Failed(AnalysisFailure.SOURCE_UNAVAILABLE)
@@ -63,6 +68,24 @@ class ImportAnalyzer(
         session.analysis.value = result
     }
 
+    /**
+     * Reads downloaded files (with their folders below the download root) without a review session. Unlike the
+     * interactive import, the draft's cover candidates are not normalized here.
+     */
+    suspend fun analyzeLocalFiles(files: List<Pair<File, List<String>>>, sourceName: String): AnalysisState = withContext(Dispatchers.IO) {
+        val audio = mutableListOf<Candidate>()
+        val images = mutableListOf<Candidate>()
+        for ((file, relativeDir) in files) {
+            val c = Candidate(Uri.fromFile(file), file.name, relativeDir, file.length())
+            if (isImage(file.name)) images += c else audio += c
+        }
+        try {
+            analyzeFiles(audio to images, sourceName) {}
+        } catch (e: IOException) {
+            AnalysisState.Failed(AnalysisFailure.SOURCE_UNAVAILABLE)
+        }
+    }
+
     // ---------------------------------------------------------------- sources
 
     private fun sourceNameOf(selection: ImportSelection): String = when (selection) {
@@ -71,7 +94,7 @@ class ImportAnalyzer(
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Audiobook"
         is ImportSelection.Documents -> selection.uris.firstOrNull()?.let { documents.describe(it)?.first }
             ?.substringBeforeLast('.') ?: "Audiobook"
-        is ImportSelection.ExistingBook -> ""
+        is ImportSelection.ExistingBook, is ImportSelection.Torrent -> ""
     }
 
     private fun collectDocuments(session: ImportSession, selection: ImportSelection.Documents): Pair<List<Candidate>, List<Candidate>> {
@@ -115,9 +138,9 @@ class ImportAnalyzer(
     // ---------------------------------------------------------------- analysis
 
     private suspend fun analyzeFiles(
-        session: ImportSession,
         found: Pair<List<Candidate>, List<Candidate>>,
         sourceName: String,
+        report: (AnalysisState.Analyzing) -> Unit,
     ): AnalysisState {
         val (audio, images) = found
         if (audio.isEmpty()) return AnalysisState.Failed(AnalysisFailure.NO_AUDIO_FILES)
@@ -125,7 +148,7 @@ class ImportAnalyzer(
         val skipped = mutableListOf<SkippedFile>()
         audio.forEachIndexed { i, c ->
             coroutineContext.ensureActive()
-            session.analysis.value = AnalysisState.Analyzing(i, audio.size, c.name)
+            report(AnalysisState.Analyzing(i, audio.size, c.name))
             try {
                 val result = documents.openSource(c.uri, c.name).use { AudioProbe.probe(it, c.name) }
                 parsed += ImportSourceFile(c.uri.toString(), c.name, c.dir, c.size, result)
@@ -145,7 +168,7 @@ class ImportAnalyzer(
             }
         }
         if (parsed.isEmpty()) return AnalysisState.Failed(AnalysisFailure.ALL_FILES_FAILED, skipped)
-        session.analysis.value = AnalysisState.Analyzing(audio.size, audio.size, null)
+        report(AnalysisState.Analyzing(audio.size, audio.size, null))
 
         val folderImages = images
             .filter { it.size in 1..MAX_IMAGE_BYTES }

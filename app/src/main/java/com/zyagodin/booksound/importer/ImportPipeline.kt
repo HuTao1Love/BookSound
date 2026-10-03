@@ -108,6 +108,7 @@ class ImportPipeline(
                     convert(request, audio, report)
                     val src = FileChannelSource(FileInputStream(audio).channel)
                     val actualDuration = runCatching { AudioProbe.probe(src, audio.name).durationMs }.getOrNull()
+                    if (request.strictValidation) checkDecodedDuration(actualDuration, request.totalDurationMs)
                     if (actualDuration != null) chapters = alignChapters(chapters, actualDuration, request.totalDurationMs)
                     src
                 }
@@ -316,6 +317,18 @@ class ImportPipeline(
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /**
+     * Decoders skip damaged frames instead of failing, which would silently shorten the book.
+     * The converted audio must therefore last as long as the source files say they do.
+     */
+    private fun checkDecodedDuration(actualMs: Long?, expectedMs: Long) {
+        if (expectedMs <= 0) return
+        val tolerance = maxOf(10_000L, expectedMs * 3 / 100)
+        if (actualMs == null || actualMs <= 0 || abs(actualMs - expectedMs) > tolerance) {
+            throw ImportFailure.CorruptedInput(null, "decoded ${actualMs ?: 0} ms of $expectedMs ms")
+        }
+    }
 
     /** Stretches chapter starts so they match the real duration of the converted audio. */
     private fun alignChapters(chapters: List<Chapter>, actualMs: Long, expectedMs: Long): List<Chapter> {

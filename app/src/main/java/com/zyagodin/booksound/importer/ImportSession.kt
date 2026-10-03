@@ -19,15 +19,34 @@ enum class SkipReason { UNSUPPORTED, CORRUPTED, UNREADABLE }
 
 sealed interface AnalysisState {
     data class Analyzing(val done: Int, val total: Int, val currentName: String?) : AnalysisState
+
+    /** Magnet link: waiting for peers to send the torrent's file list. */
+    data class AwaitingTorrent(val name: String?, val online: Boolean) : AnalysisState
     data class Ready(
         val draft: ImportDraft,
         val files: List<ImportSourceFile>,
         val skipped: List<SkippedFile>,
     ) : AnalysisState
-    data class Failed(val reason: AnalysisFailure, val skipped: List<SkippedFile> = emptyList()) : AnalysisState
+    data class Failed(
+        val reason: AnalysisFailure,
+        val skipped: List<SkippedFile> = emptyList(),
+        /** Reason-specific explanation, e.g. why a torrent is not a single audiobook. */
+        val detail: String? = null,
+    ) : AnalysisState
 }
 
-enum class AnalysisFailure { NO_AUDIO_FILES, ALL_FILES_FAILED, SOURCE_UNAVAILABLE, BOOK_NOT_FOUND }
+enum class AnalysisFailure {
+    NO_AUDIO_FILES, ALL_FILES_FAILED, SOURCE_UNAVAILABLE, BOOK_NOT_FOUND,
+
+    /** The torrent does not contain a single MP3 or M4B audiobook. */
+    TORRENT_INVALID,
+
+    /** The torrent was removed, or its file list could not be fetched. */
+    TORRENT_UNAVAILABLE,
+
+    /** The torrent's book is already being converted or is in the library. */
+    TORRENT_BUSY,
+}
 
 /** Fields the user edits in the review screen. */
 data class EditorForm(
@@ -70,10 +89,18 @@ class ImportSession(val id: String, val selection: ImportSelection) {
     var existingBookId: String? = null
     var analysisJob: Job? = null
     val isEdit: Boolean get() = selection is ImportSelection.ExistingBook
+    val torrentId: String? get() = (selection as? ImportSelection.Torrent)?.torrentId
 }
 
 class ImportSessionStore {
     private val sessions = ConcurrentHashMap<String, ImportSession>()
+
+    /**
+     * Starts loading a newly created torrent session. Torrent sessions have deterministic ids, so
+     * an editor (or cover picker) restored after the process was killed gets its session back,
+     * rebuilt from the torrent's persisted review.
+     */
+    var torrentSessionStarter: ((ImportSession) -> Unit)? = null
 
     fun create(selection: ImportSelection): ImportSession {
         val session = ImportSession(UUID.randomUUID().toString(), selection)
@@ -81,7 +108,25 @@ class ImportSessionStore {
         return session
     }
 
-    operator fun get(id: String): ImportSession? = sessions[id]
+    /** The review session of a torrent, created (and loaded) on first use. */
+    fun torrent(torrentId: String): ImportSession {
+        var created = false
+        val session = sessions.computeIfAbsent(TORRENT_PREFIX + torrentId) { id ->
+            created = true
+            ImportSession(id, ImportSelection.Torrent(torrentId))
+        }
+        if (created) torrentSessionStarter?.invoke(session)
+        return session
+    }
+
+    operator fun get(id: String): ImportSession? =
+        sessions[id] ?: if (id.startsWith(TORRENT_PREFIX)) torrent(id.removePrefix(TORRENT_PREFIX)) else null
 
     fun remove(id: String): ImportSession? = sessions.remove(id)?.also { it.analysisJob?.cancel() }
+
+    fun removeTorrent(torrentId: String) = remove(TORRENT_PREFIX + torrentId)
+
+    companion object {
+        const val TORRENT_PREFIX = "torrent-"
+    }
 }

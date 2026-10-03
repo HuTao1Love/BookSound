@@ -16,6 +16,10 @@ object NamePatternParser {
 
     private val SEPARATOR = Regex("""\s+[-–—]\s+""")
     private val YEAR = Regex("""[(\[{]\s*((?:19|20)\d{2})\s*[)\]}]""")
+
+    /** Year inside a comma separated list such as "[2007, MP3, 128 kbps]" (common for torrents). */
+    private val YEAR_IN_LIST = Regex("""[(\[{]([^)\]}]*,[^)\]}]*)[)\]}]""")
+    private val YEAR_TOKEN = Regex("""(?<!\d)((?:19|20)\d{2})(?!\d)""")
     private val NARRATOR_BRACKET = Regex(
         """[(\[{]\s*(?:read by|narrated by|narrator|reader|читает|читают|чтец|исп\.?|исполнитель)\s*:?\s*([^)\]}]+)[)\]}]""",
         RegexOption.IGNORE_CASE,
@@ -43,6 +47,9 @@ object NamePatternParser {
         name = name.replace('_', ' ').replace(Regex("""\s+"""), " ").trim()
 
         val year = YEAR.find(name)?.groupValues?.get(1)
+            ?: YEAR_IN_LIST.findAll(name).firstNotNullOfOrNull { list ->
+                list.groupValues[1].split(',').firstNotNullOfOrNull { YEAR_TOKEN.matchEntire(it.trim())?.groupValues?.get(1) }
+            }
         val narrator = NARRATOR_BRACKET.find(name)?.groupValues?.get(1)?.trim()
         name = NARRATOR_BRACKET.replace(name, " ")
         name = YEAR.replace(name, " ")

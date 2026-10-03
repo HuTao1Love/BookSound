@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Online cover search only. -->
+    <!-- Online cover search and torrent downloads. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Background playback and long running imports. -->
@@ -42,6 +42,19 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Add an audiobook from a magnet link or a .torrent file opened in another app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="magnet" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-bittorrent" />
+            </intent-filter>
         </activity>
 
         <service
@@ -59,6 +72,12 @@
             android:name=".importer.ImportService"
             android:exported="false"
             android:foregroundServiceType="mediaProcessing|dataSync" />
+
+        <!-- Keeps torrent downloads running with the app closed. -->
+        <service
+            android:name=".torrent.TorrentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Lets the system resume the last book from the media controls after a reboot. -->
         <receiver

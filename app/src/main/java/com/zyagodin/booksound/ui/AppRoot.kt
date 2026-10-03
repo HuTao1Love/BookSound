@@ -61,13 +61,22 @@ import com.zyagodin.booksound.ui.settings.RemovedBooksScreen
 import com.zyagodin.booksound.ui.settings.SettingsScreen
 import com.zyagodin.booksound.ui.theme.BookSoundTheme
 import com.zyagodin.booksound.ui.theme.Spacing
+import com.zyagodin.booksound.ui.torrent.AddTorrentDialog
+import com.zyagodin.booksound.torrent.TorrentSource
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.flow.Flow
+
+/** The "Add torrent" dialog is open; [initial] is a link or file handed over by another app. */
+private class AddTorrentRequest(val initial: TorrentSource?)
 
 /** Extra bottom padding screens must leave for the floating mini player. */
 val LocalBottomOverlayPadding = compositionLocalOf { 0.dp }
 
 /** Navigation actions available to every screen. */
-class AppNavigator(private val backStack: NavBackStack<NavKey>) {
+class AppNavigator(
+    private val backStack: NavBackStack<NavKey>,
+    private val showAddTorrent: (TorrentSource?) -> Unit = {},
+) {
     fun openBook(bookId: String) {
         // In list-detail mode, selecting another book replaces the open detail instead of stacking.
         if (backStack.lastOrNull() is BookKey) backStack[backStack.lastIndex] = BookKey(bookId) else backStack.add(BookKey(bookId))
@@ -84,6 +93,9 @@ class AppNavigator(private val backStack: NavBackStack<NavKey>) {
         if (replaceCurrent) backStack.removeLastOrNull()
         if (backStack.lastOrNull() != ImportsKey) backStack.add(ImportsKey)
     }
+
+    /** Opens the "Add torrent" dialog, optionally with a link or file opened from another app. */
+    fun addTorrent(initial: TorrentSource? = null) = showAddTorrent(initial)
 
     fun openSettings() = backStack.add(SettingsKey)
     fun openRemovedBooks() = backStack.add(RemovedBooksKey)
@@ -119,7 +131,8 @@ fun AppRoot(container: AppContainer, intents: Flow<String>) {
 @Composable
 private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val backStack = rememberNavBackStack(LibraryKey)
-    val navigator = remember(backStack) { AppNavigator(backStack) }
+    var addTorrent by remember { mutableStateOf<AddTorrentRequest?>(null) }
+    val navigator = remember(backStack) { AppNavigator(backStack) { addTorrent = AddTorrentRequest(it) } }
     val listDetail = rememberListDetailSceneStrategy<NavKey>()
     val playerState by container.player.state.collectAsStateWithLifecycle()
     val nowPlaying by container.nowPlaying.collectAsStateWithLifecycle()
@@ -132,6 +145,12 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
             when (action) {
                 MainActivity.ACTION_OPEN_PLAYER -> if (container.player.state.value.hasBook) navigator.openPlayer()
                 MainActivity.ACTION_OPEN_IMPORTS -> navigator.openImports()
+                else -> when {
+                    action.startsWith(MainActivity.TORRENT_LINK_PREFIX) ->
+                        navigator.addTorrent(TorrentSource.Link(action.removePrefix(MainActivity.TORRENT_LINK_PREFIX)))
+                    action.startsWith(MainActivity.TORRENT_FILE_PREFIX) ->
+                        navigator.addTorrent(TorrentSource.File(Uri.parse(action.removePrefix(MainActivity.TORRENT_FILE_PREFIX))))
+                }
             }
         }
     }
@@ -164,6 +183,20 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     entry<ImportsKey> { ImportsScreen(navigator) }
                     entry<SettingsKey> { SettingsScreen(navigator) }
                     entry<RemovedBooksKey> { RemovedBooksScreen(navigator) }
+                },
+            )
+        }
+        addTorrent?.let { request ->
+            AddTorrentDialog(
+                initial = request.initial,
+                onDismiss = { addTorrent = null },
+                onAdded = { id ->
+                    addTorrent = null
+                    navigator.openImportEditor(container.importSessions.torrent(id).id)
+                },
+                onAlreadyAdded = {
+                    addTorrent = null
+                    navigator.openImports()
                 },
             )
         }

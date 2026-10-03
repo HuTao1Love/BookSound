@@ -14,6 +14,9 @@ sealed interface ImportSelection {
 
     /** Re-tag a book that is already in the library (metadata/cover/chapter edit). */
     data class ExistingBook(val bookId: String) : ImportSelection
+
+    /** Review a torrent's book details while it downloads; conversion starts after the download. */
+    data class Torrent(val torrentId: String) : ImportSelection
 }
 
 /** One input file of a confirmed import. */
@@ -53,6 +56,13 @@ data class ImportRequest(
     /** Persisted read grants taken for the sources; released when the job is finished with. */
     val heldPermissions: List<Uri>,
     val estimatedOutputBytes: Long,
+    /** Torrent this import was started for; such jobs are shown and retried by the torrent. */
+    val torrentId: String? = null,
+    /**
+     * Reject the import when the decoded audio is noticeably shorter or longer than the sources
+     * claim (silently skipped damaged frames). Used for downloads, which nobody listened to yet.
+     */
+    val strictValidation: Boolean = false,
 ) {
     val totalDurationMs: Long get() = parts.sumOf { it.durationMs }
 }

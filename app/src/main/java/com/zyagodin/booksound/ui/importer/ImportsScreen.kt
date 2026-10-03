@@ -57,6 +57,11 @@ import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.ConfirmDialog
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.QuietButton
+import com.zyagodin.booksound.ui.components.SectionHeader
+import com.zyagodin.booksound.torrent.TorrentItem
+import com.zyagodin.booksound.torrent.TorrentPhase
+import com.zyagodin.booksound.ui.torrent.TorrentActions
+import com.zyagodin.booksound.ui.torrent.TorrentCard
 import com.zyagodin.booksound.ui.navigation.appContainer
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
@@ -67,8 +72,26 @@ import kotlin.math.roundToInt
 fun ImportsScreen(navigator: AppNavigator) {
     val container = appContainer()
     val manager = container.importManager
-    val jobs by manager.jobs.collectAsStateWithLifecycle()
+    val allJobs by manager.jobs.collectAsStateWithLifecycle()
+    // Conversions started by a torrent are shown on the torrent's card.
+    val jobs = allJobs.filter { it.request.torrentId == null }
+    val torrents by container.torrents.items.collectAsStateWithLifecycle()
     var cancelJob by remember { mutableStateOf<String?>(null) }
+    var removeTorrent by remember { mutableStateOf<TorrentItem?>(null) }
+    val torrentActions = remember(navigator) {
+        TorrentActions(
+            review = { navigator.openImportEditor(container.importSessions.torrent(it.id).id) },
+            pause = { container.torrents.pause(it.id) },
+            resume = { container.torrents.resume(it.id) },
+            retry = { container.torrents.retry(it.id) },
+            remove = { removeTorrent = it },
+            openBook = { bookId -> navigator.backToLibrary(); navigator.openBook(bookId) },
+            play = { bookId ->
+                container.player.play(bookId)
+                navigator.openPlayer()
+            },
+        )
+    }
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Column(Modifier.fillMaxSize()) {
@@ -78,9 +101,14 @@ fun ImportsScreen(navigator: AppNavigator) {
         ) {
             IconButton(onClick = navigator::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back)) }
             Text(stringResource(R.string.imports_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = Spacing.sm))
-            if (jobs.any { !it.isActive }) QuietButton(stringResource(R.string.action_clear_finished), manager::dismissFinished)
+            if (jobs.any { !it.isActive } || torrents.any { it.record.phase == TorrentPhase.COMPLETED }) {
+                QuietButton(stringResource(R.string.action_clear_finished), {
+                    manager.dismissFinished()
+                    container.torrents.dismissFinished()
+                })
+            }
         }
-        if (jobs.isEmpty()) {
+        if (jobs.isEmpty() && torrents.isEmpty()) {
             MessageState(
                 icon = Icons.Rounded.CloudDone,
                 title = stringResource(R.string.imports_empty_title),
@@ -93,6 +121,19 @@ fun ImportsScreen(navigator: AppNavigator) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxSize(),
             ) {
+                if (torrents.isNotEmpty()) {
+                    item(key = "torrents-header") {
+                        SectionHeader(stringResource(R.string.torrents_section), Modifier.widthIn(max = 720.dp).fillMaxWidth())
+                    }
+                    items(torrents, key = { "torrent:" + it.id }) { item ->
+                        TorrentCard(item, torrentActions, Modifier.widthIn(max = 720.dp).animateItem())
+                    }
+                    if (jobs.isNotEmpty()) {
+                        item(key = "imports-header") {
+                            SectionHeader(stringResource(R.string.imports_title), Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = Spacing.md))
+                        }
+                    }
+                }
                 items(jobs.reversed(), key = { it.id }) { job ->
                     JobCard(
                         job = job,
@@ -111,6 +152,21 @@ fun ImportsScreen(navigator: AppNavigator) {
                 }
             }
         }
+    }
+    removeTorrent?.let { item ->
+        ConfirmDialog(
+            title = stringResource(R.string.torrent_remove_title),
+            message = stringResource(R.string.torrent_remove_message),
+            confirmText = stringResource(R.string.action_remove),
+            onConfirm = {
+                container.torrents.remove(item.id)
+                container.importSessions.removeTorrent(item.id)
+                removeTorrent = null
+            },
+            onDismiss = { removeTorrent = null },
+            dismissText = stringResource(R.string.action_cancel),
+            destructive = true,
+        )
     }
     cancelJob?.let { id ->
         ConfirmDialog(
