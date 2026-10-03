@@ -79,9 +79,14 @@ jobs:
           BOOKSOUND_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           BOOKSOUND_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           GOOGLE_BOOKS_API_KEY: ${{ secrets.GOOGLE_BOOKS_API_KEY }}
+        # - A bigger heap: R8, the slowest step, runs inside the Gradle daemon, and 2 GB is tight
+        #   for it (the runner has 16 GB).
+        # - No lintVitalRelease: it ran next to R8 on the runner's 4 cores and slowed it down.
         run: |
           chmod +x gradlew
           ./gradlew :core:test :app:assembleRelease \
+            -x lintVitalRelease \
+            "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8" \
             -PversionName="$VERSION_NAME" \
             -PversionCode="${{ github.run_number }}"
           cp app/build/outputs/apk/release/app-release.apk "BookSound-$VERSION_NAME.apk"
