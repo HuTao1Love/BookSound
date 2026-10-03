@@ -36,6 +36,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
@@ -47,6 +51,28 @@ import com.zyagodin.booksound.util.formatDuration
 @Composable
 fun seriesLabel(series: String?, index: String?): String? =
     series?.let { s -> index?.let { stringResource(R.string.series_with_index, s, it) } ?: s }
+
+/** True when the title doesn't name its series itself, so lists put the series in front of it. */
+fun showsSeriesInTitle(title: String, series: String?): Boolean =
+    !series.isNullOrBlank() && !title.contains(series.trim(), ignoreCase = true)
+
+/**
+ * The title as lists show it: a volume of a series starts with the series and its number, in
+ * the accent colour ("**Mushoku Tensei #3**. Childhood — Home Tutor"), since a volume title alone
+ * often says little.
+ */
+@Composable
+fun titleWithSeries(title: String, series: String?, index: String?): AnnotatedString {
+    if (!showsSeriesInTitle(title, series)) return AnnotatedString(title)
+    val name = series!!.trim()
+    val prefix = index?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.series_in_title, name, it) } ?: name
+    val accent = MaterialTheme.colorScheme.primary
+    return buildAnnotatedString {
+        withStyle(SpanStyle(color = accent)) { append(prefix) }
+        append(". ")
+        append(title)
+    }
+}
 
 @Composable
 fun remainingLabel(item: LibraryItem): String {
@@ -89,11 +115,17 @@ fun BookGridCard(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit
             }
         }
         Spacer(Modifier.height(Spacing.sm))
-        Text(meta.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = MaterialTheme.typography.titleSmall.fontSize), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            titleWithSeries(meta.title, meta.series, meta.seriesIndex),
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = MaterialTheme.typography.titleSmall.fontSize),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
         meta.author?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        val series = seriesLabel(meta.series, meta.seriesIndex)
+        // The series is already in front of the title unless the title names it itself.
+        val series = seriesLabel(meta.series, meta.seriesIndex).takeUnless { showsSeriesInTitle(meta.title, meta.series) }
         Text(
             listOfNotNull(series, remainingLabel(item)).joinToString(" · "),
             style = MaterialTheme.typography.labelSmall,
@@ -122,11 +154,11 @@ fun BookListRow(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit,
         }
         Spacer(Modifier.width(Spacing.lg))
         Column(Modifier.weight(1f)) {
-            Text(meta.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(titleWithSeries(meta.title, meta.series, meta.seriesIndex), style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
             meta.author?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            seriesLabel(meta.series, meta.seriesIndex)?.let {
+            seriesLabel(meta.series, meta.seriesIndex)?.takeUnless { showsSeriesInTitle(meta.title, meta.series) }?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(6.dp))
