@@ -24,9 +24,11 @@ fun secret(env: String, property: String): String? =
 // Without them the release APK is built unsigned (it can't be installed).
 val releaseKeystore = secret("BOOKSOUND_KEYSTORE", "signing.storeFile")
 
-// CI sets these from the release tag and run number; local builds stay 1 / "1.0".
+// CI passes the release version and run number; local builds use appVersion (gradle.properties) and 1.
 val appVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 1
-val appVersionName = providers.gradleProperty("versionName").orNull ?: "1.0"
+val appVersionName = providers.gradleProperty("versionName").orNull
+    ?: providers.gradleProperty("appVersion").orNull
+    ?: "1.0"
 
 android {
     namespace = "com.zyagodin.booksound"
