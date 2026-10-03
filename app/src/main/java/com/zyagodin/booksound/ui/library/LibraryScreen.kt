@@ -269,6 +269,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
                             onOpen = { navigator.openBook(it.id) },
                             onLongClick = { actionsFor = it.id },
+                            onOpenSeries = navigator::openSeries,
                             modifier = Modifier.animateItem(),
                         )
                     }
@@ -644,8 +645,9 @@ private fun ImportOption(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     }
 }
 
+/** Long-press menu of a book in the library and in a series. */
 @Composable
-private fun BookActionsSheet(
+internal fun BookActionsSheet(
     item: LibraryItem,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,

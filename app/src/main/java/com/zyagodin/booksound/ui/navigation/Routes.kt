@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object LibraryKey : NavKey
 @Serializable data class BookKey(val bookId: String) : NavKey
+@Serializable data class SeriesKey(val series: String) : NavKey
 @Serializable data object PlayerKey : NavKey
 @Serializable data class ImportEditorKey(val sessionId: String) : NavKey
 @Serializable data class CoverPickerKey(val sessionId: String) : NavKey

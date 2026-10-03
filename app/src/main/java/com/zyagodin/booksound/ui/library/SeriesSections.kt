@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +49,7 @@ import com.zyagodin.booksound.util.formatDuration
 /**
  * One row of the series view. Books without a series come first as a plain shelf with no heading;
  * a series is a card with its name, authors and overall progress above a carousel ordered by book number.
+ * Tapping the card (outside the carousel's books) opens the series' own screen.
  */
 @Composable
 fun SeriesSectionView(
@@ -53,12 +57,13 @@ fun SeriesSectionView(
     coverSize: Dp,
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
+    onOpenSeries: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (section.series == null) {
         Carousel(section.items, numbered = false, coverSize, onOpen, onLongClick, PaddingValues(horizontal = 0.dp), modifier.fillMaxWidth().padding(vertical = Spacing.sm))
     } else {
-        SeriesCard(section, coverSize, onOpen, onLongClick, modifier)
+        SeriesCard(section, coverSize, onOpen, onLongClick, { onOpenSeries(section.series) }, modifier)
     }
 }
 
@@ -68,12 +73,14 @@ private fun SeriesCard(
     coverSize: Dp,
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
+    onOpenSeries: () -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
     val group = section.group
     val first = section.items.firstOrNull()
     Surface(
+        onClick = onOpenSeries,
         shape = Radii.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)),
@@ -110,6 +117,12 @@ private fun SeriesCard(
                             )
                         }
                     }
+                    Icon(
+                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.action_open_series),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = Spacing.xs),
+                    )
                 }
                 if (group.progress > 0f) {
                     BookProgressBar(group.progress, Modifier.padding(horizontal = Spacing.lg).padding(top = Spacing.md), height = 3.dp)
@@ -123,15 +136,15 @@ private fun SeriesCard(
 
 /** Up to three covers fanned out, as a small series emblem. */
 @Composable
-private fun StackedCovers(items: List<LibraryItem>) {
-    val size = 52.dp
-    Box(Modifier.width(size + 12.dp * (items.size - 1).coerceAtLeast(0)).height(size)) {
+internal fun StackedCovers(items: List<LibraryItem>, size: Dp = 52.dp) {
+    val step = size * 0.23f
+    Box(Modifier.width(size + step * (items.size - 1).coerceAtLeast(0)).height(size)) {
         items.reversed().forEachIndexed { reverseIndex, item ->
             val i = items.size - 1 - reverseIndex
             BookCover(
                 item.coverPath, item.metadata.title, null,
-                Modifier.size(size).offset(x = 12.dp * i),
-                shape = RoundedCornerShape(12.dp),
+                Modifier.size(size).offset(x = step * i),
+                shape = RoundedCornerShape(size * 0.23f),
                 elevation = 4.dp,
             )
         }

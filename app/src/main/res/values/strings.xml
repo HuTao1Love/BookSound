@@ -338,6 +338,10 @@
     <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
     <string name="action_show_series">Show by series</string>
+    <string name="action_open_series">Open series</string>
+    <string name="series_up_next">Up next: %1$s</string>
+    <string name="series_empty_title">No books in this series</string>
+    <string name="series_empty_message">Its books were removed from the library or moved to another series.</string>
 
     <!-- Torrents -->
     <string name="import_option_torrent">Torrent</string>

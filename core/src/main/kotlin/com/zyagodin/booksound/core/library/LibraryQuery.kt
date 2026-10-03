@@ -97,6 +97,13 @@ object LibrarySearch {
         return groups
     }
 
+    /** All books of [series] (matched like [groupBySeries] does: ignoring case and accents), ordered by number; null if none. */
+    fun seriesGroup(entries: List<LibraryEntry>, series: String): SeriesGroup? {
+        val key = normalize(series)
+        return groupBySeries(entries.filter { e -> e.book.metadata.series?.let { normalize(it) } == key })
+            .firstOrNull { it.series != null }
+    }
+
     /** Lower-case, accent-insensitive form used for matching ("Ёжик" matches "ежик", "Café" matches "cafe"). */
     fun normalize(text: String): String {
         val decomposed = Normalizer.normalize(text.lowercase(Locale.ROOT).replace('ё', 'е').replace('й', 'и'), Normalizer.Form.NFD)

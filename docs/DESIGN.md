@@ -39,7 +39,9 @@ Three layouts (toggle in the top bar): **Series** (default), Grid, List.
 Series view is a vertical list: first "Without series" (shelf of standalone books), then one card
 per series with stacked-cover emblem, authors, book count, total length, finished count, overall
 progress and a carousel ordered by book number (#1, #2…). Search, filters and sort apply to all
-layouts; in Series view the sort decides which series comes first.
+layouts; in Series view the sort decides which series comes first. Tapping a series card opens the
+series screen: emblem, totals, progress, a play button for the next unfinished book, and every
+book of the series as a list ordered by number (regardless of the library's search and filter).
 
 ## Navigation
 
@@ -47,6 +49,7 @@ layouts; in Series view the sort decides which series comes first.
 Onboarding (choose library folder)
 Library ──► Book details ──► Player ──► Chapters / Speed / Sleep (sheets)
    │             └──► Edit book (import editor in edit mode) ──► Cover picker
+   ├──► Series (tap a series card) ──► Book details
    ├──► Import: pick files/folder ──► Review & edit ──► Cover picker
    │                                       └──► Imports (progress queue)
    ├──► Import: torrent (link or file) ──► Review & edit while downloading ──► Imports (Downloads)

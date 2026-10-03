@@ -88,6 +88,20 @@ class SyncAndSearchTest {
     }
 
     @Test
+    fun `one series is found ignoring case and ordered by number`() {
+        val all = listOf(
+            entry("Book 10", "Amy", 4, null, series = "Saga", index = "10"),
+            entry("Solo", "Bob", 1, null),
+            entry("Book 2", "Amy", 5, null, series = "saga", index = "2"),
+            entry("Other 1", "Cid", 6, null, series = "Other", index = "1"),
+        )
+        val saga = LibrarySearch.seriesGroup(all, "SAGA")!!
+        assertEquals("Saga", saga.series)
+        assertEquals(listOf("Book 2", "Book 10"), saga.entries.map { it.book.metadata.title })
+        assertEquals(null, LibrarySearch.seriesGroup(all, "Missing"))
+    }
+
+    @Test
     fun `sorting and filters`() {
         val all = listOf(
             entry("B", "Zed", 1, 50, position = 10),

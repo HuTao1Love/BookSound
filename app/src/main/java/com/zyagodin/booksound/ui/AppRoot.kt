@@ -48,6 +48,7 @@ import com.zyagodin.booksound.ui.importer.CoverPickerScreen
 import com.zyagodin.booksound.ui.importer.ImportEditorScreen
 import com.zyagodin.booksound.ui.importer.ImportsScreen
 import com.zyagodin.booksound.ui.library.LibraryScreen
+import com.zyagodin.booksound.ui.library.SeriesScreen
 import com.zyagodin.booksound.ui.navigation.BookKey
 import com.zyagodin.booksound.ui.navigation.CoverPickerKey
 import com.zyagodin.booksound.ui.navigation.ImportEditorKey
@@ -55,6 +56,7 @@ import com.zyagodin.booksound.ui.navigation.ImportsKey
 import com.zyagodin.booksound.ui.navigation.LibraryKey
 import com.zyagodin.booksound.ui.navigation.PlayerKey
 import com.zyagodin.booksound.ui.navigation.RemovedBooksKey
+import com.zyagodin.booksound.ui.navigation.SeriesKey
 import com.zyagodin.booksound.ui.navigation.SettingsKey
 import com.zyagodin.booksound.ui.onboarding.OnboardingScreen
 import com.zyagodin.booksound.ui.player.PlayerScreen
@@ -81,6 +83,10 @@ class AppNavigator(
     fun openBook(bookId: String) {
         // In list-detail mode, selecting another book replaces the open detail instead of stacking.
         if (backStack.lastOrNull() is BookKey) backStack[backStack.lastIndex] = BookKey(bookId) else backStack.add(BookKey(bookId))
+    }
+
+    fun openSeries(series: String) {
+        if ((backStack.lastOrNull() as? SeriesKey)?.series != series) backStack.add(SeriesKey(series))
     }
 
     fun openPlayer() {
@@ -167,7 +173,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
 
     val top = backStack.lastOrNull()
     val showMiniPlayer = nowPlaying != null && playerState.hasBook &&
-        (top == LibraryKey || top is BookKey || top == ImportsKey || top == SettingsKey)
+        (top == LibraryKey || top is SeriesKey || top is BookKey || top == ImportsKey || top == SettingsKey)
     // Screens add the navigation bar inset themselves; the docked bar sits right on top of it.
     val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight else 0.dp
 
@@ -184,6 +190,9 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                 entryProvider = entryProvider {
                     entry<LibraryKey>(metadata = ListDetailSceneStrategy.listPane(detailPlaceholder = { DetailPlaceholder() })) {
                         LibraryScreen(navigator)
+                    }
+                    entry<SeriesKey>(metadata = ListDetailSceneStrategy.listPane(detailPlaceholder = { DetailPlaceholder() })) { key ->
+                        SeriesScreen(key.series, navigator)
                     }
                     entry<BookKey>(metadata = ListDetailSceneStrategy.detailPane()) { key ->
                         BookDetailScreen(key.bookId, navigator)
