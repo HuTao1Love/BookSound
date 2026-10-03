@@ -19,6 +19,18 @@ class CoverSearchParsingTest {
     }
 
     @Test
+    fun `a volume of a series is searched with the series name`() {
+        assertEquals(
+            "Реинкарнация безработного Детство — домашний учитель",
+            CoverSearchRepository.withSeries("Детство — домашний учитель", "Реинкарнация безработного"),
+        )
+        // Already in the title, or no series: the title as it is.
+        assertEquals("Дюна. Мессия Дюны", CoverSearchRepository.withSeries("Дюна. Мессия Дюны", "дюна"))
+        assertEquals("Dune", CoverSearchRepository.withSeries("Dune", null))
+        assertEquals("Dune", CoverSearchRepository.withSeries("Dune", "  "))
+    }
+
+    @Test
     fun `itunes results`() {
         val covers = CoverSearchRepository.parseItunes(
             parse(
