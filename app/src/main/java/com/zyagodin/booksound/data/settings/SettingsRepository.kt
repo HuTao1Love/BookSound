@@ -57,6 +57,8 @@ data class AppSettings(
     val libraryFilter: ProgressFilter = ProgressFilter.ALL,
     val libraryLayout: LibraryLayoutMode = LibraryLayoutMode.SERIES,
     val lastBookId: String? = null,
+    /** The "let BookSound run in the background" question was answered; don't ask again. */
+    val backgroundPromptShown: Boolean = false,
     /** Patterns for reading book details from a folder/file/torrent name, in the user's order. */
     val nameTemplates: List<String> = NameTemplate.DEFAULTS,
     /** Template last applied in the import editor; applied again automatically when it fits. */
@@ -104,6 +106,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val filter = stringPreferencesKey("library_filter")
         val layout = stringPreferencesKey("library_layout")
         val lastBook = stringPreferencesKey("last_book_id")
+        val backgroundPrompt = booleanPreferencesKey("background_prompt_shown")
         val deviceId = stringPreferencesKey("device_id")
         val syncCursor = stringPreferencesKey("sync_cursor")
         val nameTemplates = stringPreferencesKey("name_templates")
@@ -134,6 +137,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             libraryFilter = enumOrDefault(p[Keys.filter], ProgressFilter.ALL),
             libraryLayout = enumOrDefault(p[Keys.layout], LibraryLayoutMode.SERIES),
             lastBookId = p[Keys.lastBook],
+            backgroundPromptShown = p[Keys.backgroundPrompt] ?: false,
             nameTemplates = p[Keys.nameTemplates]?.split(TEMPLATE_SEPARATOR)?.filter { it.isNotBlank() } ?: NameTemplate.DEFAULTS,
             lastNameTemplate = p[Keys.lastNameTemplate],
             loaded = true,
@@ -179,6 +183,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     suspend fun setLastNameTemplate(template: String?) = edit {
         if (template == null) it.remove(Keys.lastNameTemplate) else it[Keys.lastNameTemplate] = template
     }
+    suspend fun setBackgroundPromptShown() = edit { it[Keys.backgroundPrompt] = true }
     suspend fun setLastBook(bookId: String?) = edit { if (bookId == null) it.remove(Keys.lastBook) else it[Keys.lastBook] = bookId }
 
     /** Random per-installation identifier used to attribute changes for future sync. */

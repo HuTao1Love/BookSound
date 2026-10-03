@@ -25,8 +25,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,7 +41,10 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.MainActivity
+import com.zyagodin.booksound.ui.components.BackgroundWork
+import com.zyagodin.booksound.ui.components.BackgroundWorkDialog
 import com.zyagodin.booksound.ui.components.MiniPlayer
+import com.zyagodin.booksound.ui.components.rememberBackgroundWorkRequest
 import com.zyagodin.booksound.ui.components.MiniPlayerHeight
 import com.zyagodin.booksound.ui.detail.BookDetailScreen
 import com.zyagodin.booksound.ui.detail.DetailPlaceholder
@@ -65,6 +70,7 @@ import com.zyagodin.booksound.ui.torrent.AddTorrentDialog
 import com.zyagodin.booksound.torrent.TorrentSource
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 /** The "Add torrent" dialog is open; [initial] is a link or file handed over by another app. */
 private class AddTorrentRequest(val initial: TorrentSource?)
@@ -136,6 +142,15 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val listDetail = rememberListDetailSceneStrategy<NavKey>()
     val playerState by container.player.state.collectAsStateWithLifecycle()
     val nowPlaying by container.nowPlaying.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var askBackgroundWork by remember { mutableStateOf(false) }
+    val requestBackgroundWork = rememberBackgroundWorkRequest { }
+
+    /** Downloads run in the background: once, ask to be exempt from battery optimization. */
+    fun maybeAskBackgroundWork() {
+        if (!container.settings.state.value.backgroundPromptShown && !BackgroundWork.isUnrestricted(context)) askBackgroundWork = true
+    }
 
     LaunchedEffect(Unit) {
         container.scanner.scan()
@@ -193,6 +208,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                 onAdded = { id ->
                     addTorrent = null
                     navigator.openImportEditor(container.importSessions.torrent(id).id)
+                    maybeAskBackgroundWork()
                 },
                 onAlreadyAdded = {
                     addTorrent = null
@@ -201,7 +217,21 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                 onAddedSeveral = {
                     addTorrent = null
                     navigator.openImports()
+                    maybeAskBackgroundWork()
                 },
+            )
+        }
+        if (askBackgroundWork) {
+            fun answered() {
+                askBackgroundWork = false
+                scope.launch { container.settings.setBackgroundPromptShown() }
+            }
+            BackgroundWorkDialog(
+                onAllow = {
+                    answered()
+                    requestBackgroundWork()
+                },
+                onLater = ::answered,
             )
         }
         AnimatedVisibility(

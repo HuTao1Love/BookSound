@@ -51,4 +51,29 @@ you choose.
 ./gradlew :core:test :app:assembleDebug
 ```
 
+## Releases (APK on GitHub)
+
+Publishing a GitHub release (Releases → Draft a new release → tag like `v1.2` → Publish) runs
+`.github/workflows/release.yml`: it tests `:core`, builds a signed release APK and attaches it
+to the release as `BookSound-1.2.apk`. It can also be run by hand from the Actions tab.
+
+One-time setup — a release key (keep the file and passwords safe: updates must be signed with
+the same key, otherwise the app has to be uninstalled first):
+
+```
+keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 booksound.jks          # Windows PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("booksound.jks"))
+```
+
+Add repository secrets (Settings → Secrets and variables → Actions): `KEYSTORE_BASE64` (the
+base64 output), `KEYSTORE_PASSWORD`, `KEY_ALIAS` (`booksound`), `KEY_PASSWORD`, and optionally
+`GOOGLE_BOOKS_API_KEY`. To build the same signed APK locally, put into `local.properties`:
+
+```
+signing.storeFile=C:/path/to/booksound.jks
+signing.storePassword=...
+signing.keyAlias=booksound
+signing.keyPassword=...
+```
+
 Design notes: [docs/DESIGN.md](docs/DESIGN.md).

@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DarkMode
@@ -83,6 +84,8 @@ import com.zyagodin.booksound.data.settings.ThemeMode
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.AppBottomSheet
+import com.zyagodin.booksound.ui.components.BackgroundWork
+import com.zyagodin.booksound.ui.components.rememberBackgroundWorkRequest
 import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.player.voicePresetName
@@ -147,6 +150,8 @@ fun SettingsScreen(navigator: AppNavigator) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var choice by remember { mutableStateOf<ChoiceKind?>(null) }
+    var unrestricted by remember { mutableStateOf(BackgroundWork.isUnrestricted(context)) }
+    val requestBackgroundWork = rememberBackgroundWorkRequest { unrestricted = it }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.changeFolder(uri) { ok ->
             scope.launch { snackbar.showSnackbar(context.getString(if (ok) R.string.settings_folder_changed else R.string.settings_folder_failed)) }
@@ -208,6 +213,12 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Item(Icons.Rounded.GraphicEq, stringResource(R.string.settings_quality), bitrateLabel(settings.encoderBitrateKbps), onClick = { choice = ChoiceKind.BITRATE })
                             Toggle(Icons.Rounded.Speaker, stringResource(R.string.settings_mono), stringResource(R.string.settings_mono_hint), settings.downmixToMono, vm::setMono)
                             Toggle(Icons.Rounded.ImageSearch, stringResource(R.string.settings_auto_cover), stringResource(R.string.settings_auto_cover_hint), settings.autoCoverSearch, vm::setAutoCover)
+                            Item(
+                                Icons.Rounded.BatteryFull,
+                                stringResource(R.string.settings_background),
+                                stringResource(if (unrestricted) R.string.settings_background_on else R.string.settings_background_off),
+                                onClick = requestBackgroundWork,
+                            )
                         }
                         Group(stringResource(R.string.settings_group_appearance)) {
                             Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {

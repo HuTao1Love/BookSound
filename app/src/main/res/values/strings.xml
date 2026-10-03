@@ -482,4 +482,12 @@
     <string name="voice_old_recording_hint">Keeps only the speech range: less hum and hiss</string>
     <string name="voice_clarity">Speech clarity</string>
     <string name="voice_clarity_hint">For quiet or mumbled narration: brings consonants forward</string>
+    <!-- Background work (battery optimization) -->
+    <string name="background_title">Keep downloads running?</string>
+    <string name="background_message">Android may put BookSound to sleep in the background to save battery, and downloads then stop until you open the app. Allow BookSound to run without battery restrictions.\n\nOn some phones (Samsung, Xiaomi) also check that BookSound isn\'t in the list of sleeping apps: Settings → Battery.</string>
+    <string name="background_allow">Allow</string>
+    <string name="background_later">Not now</string>
+    <string name="settings_background">Background work</string>
+    <string name="settings_background_on">Unrestricted — downloads keep running</string>
+    <string name="settings_background_off">Restricted by battery saving — tap to allow</string>
 </resources>
