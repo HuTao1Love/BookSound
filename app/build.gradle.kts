@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
+// Optional Google Books API key for online cover search: put googleBooksApiKey=... into
+// local.properties (not committed). Without a key, Google Books is skipped.
+val localProperties = java.util.Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.zyagodin.booksound"
     compileSdk {
@@ -19,6 +25,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${localProperties.getProperty("googleBooksApiKey", "").trim()}\"")
     }
 
     buildTypes {
@@ -35,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

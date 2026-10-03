@@ -12,11 +12,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -43,22 +41,40 @@ sealed interface CoverSearchResult {
 }
 
 /**
- * Searches public book catalogues that need no API key. Each source is queried in parallel;
- * a failing source does not hide results from the others.
+ * Searches public book catalogues. Each source is queried in parallel; a failing source does not
+ * hide results from the others. When nothing is found for title + author (authors are often
+ * spelled differently in catalogues), the title alone is tried.
+ *
+ * Google Books is only used with an API key: without one its quota is zero.
  */
-class CoverSearchRepository(private val http: OkHttpClient) {
+class CoverSearchRepository(private val http: OkHttpClient, private val googleBooksApiKey: String = "") {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     suspend fun search(title: String, author: String?): CoverSearchResult = withContext(Dispatchers.IO) {
-        val query = listOfNotNull(title.trim().takeIf { it.isNotEmpty() }, author?.trim()?.takeIf { it.isNotEmpty() }).joinToString(" ")
-        if (query.isBlank()) return@withContext CoverSearchResult.Found(emptyList())
+        val cleanTitle = cleanQuery(title)
+        val cleanAuthor = author?.let(::cleanQuery)?.takeIf { it.isNotEmpty() }
+        if (cleanTitle.isEmpty()) return@withContext CoverSearchResult.Found(emptyList())
+        val first = searchOnce(cleanTitle, cleanAuthor)
+        if (first is CoverSearchResult.Found && first.covers.isEmpty() && cleanAuthor != null) {
+            searchOnce(cleanTitle, null)
+        } else {
+            first
+        }
+    }
+
+    private suspend fun searchOnce(title: String, author: String?): CoverSearchResult {
+        val query = listOfNotNull(title, author).joinToString(" ")
+        val country = Locale.getDefault().country.takeIf { it.length == 2 } ?: "US"
         val networkErrors = java.util.concurrent.atomic.AtomicInteger()
-        val sources: List<suspend () -> List<OnlineCover>> = listOf(
-            { itunes(query, Locale.getDefault().country.ifBlank { "US" }) },
-            { itunes(query, "US") },
-            { openLibrary(title, author) },
-            { googleBooks(title, author) },
-        )
+        val sources = buildList<suspend () -> List<OnlineCover>> {
+            add { itunes(query, country, "audiobook") }
+            if (country != "US") add { itunes(query, "US", "audiobook") }
+            add { litres(query) }
+            add { openLibrary(query) }
+            // Apple sells e-books in many more countries than audiobooks; the covers are the same.
+            add { itunes(query, country, "ebook") }
+            if (googleBooksApiKey.isNotBlank()) add { googleBooks(title, author) }
+        }
         val results = coroutineScope {
             sources.map { source ->
                 async {
@@ -80,7 +96,7 @@ class CoverSearchRepository(private val http: OkHttpClient) {
         val maxLen = results.maxOfOrNull { it.size } ?: 0
         for (i in 0 until maxLen) for (list in results) list.getOrNull(i)?.let { merged += it }
         val unique = merged.distinctBy { it.fullUrl }
-        when {
+        return when {
             unique.isNotEmpty() -> CoverSearchResult.Found(unique.take(MAX_RESULTS))
             networkErrors.get() == sources.size -> CoverSearchResult.Offline
             else -> CoverSearchResult.Found(emptyList())
@@ -95,73 +111,49 @@ class CoverSearchRepository(private val http: OkHttpClient) {
         CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }
     }
 
-    private suspend fun itunes(query: String, country: String): List<OnlineCover> {
+    private suspend fun itunes(query: String, country: String, media: String): List<OnlineCover> {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", query)
-            .addQueryParameter("media", "audiobook")
+            .addQueryParameter("media", media)
             .addQueryParameter("limit", "15")
             .addQueryParameter("country", country)
             .build()
-        val root = getJson(url.toString()) ?: return emptyList()
-        return root.obj("results")?.let { it as? JsonArray }.orEmpty().mapNotNull { r ->
-            val o = r.jsonObject
-            val art = o.str("artworkUrl100") ?: return@mapNotNull null
-            OnlineCover(
-                thumbnailUrl = art.replace("100x100bb", "300x300bb"),
-                fullUrl = art.replace("100x100bb", "1000x1000bb"),
-                source = "Apple Books",
-                title = o.str("collectionName") ?: o.str("trackName"),
-                author = o.str("artistName"),
-            )
-        }
+        return getJson(url.toString())?.let(::parseItunes).orEmpty()
     }
 
-    private suspend fun openLibrary(title: String, author: String?): List<OnlineCover> {
+    /** LitRes: the largest catalogue of Russian books and audiobooks. */
+    private suspend fun litres(query: String): List<OnlineCover> {
+        val url = "https://api.litres.ru/foundation/api/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("limit", "15")
+            .addQueryParameter("types", "audiobook")
+            .addQueryParameter("types", "text_book")
+            .build()
+        return getJson(url.toString())?.let(::parseLitres).orEmpty()
+    }
+
+    private suspend fun openLibrary(query: String): List<OnlineCover> {
+        // Free text query: the picker passes "title author" as one string, a title= search would miss it.
         val url = "https://openlibrary.org/search.json".toHttpUrl().newBuilder()
-            .addQueryParameter("title", title)
-            .apply { if (!author.isNullOrBlank()) addQueryParameter("author", author) }
+            .addQueryParameter("q", query)
             .addQueryParameter("limit", "15")
             .addQueryParameter("fields", "title,author_name,cover_i")
             .build()
-        val root = getJson(url.toString()) ?: return emptyList()
-        return root.obj("docs")?.let { it as? JsonArray }.orEmpty().mapNotNull { d ->
-            val o = d.jsonObject
-            val id = o["cover_i"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
-            OnlineCover(
-                thumbnailUrl = "https://covers.openlibrary.org/b/id/$id-M.jpg",
-                fullUrl = "https://covers.openlibrary.org/b/id/$id-L.jpg",
-                source = "Open Library",
-                title = o.str("title"),
-                author = (o["author_name"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull,
-            )
-        }
+        return getJson(url.toString())?.let(::parseOpenLibrary).orEmpty()
     }
 
     private suspend fun googleBooks(title: String, author: String?): List<OnlineCover> {
         val q = buildString {
-            append("intitle:").append(title)
+            append(title)
             if (!author.isNullOrBlank()) append(" inauthor:").append(author)
         }
         val url = "https://www.googleapis.com/books/v1/volumes".toHttpUrl().newBuilder()
             .addQueryParameter("q", q)
             .addQueryParameter("maxResults", "15")
             .addQueryParameter("printType", "books")
+            .addQueryParameter("key", googleBooksApiKey)
             .build()
-        val root = getJson(url.toString()) ?: return emptyList()
-        return root.obj("items")?.let { it as? JsonArray }.orEmpty().mapNotNull { item ->
-            val o = item.jsonObject
-            val id = o.str("id") ?: return@mapNotNull null
-            val info = o["volumeInfo"]?.jsonObject ?: return@mapNotNull null
-            if (info["imageLinks"] == null) return@mapNotNull null
-            val base = "https://books.google.com/books/content?id=$id&printsec=frontcover&img=1&zoom=1&source=gbs_api"
-            OnlineCover(
-                thumbnailUrl = base,
-                fullUrl = "$base&fife=w1000",
-                source = "Google Books",
-                title = info.str("title"),
-                author = (info["authors"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull,
-            )
-        }
+        return getJson(url.toString())?.let(::parseGoogleBooks).orEmpty()
     }
 
     /** Google returns a tiny "image not available" placeholder for some volumes. */
@@ -169,7 +161,7 @@ class CoverSearchRepository(private val http: OkHttpClient) {
 
     private suspend fun getJson(url: String): JsonObject? {
         val body = get(url) ?: return null
-        return json.parseToJsonElement(body.decodeToString()).jsonObject
+        return json.parseToJsonElement(body.decodeToString()) as? JsonObject
     }
 
     private suspend fun get(url: String): ByteArray? {
@@ -192,10 +184,85 @@ class CoverSearchRepository(private val http: OkHttpClient) {
         })
     }
 
-    private fun JsonObject.str(key: String): String? = this[key]?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
-    private fun JsonObject.obj(key: String): JsonElement? = this[key]
-
     companion object {
+        /** Drops bracketed noise ("(Unabridged)", "[MP3]") that makes catalogue searches miss. */
+        fun cleanQuery(text: String): String = text
+            .replace(Regex("""[(\[{][^)\]}]*[)\]}]"""), " ")
+            .replace(Regex("""[_|]+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .trim('-', '.', ',', ':', ' ')
+
+        fun parseItunes(root: JsonObject): List<OnlineCover> = (root["results"] as? JsonArray).orEmpty().mapNotNull { r ->
+            val o = r as? JsonObject ?: return@mapNotNull null
+            val art = o.str("artworkUrl100") ?: o.str("artworkUrl60") ?: return@mapNotNull null
+            OnlineCover(
+                thumbnailUrl = art.replace(ARTWORK_SIZE, "300x300bb"),
+                fullUrl = art.replace(ARTWORK_SIZE, "1000x1000bb"),
+                source = "Apple Books",
+                title = o.str("collectionName") ?: o.str("trackName"),
+                author = o.str("artistName"),
+            )
+        }
+
+        fun parseOpenLibrary(root: JsonObject): List<OnlineCover> = (root["docs"] as? JsonArray).orEmpty().mapNotNull { d ->
+            val o = d as? JsonObject ?: return@mapNotNull null
+            val id = (o["cover_i"] as? JsonPrimitive)?.intOrNull ?: return@mapNotNull null
+            OnlineCover(
+                thumbnailUrl = "https://covers.openlibrary.org/b/id/$id-M.jpg",
+                fullUrl = "https://covers.openlibrary.org/b/id/$id-L.jpg",
+                source = "Open Library",
+                title = o.str("title"),
+                author = (o["author_name"] as? JsonArray)?.firstOrNull()?.let { (it as? JsonPrimitive)?.contentOrNull },
+            )
+        }
+
+        fun parseGoogleBooks(root: JsonObject): List<OnlineCover> = (root["items"] as? JsonArray).orEmpty().mapNotNull { item ->
+            val o = item as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id") ?: return@mapNotNull null
+            val info = o["volumeInfo"] as? JsonObject ?: return@mapNotNull null
+            if (info["imageLinks"] == null) return@mapNotNull null
+            val base = "https://books.google.com/books/content?id=$id&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+            OnlineCover(
+                thumbnailUrl = base,
+                fullUrl = "$base&fife=w1000",
+                source = "Google Books",
+                title = info.str("title"),
+                author = (info["authors"] as? JsonArray)?.firstOrNull()?.let { (it as? JsonPrimitive)?.contentOrNull },
+            )
+        }
+
+        /**
+         * LitRes has no documented public API; the response is walked leniently so that any
+         * object with a title and a cover URL counts as a book, wherever it is nested.
+         */
+        fun parseLitres(root: JsonElement): List<OnlineCover> {
+            val out = mutableListOf<OnlineCover>()
+            fun visit(e: JsonElement) {
+                when (e) {
+                    is JsonObject -> {
+                        val cover = e.str("cover_url") ?: e.str("cover")
+                        val title = e.str("title")
+                        if (cover != null && title != null && out.size < 15) {
+                            val thumb = if (cover.startsWith("/")) "https://www.litres.ru$cover" else cover
+                            val author = (e["persons"] as? JsonArray)?.mapNotNull { it as? JsonObject }
+                                ?.firstOrNull { it.str("role") == "author" }?.str("full_name")
+                            out += OnlineCover(thumb, thumb.replace(Regex("""/cover_\d+/"""), "/cover_max1500/"), "Литрес", title, author)
+                        } else {
+                            e.values.forEach(::visit)
+                        }
+                    }
+                    is JsonArray -> e.forEach(::visit)
+                    else -> Unit
+                }
+            }
+            visit(root)
+            return out.filter { it.thumbnailUrl.startsWith("https://") }
+        }
+
+        private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+        private const val ARTWORK_SIZE = "100x100bb"
         private const val TAG = "CoverSearch"
         private const val MAX_RESULTS = 36
         private const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
