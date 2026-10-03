@@ -189,9 +189,12 @@ fun statusText(item: TorrentItem): String {
                 live == null -> stringResource(R.string.torrent_downloading) + " · $percent% · $size"
                 else -> listOfNotNull(
                     "$percent%",
-                    stringResource(R.string.torrent_speed, formatSize(context, live.downloadRate.toLong())),
-                    if (live.swarm > live.peers) stringResource(R.string.torrent_peers_of, live.peers, live.swarm)
-                    else pluralStringResource(R.plurals.torrent_peers, live.peers, live.peers),
+                    live.downloadRate.takeIf { it > 0 }?.let { stringResource(R.string.torrent_speed, formatSize(context, it.toLong())) },
+                    when {
+                        live.peers == 0 && live.swarm == 0 -> stringResource(R.string.torrent_looking_for_peers)
+                        live.swarm > live.peers -> stringResource(R.string.torrent_peers_of, live.peers, live.swarm)
+                        else -> pluralStringResource(R.plurals.torrent_peers, live.peers, live.peers)
+                    },
                 ).joinToString(" · ")
             }
         }

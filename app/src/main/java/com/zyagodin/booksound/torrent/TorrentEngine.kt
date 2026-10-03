@@ -205,9 +205,14 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
         h.saveResumeData(TorrentHandle.SAVE_INFO_DICT)
     }
 
+    /**
+     * Starts the torrent right away. Torrents are taken out of libtorrent's automatic queue: it
+     * starts queued torrents only every 30 s and may keep them paused; BookSound runs few
+     * downloads and decides itself what runs.
+     */
     fun resume(infoHash: String) {
         val h = handle(infoHash) ?: return
-        h.setFlags(TorrentFlags.AUTO_MANAGED)
+        h.unsetFlags(TorrentFlags.AUTO_MANAGED)
         h.resume()
     }
 
@@ -231,9 +236,8 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
     fun status(infoHash: String): EngineStatus? {
         val h = handle(infoHash) ?: return null
         val s = h.status()
-        // Paused by the user; libtorrent's own queue pauses auto-managed torrents temporarily.
-        val flags = s.flags()
-        val paused = flags.and_(TorrentFlags.PAUSED).non_zero() && !flags.and_(TorrentFlags.AUTO_MANAGED).non_zero()
+        // Includes torrents added paused for libtorrent's queue; the manager resumes those at once.
+        val paused = s.flags().and_(TorrentFlags.PAUSED).non_zero()
         val state = when (s.state()) {
             TorrentStatus.State.CHECKING_FILES, TorrentStatus.State.CHECKING_RESUME_DATA -> EngineStatus.State.CHECKING
             TorrentStatus.State.DOWNLOADING, TorrentStatus.State.DOWNLOADING_METADATA -> EngineStatus.State.DOWNLOADING
