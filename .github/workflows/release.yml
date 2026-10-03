@@ -1,7 +1,12 @@
-# Builds a signed release APK and attaches it to the GitHub release.
+# Builds a signed release APK and publishes it on GitHub.
 #
-# Runs when a release is published (Releases → Draft a new release → tag e.g. v1.2 → Publish),
-# or by hand from the Actions tab (the APK is then kept as a workflow artifact).
+# - Every push to main (each merged pull request) becomes a release tagged
+#   <appVersion from gradle.properties>.<run number>, e.g. 1.0.57, with the APK attached.
+# - A release published by hand (Releases → Draft a new release) gets the APK attached.
+# - Run by hand from the Actions tab: the APK is kept as a workflow artifact.
+#
+# All three share this workflow's run number, which is also the APK's versionCode, so every new
+# build installs over the previous one.
 #
 # Needs these repository secrets (Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64     the release keystore, base64-encoded
@@ -13,6 +18,8 @@
 name: Release APK
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
@@ -59,12 +66,12 @@ jobs:
 
       - name: Work out the version
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            NAME="${{ github.event.release.tag_name }}"
-          else
-            NAME="$(git describe --tags --always)"
-          fi
-          echo "VERSION_NAME=${NAME#v}" >> "$GITHUB_ENV"
+          BASE="$(sed -n 's/^appVersion=//p' gradle.properties | tr -d '[:space:]')"
+          case "${{ github.event_name }}" in
+            release) NAME="${{ github.event.release.tag_name }}"; NAME="${NAME#v}" ;;
+            *) NAME="${BASE:-1.0}.${{ github.run_number }}" ;;
+          esac
+          echo "VERSION_NAME=$NAME" >> "$GITHUB_ENV"
 
       - name: Test and build
         env:
@@ -85,8 +92,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" "BookSound-$VERSION_NAME.apk" --clobber
 
+      - name: Publish a release for the push to main
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION_NAME" "BookSound-$VERSION_NAME.apk" \
+            --target "${{ github.sha }}" \
+            --title "BookSound $VERSION_NAME" \
+            --generate-notes
+
       - name: Keep the APK as an artifact
-        if: github.event_name != 'release'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: BookSound-${{ env.VERSION_NAME }}
