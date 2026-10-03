@@ -326,15 +326,11 @@
     <string name="restore_failed">The file is gone, so the book can\'t be restored</string>
 
     <!-- Onboarding -->
-    <string name="onboarding_title">Your audiobooks, your folder</string>
-    <string name="onboarding_message">Choose the folder where your audiobooks will live. Every book is kept there as a regular M4B file you can copy, back up or play anywhere.</string>
-    <string name="onboarding_feature_files">Real files, organised as Author / Series / Book</string>
-    <string name="onboarding_feature_import">MP3 folders become one book with chapters and cover</string>
-    <string name="onboarding_feature_player">Background playback, speed control and a sleep timer</string>
-    <string name="onboarding_choose_folder">Choose library folder</string>
-    <string name="onboarding_tip">Tip: create a folder named “Audiobooks” in the picker.</string>
-    <string name="onboarding_folder_lost">BookSound lost access to your library folder. Choose it again — your books and progress are kept.</string>
-    <string name="onboarding_permission_failed">That folder can\'t be used. Please choose a folder on your device or SD card.</string>
+    <string name="onboarding_title">Pick a folder for your books</string>
+    <string name="onboarding_message">BookSound saves audiobooks there as regular M4B files.</string>
+    <string name="onboarding_choose_folder">Choose folder</string>
+    <string name="onboarding_folder_lost">BookSound can\'t open your library folder anymore. Pick it again, your progress is safe.</string>
+    <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
     <string name="library_no_series">Without series</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
     <string name="action_show_series">Show by series</string>

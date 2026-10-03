@@ -324,15 +324,11 @@
     <string name="restored">Книга возвращена</string>
     <string name="restore_failed">Файла больше нет, книгу не вернуть</string>
 
-    <string name="onboarding_title">Ваши книги — в вашей папке</string>
-    <string name="onboarding_message">Выберите папку для аудиокниг. Каждая книга хранится там обычным файлом M4B, который можно копировать, сохранять в резервную копию и слушать где угодно.</string>
-    <string name="onboarding_feature_files">Настоящие файлы: Автор / Серия / Книга</string>
-    <string name="onboarding_feature_import">Папки с MP3 превращаются в одну книгу с главами и обложкой</string>
-    <string name="onboarding_feature_player">Фоновое воспроизведение, скорость и таймер сна</string>
-    <string name="onboarding_choose_folder">Выбрать папку библиотеки</string>
-    <string name="onboarding_tip">Совет: создайте в окне выбора папку «Audiobooks».</string>
-    <string name="onboarding_folder_lost">BookSound потерял доступ к папке библиотеки. Выберите её снова — книги и прогресс сохранены.</string>
-    <string name="onboarding_permission_failed">Эту папку использовать нельзя. Выберите папку во внутренней памяти или на SD-карте.</string>
+    <string name="onboarding_title">Выберите папку для книг</string>
+    <string name="onboarding_message">BookSound будет сохранять туда аудиокниги в формате M4B.</string>
+    <string name="onboarding_choose_folder">Выбрать папку</string>
+    <string name="onboarding_folder_lost">Нет доступа к папке с книгами. Выберите её снова, прогресс не потеряется.</string>
+    <string name="onboarding_permission_failed">Эту папку выбрать нельзя. Попробуйте другую.</string>
     <string name="library_no_series">Без серии</string>
     <string name="series_finished_of">%1$d/%2$d прослушано</string>
     <string name="action_show_series">Показать по сериям</string>
