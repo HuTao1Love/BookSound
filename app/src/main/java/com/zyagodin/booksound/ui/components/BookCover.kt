@@ -126,12 +126,12 @@ fun CoverBackdrop(coverPath: String?, title: String, modifier: Modifier = Modifi
 }
 
 private val PlaceholderPalettes = listOf(
-    Color(0xFFFF9548) to Color(0xFFFF4E6B),
-    Color(0xFF6EE7C8) to Color(0xFF2B7FFF),
-    Color(0xFFAFA2FF) to Color(0xFF6A3DF0),
-    Color(0xFFFFC94D) to Color(0xFFFF7A3D),
-    Color(0xFF5EC8FF) to Color(0xFF3F4BF2),
-    Color(0xFFFF8FC7) to Color(0xFF9B46FF),
+    Color(0xFFFFB27D) to Color(0xFFE0607E),
+    Color(0xFF8ED8BF) to Color(0xFF3F7FA8),
+    Color(0xFFBBB0FF) to Color(0xFF6A55D8),
+    Color(0xFFFFD48A) to Color(0xFFE5835A),
+    Color(0xFF8CC8F0) to Color(0xFF4A5BC4),
+    Color(0xFFF4A3C4) to Color(0xFF8E5BD0),
 )
 
 private fun paletteFor(title: String) = PlaceholderPalettes[abs(title.hashCode()) % PlaceholderPalettes.size]

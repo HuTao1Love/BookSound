@@ -22,47 +22,49 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.data.settings.ThemeMode
 
-// "Midnight": near-black graphite surfaces, a warm orange→coral accent, mint and violet helpers.
-private val Amber = Color(0xFFFF9548)
-private val Coral = Color(0xFFFF5E62)
-private val AmberDeep = Color(0xFFE5641E)
+// "Dusk": ink-blue surfaces with a faint violet tint, a soft apricot→rose accent, sage and
+// lavender helpers. The light scheme is warm paper with a terracotta accent.
+private val Apricot = Color(0xFFFFB27D)
+private val Rose = Color(0xFFF47C93)
+private val Terracotta = Color(0xFFC65A33)
+private val RoseDeep = Color(0xFFC0466B)
 
 private val DarkColors = darkColorScheme(
-    primary = Amber,
-    onPrimary = Color(0xFF1C0D02),
-    primaryContainer = Color(0xFF3B2416),
-    onPrimaryContainer = Color(0xFFFFD6BA),
-    secondary = Color(0xFF6EE7C8),
-    onSecondary = Color(0xFF00382D),
-    secondaryContainer = Color(0xFF16352E),
-    onSecondaryContainer = Color(0xFFB5F5E3),
-    tertiary = Color(0xFFAFA2FF),
-    onTertiary = Color(0xFF1E1452),
-    tertiaryContainer = Color(0xFF2B2550),
-    onTertiaryContainer = Color(0xFFE2DCFF),
-    error = Color(0xFFFF8A8A),
+    primary = Apricot,
+    onPrimary = Color(0xFF2E1407),
+    primaryContainer = Color(0xFF3A2A24),
+    onPrimaryContainer = Color(0xFFFFDCC7),
+    secondary = Color(0xFF8ED8BF),
+    onSecondary = Color(0xFF00382C),
+    secondaryContainer = Color(0xFF1B3430),
+    onSecondaryContainer = Color(0xFFC2EFE0),
+    tertiary = Color(0xFFBBB0FF),
+    onTertiary = Color(0xFF221A55),
+    tertiaryContainer = Color(0xFF2D2A4E),
+    onTertiaryContainer = Color(0xFFE4DFFF),
+    error = Color(0xFFFF8F8F),
     onError = Color(0xFF3D0707),
-    errorContainer = Color(0xFF3A1518),
-    onErrorContainer = Color(0xFFFFD6D6),
-    background = Color(0xFF0A0B0F),
-    onBackground = Color(0xFFF2F2F5),
-    surface = Color(0xFF0A0B0F),
-    onSurface = Color(0xFFF2F2F5),
-    surfaceVariant = Color(0xFF1E2029),
-    onSurfaceVariant = Color(0xFFA0A3B1),
-    surfaceTint = Amber,
-    surfaceBright = Color(0xFF2E3140),
-    surfaceDim = Color(0xFF0A0B0F),
-    surfaceContainerLowest = Color(0xFF060709),
-    surfaceContainerLow = Color(0xFF111217),
-    surfaceContainer = Color(0xFF16181F),
-    surfaceContainerHigh = Color(0xFF1E2029),
-    surfaceContainerHighest = Color(0xFF282B36),
-    outline = Color(0xFF5C6070),
-    outlineVariant = Color(0xFF2A2D38),
-    inverseSurface = Color(0xFFF2F2F5),
-    inverseOnSurface = Color(0xFF16181F),
-    inversePrimary = AmberDeep,
+    errorContainer = Color(0xFF3B1A20),
+    onErrorContainer = Color(0xFFFFD9D9),
+    background = Color(0xFF0F1117),
+    onBackground = Color(0xFFECEDF3),
+    surface = Color(0xFF0F1117),
+    onSurface = Color(0xFFECEDF3),
+    surfaceVariant = Color(0xFF21242F),
+    onSurfaceVariant = Color(0xFF9FA3B6),
+    surfaceTint = Apricot,
+    surfaceBright = Color(0xFF323646),
+    surfaceDim = Color(0xFF0F1117),
+    surfaceContainerLowest = Color(0xFF0A0B10),
+    surfaceContainerLow = Color(0xFF151720),
+    surfaceContainer = Color(0xFF1A1C26),
+    surfaceContainerHigh = Color(0xFF21242F),
+    surfaceContainerHighest = Color(0xFF2A2D3A),
+    outline = Color(0xFF5E6377),
+    outlineVariant = Color(0xFF2C2F3C),
+    inverseSurface = Color(0xFFECEDF3),
+    inverseOnSurface = Color(0xFF1A1C26),
+    inversePrimary = Terracotta,
     scrim = Color.Black,
 )
 
@@ -74,53 +76,53 @@ private val AmoledColors = DarkColors.copy(
     background = Color.Black,
     surface = Color.Black,
     surfaceDim = Color.Black,
-    surfaceVariant = Color(0xFF17181D),
-    surfaceBright = Color(0xFF26282F),
+    surfaceVariant = Color(0xFF17181E),
+    surfaceBright = Color(0xFF272930),
     surfaceContainerLowest = Color.Black,
-    surfaceContainerLow = Color(0xFF07080A),
-    surfaceContainer = Color(0xFF0D0E11),
-    surfaceContainerHigh = Color(0xFF15161A),
-    surfaceContainerHighest = Color(0xFF1E2025),
-    outlineVariant = Color(0xFF22242B),
+    surfaceContainerLow = Color(0xFF07080B),
+    surfaceContainer = Color(0xFF0D0E12),
+    surfaceContainerHigh = Color(0xFF15161B),
+    surfaceContainerHighest = Color(0xFF1E2026),
+    outlineVariant = Color(0xFF22242C),
     inverseOnSurface = Color.Black,
 )
 
 private val LightColors = lightColorScheme(
-    primary = AmberDeep,
+    primary = Terracotta,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE3D1),
-    onPrimaryContainer = Color(0xFF3A1600),
-    secondary = Color(0xFF0E8A6E),
+    primaryContainer = Color(0xFFFFE2D3),
+    onPrimaryContainer = Color(0xFF3D1404),
+    secondary = Color(0xFF2C7D66),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDF3E7),
-    onSecondaryContainer = Color(0xFF00382D),
-    tertiary = Color(0xFF5B4BD6),
+    secondaryContainer = Color(0xFFD2EEE3),
+    onSecondaryContainer = Color(0xFF00382C),
+    tertiary = Color(0xFF6352C4),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE4DFFF),
-    onTertiaryContainer = Color(0xFF1E1452),
-    error = Color(0xFFD32F2F),
+    tertiaryContainer = Color(0xFFE7E1FF),
+    onTertiaryContainer = Color(0xFF221A55),
+    error = Color(0xFFC62F3A),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE0E0),
+    errorContainer = Color(0xFFFFE0DF),
     onErrorContainer = Color(0xFF410E0B),
-    background = Color(0xFFF6F6F9),
-    onBackground = Color(0xFF111217),
-    surface = Color(0xFFF6F6F9),
-    onSurface = Color(0xFF111217),
-    surfaceVariant = Color(0xFFE6E7EE),
-    onSurfaceVariant = Color(0xFF5B5F6E),
-    surfaceTint = AmberDeep,
+    background = Color(0xFFFAF7F3),
+    onBackground = Color(0xFF1E1B18),
+    surface = Color(0xFFFAF7F3),
+    onSurface = Color(0xFF1E1B18),
+    surfaceVariant = Color(0xFFEDE7E0),
+    onSurfaceVariant = Color(0xFF6A625A),
+    surfaceTint = Terracotta,
     surfaceBright = Color.White,
-    surfaceDim = Color(0xFFDDDEE5),
+    surfaceDim = Color(0xFFE2DBD2),
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF0F1F5),
-    surfaceContainer = Color(0xFFEBECF1),
-    surfaceContainerHigh = Color(0xFFE5E6EC),
-    surfaceContainerHighest = Color(0xFFDDDEE6),
-    outline = Color(0xFF8B8F9E),
-    outlineVariant = Color(0xFFD5D7E0),
-    inverseSurface = Color(0xFF1E2029),
-    inverseOnSurface = Color(0xFFF2F2F5),
-    inversePrimary = Amber,
+    surfaceContainerLow = Color(0xFFF5F0EA),
+    surfaceContainer = Color(0xFFF0EAE3),
+    surfaceContainerHigh = Color(0xFFEBE4DC),
+    surfaceContainerHighest = Color(0xFFE4DCD3),
+    outline = Color(0xFF9A9087),
+    outlineVariant = Color(0xFFDDD4CA),
+    inverseSurface = Color(0xFF2A2724),
+    inverseOnSurface = Color(0xFFF5F0EA),
+    inversePrimary = Apricot,
     scrim = Color.Black,
 )
 
@@ -128,12 +130,13 @@ private val LightColors = lightColorScheme(
 @Immutable
 data class AppGradients(val accent: Brush, val accentColors: List<Color>)
 
-private val Gradients = AppGradients(
-    accent = Brush.linearGradient(listOf(Amber, Coral)),
-    accentColors = listOf(Amber, Coral),
-)
+private fun gradientOf(from: Color, to: Color) = AppGradients(Brush.linearGradient(listOf(from, to)), listOf(from, to))
 
-val LocalGradients = staticCompositionLocalOf { Gradients }
+/** Light accents carry dark content; the deeper light-theme accents carry white (see onPrimary). */
+private val DarkGradients = gradientOf(Apricot, Rose)
+private val LightGradients = gradientOf(Terracotta, RoseDeep)
+
+val LocalGradients = staticCompositionLocalOf { DarkGradients }
 
 val BookSoundShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
@@ -190,7 +193,7 @@ fun BookSoundTheme(
             else SystemBarStyle.light(Color.Transparent.toArgb(), Color.Transparent.toArgb()),
         )
     }
-    CompositionLocalProvider(LocalDarkTheme provides dark, LocalGradients provides Gradients) {
+    CompositionLocalProvider(LocalDarkTheme provides dark, LocalGradients provides if (dark) DarkGradients else LightGradients) {
         MaterialTheme(
             colorScheme = when {
                 !dark -> LightColors

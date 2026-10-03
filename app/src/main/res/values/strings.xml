@@ -336,7 +336,6 @@
     <string name="onboarding_choose_folder">Choose folder</string>
     <string name="onboarding_folder_lost">BookSound can\'t open your library folder anymore. Pick it again, your progress is safe.</string>
     <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
-    <string name="library_no_series">Without series</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
     <string name="action_show_series">Show by series</string>
 

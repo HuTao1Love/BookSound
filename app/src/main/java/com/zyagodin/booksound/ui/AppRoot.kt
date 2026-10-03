@@ -7,11 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -65,7 +61,6 @@ import com.zyagodin.booksound.ui.player.PlayerScreen
 import com.zyagodin.booksound.ui.settings.RemovedBooksScreen
 import com.zyagodin.booksound.ui.settings.SettingsScreen
 import com.zyagodin.booksound.ui.theme.BookSoundTheme
-import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.ui.torrent.AddTorrentDialog
 import com.zyagodin.booksound.torrent.TorrentSource
 import androidx.compose.runtime.mutableStateOf
@@ -173,7 +168,8 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val top = backStack.lastOrNull()
     val showMiniPlayer = nowPlaying != null && playerState.hasBook &&
         (top == LibraryKey || top is BookKey || top == ImportsKey || top == SettingsKey)
-    val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight + Spacing.lg * 2 else 0.dp
+    // Screens add the navigation bar inset themselves; the docked bar sits right on top of it.
+    val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight else 0.dp
 
     Box(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalBottomOverlayPadding provides overlay) {
@@ -238,10 +234,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
             visible = showMiniPlayer,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = Spacing.md, vertical = Spacing.md),
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             nowPlaying?.let { book ->
                 MiniPlayer(
