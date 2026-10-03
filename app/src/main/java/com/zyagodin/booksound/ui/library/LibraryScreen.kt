@@ -117,6 +117,7 @@ import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SheetAction
 import com.zyagodin.booksound.ui.components.remainingLabel
+import com.zyagodin.booksound.ui.components.titleWithSeries
 import com.zyagodin.booksound.ui.components.rememberWindowLayout
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
@@ -546,7 +547,7 @@ private fun ContinueListeningCard(item: LibraryItem, onOpen: () -> Unit, onPlay:
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(2.dp))
-                    Text(item.metadata.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(titleWithSeries(item.metadata.title, item.metadata.series, item.metadata.seriesIndex), style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     item.metadata.author?.let {
                         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -652,7 +653,7 @@ private fun BookActionsSheet(
             BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(56.dp))
             Spacer(Modifier.width(Spacing.lg))
             Column {
-                Text(item.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(titleWithSeries(item.metadata.title, item.metadata.series, item.metadata.seriesIndex), style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 item.metadata.author?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
