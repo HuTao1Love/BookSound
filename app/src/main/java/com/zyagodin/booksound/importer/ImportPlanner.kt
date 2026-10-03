@@ -121,7 +121,15 @@ class ImportPlanner(
 
         val parts = input.parts.map { p ->
             val f = input.files[p.sourceId]
-            SourcePart(Uri.parse(p.sourceId), p.displayName, f?.sizeBytes ?: 0L, p.durationMs, f?.parsed?.container ?: AudioContainer.UNKNOWN)
+            SourcePart(
+                uri = Uri.parse(p.sourceId),
+                displayName = p.displayName,
+                sizeBytes = f?.sizeBytes ?: 0L,
+                durationMs = p.durationMs,
+                container = f?.parsed?.container ?: AudioContainer.UNKNOWN,
+                sampleRate = f?.parsed?.stream?.sampleRate,
+                channels = f?.parsed?.stream?.channels,
+            )
         }
         val strategy = strategyFor(input.parts, input.files)
         val inputBytes = parts.sumOf { it.sizeBytes.coerceAtLeast(0) }

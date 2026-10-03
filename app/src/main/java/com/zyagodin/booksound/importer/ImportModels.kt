@@ -26,6 +26,9 @@ data class SourcePart(
     val sizeBytes: Long,
     val durationMs: Long,
     val container: AudioContainer,
+    /** Stream properties when known; used to give parallel-encoded parts one common format. */
+    val sampleRate: Int? = null,
+    val channels: Int? = null,
 )
 
 enum class ConflictPolicy {

@@ -33,6 +33,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -203,8 +208,10 @@ class ImportPipeline(
     private fun checkTemporarySpace(workDir: File, treeUri: Uri, request: ImportRequest) {
         val available = workDir.usableSpace
         val sameVolume = runCatching { documents.rootDocumentId(treeUri).startsWith("primary:") }.getOrDefault(true)
-        // Temporary audio + (when the library is on the same volume) the final copy.
-        val required = request.estimatedOutputBytes * (if (sameVolume) 2 else 1) + SAFETY_MARGIN
+        // Temporary audio (plus the separately encoded parts while they are joined) and, when the
+        // library is on the same volume, the final copy.
+        val copies = 1 + (if (encodesInParallel(request)) 1 else 0) + (if (sameVolume) 1 else 0)
+        val required = request.estimatedOutputBytes * copies + SAFETY_MARGIN
         if (available in 1 until required) {
             throw ImportFailure.InsufficientStorage(required, available, ImportFailure.Location.TEMPORARY)
         }
@@ -213,6 +220,18 @@ class ImportPipeline(
     private suspend fun convert(request: ImportRequest, output: File, report: Progress) {
         val uris = request.parts.map { it.uri }
         report.report(ImportStage.CONVERTING, 0f)
+        if (encodesInParallel(request)) {
+            try {
+                transcodeInParallel(request, output, report)
+                report.report(ImportStage.CONVERTING, 1f)
+                return
+            } catch (e: JoinFailed) {
+                // Joining the encoded parts failed: encode everything in one pass instead.
+                Log.i(TAG, "Joining encoded parts failed, transcoding in one pass", e.cause)
+                output.delete()
+                report.report(ImportStage.CONVERTING, 0f)
+            }
+        }
         val copyFirst = request.strategy == ConversionStrategy.CONCAT_COPY
         try {
             transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = copyFirst) {
@@ -229,6 +248,61 @@ class ImportPipeline(
             }
         }
         report.report(ImportStage.CONVERTING, 1f)
+    }
+
+    private class JoinFailed(cause: Throwable) : Exception(cause)
+
+    private fun encodesInParallel(request: ImportRequest) = request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1
+
+    /**
+     * Encodes the parts to AAC side by side (AAC encoding runs on one CPU core per file, so a
+     * single sequential pass leaves most of the phone idle), in one common format, then joins
+     * them without re-encoding.
+     */
+    private suspend fun transcodeInParallel(request: ImportRequest, output: File, report: Progress) {
+        val parts = request.parts
+        val workDir = output.parentFile!!
+        // The most common input rate, so that most parts need no resampling.
+        val sampleRate = parts.mapNotNull { it.sampleRate }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        val channels = if (request.downmixToMono || parts.all { it.channels == 1 }) 1 else 2
+        val weights = parts.map { it.durationMs.coerceAtLeast(1).toDouble() }
+        val total = weights.sum()
+        val progress = DoubleArray(parts.size)
+        fun publish() = report.report(ImportStage.CONVERTING, (ENCODE_SHARE * progress.indices.sumOf { progress[it] * weights[it] } / total).toFloat())
+
+        val files = parts.indices.map { File(workDir, "part-%04d.m4a".format(it)) }
+        val gate = Semaphore(PARALLEL_ENCODERS.coerceAtMost(maxOf(2, Runtime.getRuntime().availableProcessors() / 2)))
+        coroutineScope {
+            parts.mapIndexed { i, part ->
+                async {
+                    gate.withPermit {
+                        try {
+                            transcoder.run(
+                                listOf(part.uri), files[i], request.bitrateKbps, downmixToMono = false, transmux = false,
+                                outputSampleRate = sampleRate, outputChannels = channels,
+                            ) { p ->
+                                progress[i] = p.toDouble()
+                                publish()
+                            }
+                        } catch (e: ExportException) {
+                            // Out of space is reported as such by mapFailure; anything else names the part.
+                            throw if (isOutOfSpace(e)) e else exportFailure(e, part.displayName)
+                        }
+                        progress[i] = 1.0
+                        publish()
+                    }
+                }
+            }.awaitAll()
+        }
+        try {
+            transcoder.run(files.map(Uri::fromFile), output, request.bitrateKbps, downmixToMono = false, transmux = true) { p ->
+                report.report(ImportStage.CONVERTING, (ENCODE_SHARE + (1 - ENCODE_SHARE) * p).toFloat())
+            }
+        } catch (e: ExportException) {
+            throw JoinFailed(e)
+        } finally {
+            files.forEach(File::delete)
+        }
     }
 
     private suspend fun prepareTarget(treeUri: Uri, request: ImportRequest, ownFileUri: String?): Target {
@@ -348,14 +422,7 @@ class ImportPipeline(
             return ImportFailure.InsufficientStorage(request.estimatedOutputBytes, null, location)
         }
         return when (t) {
-            is ExportException -> when (t.errorCode) {
-                ExportException.ERROR_CODE_IO_FILE_NOT_FOUND, ExportException.ERROR_CODE_IO_NO_PERMISSION ->
-                    ImportFailure.SourceUnavailable(request.parts.firstOrNull()?.displayName ?: "", t)
-                ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
-                    ImportFailure.UnsupportedFormat(null, t.errorCodeName)
-                ExportException.ERROR_CODE_DECODING_FAILED -> ImportFailure.CorruptedInput(null, t.errorCodeName)
-                else -> ImportFailure.ConversionFailed(t.errorCodeName, t)
-            }
+            is ExportException -> exportFailure(t, null, request.parts.firstOrNull()?.displayName)
             is UnsupportedFormatException -> ImportFailure.UnsupportedFormat(null, t.message)
             is CorruptedFileException -> ImportFailure.CorruptedInput(null, t.message)
             is NotSeekableException -> ImportFailure.SourceUnavailable(t.message ?: "", t)
@@ -364,6 +431,16 @@ class ImportPipeline(
             is IOException -> ImportFailure.WriteFailed(t.message, t)
             else -> ImportFailure.Unexpected(t.message ?: t.javaClass.simpleName, t)
         }
+    }
+
+    /** [fileName] is the part that failed, when known. */
+    private fun exportFailure(t: ExportException, fileName: String?, fallbackName: String? = fileName): ImportFailure = when (t.errorCode) {
+        ExportException.ERROR_CODE_IO_FILE_NOT_FOUND, ExportException.ERROR_CODE_IO_NO_PERMISSION ->
+            ImportFailure.SourceUnavailable(fileName ?: fallbackName ?: "", t)
+        ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
+            ImportFailure.UnsupportedFormat(fileName, t.errorCodeName)
+        ExportException.ERROR_CODE_DECODING_FAILED -> ImportFailure.CorruptedInput(fileName, t.errorCodeName)
+        else -> ImportFailure.ConversionFailed(listOfNotNull(fileName, t.errorCodeName).joinToString(": "), t)
     }
 
     private fun isOutOfSpace(t: Throwable): Boolean {
@@ -402,5 +479,11 @@ class ImportPipeline(
     companion object {
         private const val TAG = "ImportPipeline"
         private const val SAFETY_MARGIN = 32L * 1024 * 1024
+
+        /** Upper bound of parts encoded at the same time (codec instances and memory are limited). */
+        private const val PARALLEL_ENCODERS = 4
+
+        /** Share of the conversion progress spent encoding; the rest is joining. */
+        private const val ENCODE_SHARE = 0.95
     }
 }
