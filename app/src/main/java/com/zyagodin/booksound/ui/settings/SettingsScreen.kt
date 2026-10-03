@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -91,6 +92,7 @@ import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.player.voicePresetName
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
+import com.zyagodin.booksound.util.DebugLog
 import com.zyagodin.booksound.util.formatSpeed
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -251,6 +253,18 @@ fun SettingsScreen(navigator: AppNavigator) {
                         Group(stringResource(R.string.settings_group_about)) {
                             Item(Icons.Rounded.CloudSync, stringResource(R.string.settings_sync), stringResource(R.string.settings_sync_hint), onClick = null)
                             Item(Icons.Rounded.Info, stringResource(R.string.app_name), stringResource(R.string.settings_version, BuildConfigInfo.versionName(context)), onClick = null)
+                            Item(
+                                Icons.Rounded.BugReport,
+                                stringResource(R.string.settings_debug_log),
+                                stringResource(R.string.settings_debug_log_hint),
+                                onClick = {
+                                    scope.launch {
+                                        runCatching { DebugLog.export(context) }
+                                            .onSuccess { context.startActivity(DebugLog.shareIntent(it)) }
+                                            .onFailure { snackbar.showSnackbar(context.getString(R.string.debug_log_failed)) }
+                                    }
+                                },
+                            )
                         }
                     }
                 }

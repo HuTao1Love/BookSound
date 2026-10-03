@@ -494,4 +494,8 @@
     <string name="settings_background">Работа в фоне</string>
     <string name="settings_background_on">Без ограничений — загрузки не останавливаются</string>
     <string name="settings_background_off">Ограничена экономией батареи — нажмите, чтобы разрешить</string>
+    <!-- Отладочный лог -->
+    <string name="settings_debug_log">Отладочный лог</string>
+    <string name="settings_debug_log_hint">Отправить лог приложения, чтобы сообщить о проблеме (в нём есть названия книг и файлов)</string>
+    <string name="debug_log_failed">Не удалось собрать лог.</string>
 </resources>

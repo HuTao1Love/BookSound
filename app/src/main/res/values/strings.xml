@@ -490,4 +490,8 @@
     <string name="settings_background">Background work</string>
     <string name="settings_background_on">Unrestricted — downloads keep running</string>
     <string name="settings_background_off">Restricted by battery saving — tap to allow</string>
+    <!-- Debug log -->
+    <string name="settings_debug_log">Debug log</string>
+    <string name="settings_debug_log_hint">Share the app\'s log to report a problem (contains book and file names)</string>
+    <string name="debug_log_failed">Couldn\'t collect the log.</string>
 </resources>

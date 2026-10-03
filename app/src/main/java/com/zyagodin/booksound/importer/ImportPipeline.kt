@@ -6,6 +6,7 @@ import android.system.OsConstants
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
+import android.media.MediaCodec
 import androidx.media3.transformer.ExportException
 import com.zyagodin.booksound.core.io.CancellationSignal
 import com.zyagodin.booksound.core.io.ChannelSink
@@ -478,7 +479,18 @@ class ImportPipeline(
         ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
             ImportFailure.UnsupportedFormat(fileName, t.errorCodeName)
         ExportException.ERROR_CODE_DECODING_FAILED -> ImportFailure.CorruptedInput(fileName, t.errorCodeName)
-        else -> ImportFailure.ConversionFailed(listOfNotNull(fileName, t.errorCodeName).joinToString(": "), t)
+        else -> ImportFailure.ConversionFailed(listOfNotNull(fileName, t.errorCodeName, underlyingCause(t)).joinToString(": "), t)
+    }
+
+    /**
+     * The codec's own error behind an [ExportException] (e.g. "CodecException: Error 0xe"), which
+     * the error code alone doesn't tell; shown to the user so the problem can be reported.
+     */
+    private fun underlyingCause(t: ExportException): String? {
+        var root: Throwable = t.cause ?: return null
+        while (true) root = root.cause?.takeIf { it !== root } ?: break
+        val codec = (root as? MediaCodec.CodecException)?.let { " [${it.diagnosticInfo}, code ${it.errorCode}]" }.orEmpty()
+        return (root.javaClass.simpleName + (root.message?.let { " — $it" } ?: "") + codec).take(240)
     }
 
     private fun isOutOfSpace(t: Throwable): Boolean {
