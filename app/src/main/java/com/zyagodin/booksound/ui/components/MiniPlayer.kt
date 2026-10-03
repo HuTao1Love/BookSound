@@ -1,7 +1,11 @@
 package com.zyagodin.booksound.ui.components
 
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,8 +26,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,10 +43,11 @@ import com.zyagodin.booksound.R
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.ui.theme.Spacing
+import kotlinx.coroutines.launch
 
 val MiniPlayerHeight = 72.dp
 
-/** Floating "now playing" bar shown above library screens. */
+/** Floating "now playing" bar shown above library screens. Tap it or swipe it up to open the player. */
 @Composable
 fun MiniPlayer(
     book: BookDetails,
@@ -48,12 +60,33 @@ fun MiniPlayer(
     val position = state.positionMs
     val chapter = book.chapters.lastOrNull { it.startMs <= position }
     val duration = book.item.entry.book.durationMs.takeIf { it > 0 } ?: state.durationMs
+
+    // Swipe up: the bar follows the finger a little; far or fast enough opens the player.
+    val density = LocalDensity.current
+    val openDistance = with(density) { 40.dp.toPx() }
+    val maxLift = with(density) { 96.dp.toPx() }
+    val openVelocity = with(density) { 500.dp.toPx() }
+    val scope = rememberCoroutineScope()
+    var lift by remember { mutableFloatStateOf(0f) }
+    val drag = rememberDraggableState { delta -> lift = (lift + delta).coerceIn(-maxLift, 0f) }
+
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
         shadowElevation = 16.dp,
-        modifier = modifier.widthIn(max = 640.dp).fillMaxWidth(),
+        modifier = modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth()
+            .graphicsLayer { translationY = lift }
+            .draggable(
+                state = drag,
+                orientation = Orientation.Vertical,
+                onDragStopped = { velocity ->
+                    if (lift < -openDistance || velocity < -openVelocity) onOpen()
+                    scope.launch { animate(lift, 0f) { value, _ -> lift = value } }
+                },
+            ),
     ) {
         Column {
             Row(
