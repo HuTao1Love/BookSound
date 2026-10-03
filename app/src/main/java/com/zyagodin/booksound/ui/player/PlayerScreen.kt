@@ -1,7 +1,11 @@
 package com.zyagodin.booksound.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +52,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -90,6 +96,7 @@ import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSpeed
+import kotlinx.coroutines.launch
 
 enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE }
 
@@ -136,6 +143,16 @@ fun PlayerScreen(navigator: AppNavigator) {
     var sheet by rememberSaveable { mutableStateOf<PlayerSheet?>(null) }
     var previewMs by remember { mutableStateOf<Long?>(null) }
 
+    // Swipe down to close (the mini player opens it with a swipe up): the screen follows the
+    // finger; far or fast enough closes it, otherwise it springs back. Scrolling the chapter list
+    // and dragging the seek bar keep working, they consume their own gestures.
+    val density = LocalDensity.current
+    val closeDistance = with(density) { 120.dp.toPx() }
+    val closeVelocity = with(density) { 900.dp.toPx() }
+    val scope = rememberCoroutineScope()
+    var pull by remember { mutableFloatStateOf(0f) }
+    val pullState = rememberDraggableState { delta -> pull = (pull + delta).coerceAtLeast(0f) }
+
     val details = book
     if (details == null || !player.hasBook) {
         MessageState(
@@ -173,7 +190,23 @@ fun PlayerScreen(navigator: AppNavigator) {
     )
     val skip = settings.skipBackSeconds to settings.skipForwardSeconds
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .draggable(
+                state = pullState,
+                orientation = Orientation.Vertical,
+                onDragStopped = { velocity ->
+                    if (pull > closeDistance || velocity > closeVelocity) {
+                        navigator.back()
+                    } else {
+                        scope.launch { animate(pull, 0f) { value, _ -> pull = value } }
+                    }
+                },
+            )
+            .graphicsLayer { translationY = pull }
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         CoverBackdrop(details.item.coverPath, details.item.metadata.title, Modifier.fillMaxSize(), intensity = 0.7f)
         val hinge = window.hingeBounds
         when {
