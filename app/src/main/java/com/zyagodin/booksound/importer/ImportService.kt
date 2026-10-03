@@ -121,7 +121,9 @@ class ImportService : Service() {
 
     private fun progressNotification(jobs: List<ImportJob>): Notification {
         val active = jobs.firstOrNull { it.isActive && it.stage != ImportStage.QUEUED } ?: jobs.firstOrNull { it.isActive }
-        val queued = jobs.count { it.isActive } - 1
+        // Up to three books import side by side; the rest wait.
+        val othersRunning = jobs.count { it.isActive && it.stage != ImportStage.QUEUED && it.id != active?.id }
+        val queued = jobs.count { it.stage == ImportStage.QUEUED && it.id != active?.id }
         val builder = NotificationCompat.Builder(this, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
@@ -138,6 +140,7 @@ class ImportService : Service() {
             .setContentText(
                 getString(stageLabel(active.stage)) +
                     (percent?.let { " · $it%" } ?: "") +
+                    (if (othersRunning > 0) " · " + resources.getQuantityString(R.plurals.import_more_running, othersRunning, othersRunning) else "") +
                     (if (queued > 0) " · " + resources.getQuantityString(R.plurals.import_more_queued, queued, queued) else ""),
             )
             .setProgress(100, percent ?: 0, percent == null)

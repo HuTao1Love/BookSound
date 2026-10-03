@@ -259,6 +259,10 @@
     <string name="import_stage_cancelled">Cancelled</string>
     <string name="import_done_title">Added to your library</string>
     <string name="import_failed_title">Import failed</string>
+    <plurals name="import_more_running">
+        <item quantity="one">%1$d more in progress</item>
+        <item quantity="other">%1$d more in progress</item>
+    </plurals>
     <plurals name="import_more_queued">
         <item quantity="one">%1$d more queued</item>
         <item quantity="other">%1$d more queued</item>

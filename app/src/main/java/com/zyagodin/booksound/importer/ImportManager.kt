@@ -67,21 +67,19 @@ class ImportManager(
     }
 
     fun cancel(jobId: String) {
-        val worker = running[jobId]
-        if (worker != null) {
-            worker.cancel()
-        } else {
-            setState(jobId) { if (it.stage == ImportStage.QUEUED) it.copy(stage = ImportStage.CANCELLED, progress = null) else it }
-        }
+        // A job not claimed yet is cancelled here and [process] skips it; a claimed one is running
+        // and its worker is already registered (see [process]).
+        setState(jobId) { if (it.stage == ImportStage.QUEUED) it.copy(stage = ImportStage.CANCELLED, progress = null) else it }
+        running[jobId]?.cancel()
     }
 
     /** Cancels everything, e.g. when Android ends the foreground service time budget. */
     fun failAll(failure: ImportFailure) {
-        val workers = running.toMap()
         _jobs.update { list ->
-            list.map { if (it.isActive && it.id !in workers) it.copy(stage = ImportStage.FAILED, failure = failure) else it }
+            list.map { if (it.stage == ImportStage.QUEUED) it.copy(stage = ImportStage.FAILED, failure = failure) else it }
         }
-        workers.forEach { (id, job) ->
+        // Every job claimed before the update above is registered by now.
+        running.forEach { (id, job) ->
             pendingFailure[id] = failure
             job.cancel()
         }
@@ -110,10 +108,11 @@ class ImportManager(
     }
 
     private suspend fun process(id: String) {
-        val job = _jobs.value.firstOrNull { it.id == id } ?: return
-        if (job.stage != ImportStage.QUEUED) return
-        // Registered before it starts, so a cancel arriving right away reaches it.
+        if (_jobs.value.none { it.id == id && it.stage == ImportStage.QUEUED }) return
+        // Registered before the job is claimed, so a cancel that finds the job claimed also finds
+        // the worker. The worker claims the job itself: a cancel that came first wins.
         val worker = scope.launch(start = CoroutineStart.LAZY) {
+            val job = claim(id) ?: return@launch
             try {
                 val bookId = pipeline.run(job.request) { stage, progress ->
                     setState(id) { it.copy(stage = stage, progress = progress) }
@@ -138,12 +137,26 @@ class ImportManager(
             }
         }
         running[id] = worker
-        worker.start()
         try {
+            worker.start()
             worker.join()
         } finally {
             running.remove(id)
+            // Left by failAll for a worker that never claimed its job.
+            pendingFailure.remove(id)
         }
+    }
+
+    /** Moves a queued job to PREPARING; null if it was cancelled or failed in the meantime. */
+    private fun claim(id: String): ImportJob? {
+        var claimed: ImportJob? = null
+        _jobs.update { list ->
+            claimed = null
+            list.map { job ->
+                if (job.id == id && job.stage == ImportStage.QUEUED) job.copy(stage = ImportStage.PREPARING).also { claimed = it } else job
+            }
+        }
+        return claimed
     }
 
     private fun releaseSource(job: ImportJob) {
