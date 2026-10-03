@@ -1,16 +1,16 @@
 package com.zyagodin.booksound.ui.components
 
 import androidx.compose.animation.core.animate
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,9 +45,13 @@ import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.ui.theme.Spacing
 import kotlinx.coroutines.launch
 
-val MiniPlayerHeight = 72.dp
+/** Height of the bar above the navigation bar inset (progress line + content row). */
+val MiniPlayerHeight = 62.dp
 
-/** Floating "now playing" bar shown above library screens. Tap it or swipe it up to open the player. */
+/**
+ * "Now playing" bar docked to the bottom edge of library screens; its background runs under the
+ * navigation bar. Tap it or swipe it up to open the player.
+ */
 @Composable
 fun MiniPlayer(
     book: BookDetails,
@@ -71,10 +75,9 @@ fun MiniPlayer(
     val drag = rememberDraggableState { delta -> lift = (lift + delta).coerceIn(-maxLift, 0f) }
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-        shadowElevation = 16.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 12.dp,
         modifier = modifier
             .widthIn(max = 640.dp)
             .fillMaxWidth()
@@ -88,19 +91,26 @@ fun MiniPlayer(
                 },
             ),
     ) {
-        Column {
+        Column(Modifier.navigationBarsPadding()) {
+            BookProgressBar(
+                if (duration > 0) position.toFloat() / duration else 0f,
+                Modifier.padding(horizontal = 20.dp),
+                height = 2.dp,
+                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .height(MiniPlayerHeight - 2.dp)
                     .clickable(role = Role.Button, onClickLabel = stringResource(R.string.action_open_player), onClick = onOpen)
-                    .padding(start = Spacing.sm, end = Spacing.xs, top = Spacing.sm, bottom = Spacing.sm),
+                    .padding(start = Spacing.md, end = Spacing.sm),
             ) {
-                BookCover(book.item.coverPath, book.item.metadata.title, null, Modifier.size(48.dp), shape = RoundedCornerShape(10.dp))
+                BookCover(book.item.coverPath, book.item.metadata.title, null, Modifier.size(42.dp), shape = RoundedCornerShape(10.dp))
                 Spacer(Modifier.width(Spacing.md))
                 Column(Modifier.weight(1f)) {
                     Text(
                         book.item.metadata.title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontFamily = MaterialTheme.typography.titleMedium.fontFamily),
+                        style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -112,21 +122,18 @@ fun MiniPlayer(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = onSkipBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.Replay10, contentDescription = stringResource(R.string.action_rewind))
+                IconButton(onClick = onSkipBack, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Rounded.Replay10, contentDescription = stringResource(R.string.action_rewind), modifier = Modifier.size(22.dp))
                 }
+                Spacer(Modifier.width(Spacing.xs))
                 val playing = state.playWhenReady
-                GradientCircleButton(onClick = onTogglePlay, size = 48.dp) {
+                GradientCircleButton(onClick = onTogglePlay, size = 40.dp) {
                     Icon(
                         if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = stringResource(if (playing) R.string.action_pause else R.string.action_play),
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
-                Spacer(Modifier.width(Spacing.xs))
-            }
-            Box(Modifier.padding(horizontal = Spacing.lg).padding(bottom = 6.dp)) {
-                BookProgressBar(if (duration > 0) position.toFloat() / duration else 0f, height = 3.dp)
             }
         }
     }

@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -60,7 +62,6 @@ import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -174,15 +175,14 @@ fun LibraryScreen(navigator: AppNavigator) {
         snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = bottomOverlay)) },
         floatingActionButton = {
             if (state.totalCount > 0) {
-                ExtendedFloatingActionButton(
+                GradientCircleButton(
                     onClick = { showImportSheet = true },
-                    icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.action_import), style = MaterialTheme.typography.labelLarge) },
-                    shape = Radii.pill,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    size = 56.dp,
+                    glow = true,
                     modifier = Modifier.padding(bottom = bottomOverlay).navigationBarsPadding(),
-                )
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.action_import), modifier = Modifier.size(28.dp))
+                }
             }
         },
     ) { padding ->
@@ -527,38 +527,44 @@ private fun SortField.label(): Int = when (this) {
     SortField.PROGRESS -> R.string.sort_progress
 }
 
+/** A slim "pick up where you left off" strip: small cover, title, progress and a play button. */
 @Composable
 private fun ContinueListeningCard(item: LibraryItem, onOpen: () -> Unit, onPlay: () -> Unit) {
     Surface(
         onClick = onOpen,
         shape = Radii.card,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
     ) {
         Box {
-            CoverBackdrop(item.coverPath, item.metadata.title, Modifier.matchParentSize(), intensity = 0.9f)
-            Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
-                BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(96.dp), elevation = 10.dp)
-                Spacer(Modifier.width(Spacing.lg))
+            CoverBackdrop(item.coverPath, item.metadata.title, Modifier.matchParentSize(), intensity = 0.5f)
+            Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+                BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(56.dp), shape = RoundedCornerShape(12.dp), elevation = 4.dp)
+                Spacer(Modifier.width(Spacing.md))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        stringResource(R.string.continue_listening).uppercase(),
+                        stringResource(R.string.continue_listening),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Text(titleWithSeries(item.metadata.title, item.metadata.series, item.metadata.seriesIndex), style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    item.metadata.author?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        titleWithSeries(item.metadata.title, item.metadata.series, item.metadata.seriesIndex),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BookProgressBar(item.entry.progress, Modifier.weight(1f), height = 3.dp)
+                        Spacer(Modifier.width(Spacing.sm))
+                        Text(remainingLabel(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
-                    Spacer(Modifier.height(Spacing.sm))
-                    BookProgressBar(item.entry.progress, height = 4.dp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(remainingLabel(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(Spacing.md))
-                GradientCircleButton(onClick = onPlay, size = 56.dp, glow = true) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.action_resume), modifier = Modifier.size(30.dp))
+                GradientCircleButton(onClick = onPlay, size = 44.dp) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.action_resume), modifier = Modifier.size(24.dp))
                 }
             }
         }

@@ -44,8 +44,8 @@ import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.util.formatDuration
 
 /**
- * One row of the series view. Books without a series are shown as an open shelf; a series is a
- * card with its name, authors and overall progress above a carousel ordered by book number.
+ * One row of the series view. Books without a series come first as a plain shelf with no heading;
+ * a series is a card with its name, authors and overall progress above a carousel ordered by book number.
  */
 @Composable
 fun SeriesSectionView(
@@ -56,14 +56,7 @@ fun SeriesSectionView(
     modifier: Modifier = Modifier,
 ) {
     if (section.series == null) {
-        Column(modifier.fillMaxWidth().padding(vertical = Spacing.sm)) {
-            SectionTitle(
-                title = stringResource(R.string.library_no_series),
-                subtitle = pluralStringResource(R.plurals.book_count, section.items.size, section.items.size),
-            )
-            Spacer(Modifier.height(Spacing.md))
-            Carousel(section.items, numbered = false, coverSize, onOpen, onLongClick, PaddingValues(horizontal = 0.dp))
-        }
+        Carousel(section.items, numbered = false, coverSize, onOpen, onLongClick, PaddingValues(horizontal = 0.dp), modifier.fillMaxWidth().padding(vertical = Spacing.sm))
     } else {
         SeriesCard(section, coverSize, onOpen, onLongClick, modifier)
     }
@@ -128,15 +121,6 @@ private fun SeriesCard(
     }
 }
 
-@Composable
-private fun SectionTitle(title: String, subtitle: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.width(Spacing.sm))
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 3.dp))
-    }
-}
-
 /** Up to three covers fanned out, as a small series emblem. */
 @Composable
 private fun StackedCovers(items: List<LibraryItem>) {
@@ -162,8 +146,9 @@ private fun Carousel(
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
     padding: PaddingValues,
+    modifier: Modifier = Modifier,
 ) {
-    LazyRow(contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+    LazyRow(modifier, contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
         items(items, key = { it.id }) { item ->
             CarouselCard(item, numbered, coverSize, { onOpen(item) }, { onLongClick(item) })
         }

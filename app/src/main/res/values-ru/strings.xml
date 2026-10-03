@@ -336,7 +336,6 @@
     <string name="onboarding_choose_folder">Выбрать папку</string>
     <string name="onboarding_folder_lost">Нет доступа к папке с книгами. Выберите её снова, прогресс не потеряется.</string>
     <string name="onboarding_permission_failed">Эту папку выбрать нельзя. Попробуйте другую.</string>
-    <string name="library_no_series">Без серии</string>
     <string name="series_finished_of">%1$d/%2$d прослушано</string>
     <string name="action_show_series">Показать по сериям</string>
 

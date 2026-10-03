@@ -130,7 +130,7 @@ fun GradientCircleButton(
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        CompositionLocalProvider(LocalContentColor provides Color(0xFF1C0D02)) { content() }
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimary) { content() }
     }
 }
 
