@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.model.DeviceId
+import com.zyagodin.booksound.core.organize.NameTemplate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,9 +44,15 @@ data class AppSettings(
     val libraryFilter: ProgressFilter = ProgressFilter.ALL,
     val libraryLayout: LibraryLayoutMode = LibraryLayoutMode.SERIES,
     val lastBookId: String? = null,
+    /** Patterns for reading book details from a folder/file/torrent name, in the user's order. */
+    val nameTemplates: List<String> = NameTemplate.DEFAULTS,
+    /** Template last applied in the import editor; applied again automatically when it fits. */
+    val lastNameTemplate: String? = null,
     /** False until the first settings snapshot has been read; lets the UI avoid flashing onboarding. */
     val loaded: Boolean = false,
 )
+
+private const val TEMPLATE_SEPARATOR = "\n"
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -70,6 +77,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val lastBook = stringPreferencesKey("last_book_id")
         val deviceId = stringPreferencesKey("device_id")
         val syncCursor = stringPreferencesKey("sync_cursor")
+        val nameTemplates = stringPreferencesKey("name_templates")
+        val lastNameTemplate = stringPreferencesKey("last_name_template")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -90,6 +99,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             libraryFilter = enumOrDefault(p[Keys.filter], ProgressFilter.ALL),
             libraryLayout = enumOrDefault(p[Keys.layout], LibraryLayoutMode.SERIES),
             lastBookId = p[Keys.lastBook],
+            nameTemplates = p[Keys.nameTemplates]?.split(TEMPLATE_SEPARATOR)?.filter { it.isNotBlank() } ?: NameTemplate.DEFAULTS,
+            lastNameTemplate = p[Keys.lastNameTemplate],
             loaded = true,
         )
     }
@@ -115,6 +126,12 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     }
     suspend fun setLibraryFilter(filter: ProgressFilter) = edit { it[Keys.filter] = filter.name }
     suspend fun setLibraryLayout(layout: LibraryLayoutMode) = edit { it[Keys.layout] = layout.name }
+    suspend fun setNameTemplates(templates: List<String>) = edit {
+        it[Keys.nameTemplates] = templates.map { t -> t.replace(TEMPLATE_SEPARATOR, " ") }.joinToString(TEMPLATE_SEPARATOR)
+    }
+    suspend fun setLastNameTemplate(template: String?) = edit {
+        if (template == null) it.remove(Keys.lastNameTemplate) else it[Keys.lastNameTemplate] = template
+    }
     suspend fun setLastBook(bookId: String?) = edit { if (bookId == null) it.remove(Keys.lastBook) else it[Keys.lastBook] = bookId }
 
     /** Random per-installation identifier used to attribute changes for future sync. */

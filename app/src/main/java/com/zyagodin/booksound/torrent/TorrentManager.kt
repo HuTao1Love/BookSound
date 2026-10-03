@@ -417,6 +417,8 @@ class TorrentManager(
 
     private suspend fun fillSession(session: ImportSession, record: TorrentRecord) = withContext(Dispatchers.IO) {
         val m = (record.edited ?: record.suggested!!)
+        // Details the user already edited are not overwritten by an automatic name template.
+        if (record.edited != null) session.templateChecked = true
         if (session.form.value == null) {
             session.form.value = EditorForm(
                 title = m.title,

@@ -12,6 +12,8 @@ import com.zyagodin.booksound.core.naming.LibraryLayout
 import com.zyagodin.booksound.core.organize.ChapterPlanner
 import com.zyagodin.booksound.core.organize.ConversionPlanner
 import com.zyagodin.booksound.core.organize.ConversionStrategy
+import com.zyagodin.booksound.core.organize.NameField
+import com.zyagodin.booksound.core.organize.NameTemplate
 import com.zyagodin.booksound.core.torrent.AudiobookLayout
 import com.zyagodin.booksound.cover.CoverSearchResult
 import com.zyagodin.booksound.cover.OnlineCover
@@ -61,7 +63,14 @@ data class EditorUi(
     val busy: Boolean = false,
     /** Set when reviewing a torrent that is still downloading. */
     val torrent: TorrentEditorInfo? = null,
+    /** Folder, file or torrent name the details are read from; empty when editing a book. */
+    val sourceName: String = "",
+    val templates: List<TemplateOption> = emptyList(),
+    val appliedTemplate: String? = null,
 )
+
+/** A saved name template and what it reads from the current source name (null: doesn't fit). */
+data class TemplateOption(val template: String, val fields: Map<NameField, String>?)
 
 /** Download state shown while the user reviews a torrent. */
 data class TorrentEditorInfo(
@@ -98,12 +107,12 @@ class ImportEditorViewModel(
     } else {
         combine(
             combine(session.analysis, session.form, session.cover, session.online) { a, f, c, o -> Quad(a, f, c, o) },
-            container.settings.state,
+            combine(container.settings.state, session.appliedTemplate) { settings, applied -> settings to applied },
             downloading,
             busy,
             torrentItem,
-        ) { (analysis, form, cover, online), settings, isDownloading, isBusy, torrent ->
-            buildUi(analysis, form, cover, online, settings, isDownloading, isBusy, torrent)
+        ) { (analysis, form, cover, online), (settings, applied), isDownloading, isBusy, torrent ->
+            withTemplates(buildUi(analysis, form, cover, online, settings, isDownloading, isBusy, torrent), settings, applied)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EditorUi(analysis = session.analysis.value))
     }
 
@@ -124,6 +133,10 @@ class ImportEditorViewModel(
         if (s != null) {
             viewModelScope.launch {
                 s.analysis.collect { analysis ->
+                    if (analysis is AnalysisState.Ready && !s.templateChecked) {
+                        s.templateChecked = true
+                        autoApplyTemplate(s, analysis)
+                    }
                     if (analysis is AnalysisState.Ready && !s.autoSearchDone && s.cover.value == null &&
                         container.settings.current().autoCoverSearch
                     ) {
@@ -225,6 +238,68 @@ class ImportEditorViewModel(
         val ready = session.analysis.value as? AnalysisState.Ready ?: return
         container.torrents.saveReview(torrentId, form.toMetadata(ready.draft.sourceName, ready.draft.metadata), form.parts, cover?.picture, confirm)
     }
+
+    // ---------------------------------------------------------------- name templates
+
+    private var templateCache: Pair<Pair<List<String>, String>, List<TemplateOption>>? = null
+
+    private fun withTemplates(ui: EditorUi, settings: AppSettings, applied: String?): EditorUi {
+        val ready = ui.analysis as? AnalysisState.Ready ?: return ui
+        if (session?.isEdit != false) return ui
+        val source = ready.draft.sourceName
+        val key = settings.nameTemplates to source
+        val options = templateCache?.takeIf { it.first == key }?.second
+            ?: settings.nameTemplates.map { TemplateOption(it, NameTemplate.parse(it, source)) }.also { templateCache = key to it }
+        return ui.copy(sourceName = source, templates = options, appliedTemplate = applied)
+    }
+
+    /** Fills the details from the source name with [template]. */
+    fun applyTemplate(template: String) {
+        val s = session ?: return
+        val ready = s.analysis.value as? AnalysisState.Ready ?: return
+        val fields = NameTemplate.parse(template, ready.draft.sourceName) ?: return
+        update { it.withFields(fields) }
+        s.appliedTemplate.value = template
+        viewModelScope.launch { container.settings.setLastNameTemplate(template) }
+    }
+
+    fun addTemplate(template: String) {
+        val t = template.trim()
+        if (t.isEmpty() || NameTemplate.validate(t) != null) return
+        viewModelScope.launch {
+            val current = container.settings.current().nameTemplates
+            if (t !in current) container.settings.setNameTemplates(current + t)
+            if (session != null && (session.analysis.value as? AnalysisState.Ready)?.let { NameTemplate.parse(t, it.draft.sourceName) } != null) {
+                applyTemplate(t)
+            }
+        }
+    }
+
+    fun deleteTemplate(template: String) {
+        viewModelScope.launch {
+            container.settings.setNameTemplates(container.settings.current().nameTemplates - template)
+            if (container.settings.current().lastNameTemplate == template) container.settings.setLastNameTemplate(null)
+        }
+        session?.appliedTemplate?.let { applied -> if (applied.value == template) applied.value = null }
+    }
+
+    /** Applies the template used last time when it fits this name, e.g. the next book of a series. */
+    private suspend fun autoApplyTemplate(s: ImportSession, ready: AnalysisState.Ready) {
+        if (s.isEdit) return
+        val last = container.settings.current().lastNameTemplate ?: return
+        val fields = NameTemplate.parse(last, ready.draft.sourceName) ?: return
+        s.form.update { it?.withFields(fields) }
+        s.appliedTemplate.value = last
+    }
+
+    private fun EditorForm.withFields(fields: Map<NameField, String>) = copy(
+        title = fields[NameField.TITLE] ?: title,
+        author = fields[NameField.AUTHOR] ?: author,
+        narrator = fields[NameField.NARRATOR] ?: narrator,
+        series = fields[NameField.SERIES] ?: series,
+        seriesIndex = fields[NameField.NUMBER] ?: seriesIndex,
+        year = fields[NameField.YEAR] ?: year,
+    )
 
     // ---------------------------------------------------------------- editing
 

@@ -422,6 +422,9 @@ private fun EditorContent(
         item(key = "cover") {
             CoverSection(ui, onPickCover, vm::removeCover, onSuggestion = { cover -> vm.downloadOnline(cover) { picture -> if (picture == null) onCoverFailed() else onOnlineCover(picture) } })
         }
+        if (ui.sourceName.isNotBlank()) {
+            item(key = "templates") { NameTemplateSection(ui, vm::applyTemplate, vm::addTemplate, vm::deleteTemplate) }
+        }
         item(key = "fields") { MetadataFields(form, ui.seriesIndexInvalid, vm::update) }
         item(key = "destination") { DestinationCard(ui) }
         if (skipped.isNotEmpty()) item(key = "skipped") { SkippedCard(skipped, Modifier.padding(top = Spacing.lg)) }

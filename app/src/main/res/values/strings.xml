@@ -425,4 +425,18 @@
     <string name="torrent_peers_of">peers: %1$d of %2$d</string>
     <string name="torrent_tracker_error">Tracker: %1$s</string>
     <string name="torrent_looking_for_peers">looking for peers</string>
+
+    <!-- Name templates -->
+    <string name="template_section">Name template</string>
+    <string name="template_add">Add template</string>
+    <string name="template_hint">Tap a template to fill in the details. Hold it to delete.</string>
+    <string name="template_dialog_title">New template</string>
+    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% to skip a part. Everything else must match the name as written.</string>
+    <string name="template_no_match">Doesn\'t fit this name, but it can still be saved.</string>
+    <string name="template_skipped">Skipped</string>
+    <string name="template_delete_title">Delete template?</string>
+    <string name="template_problem_none">Add at least one placeholder, e.g. %1$s.</string>
+    <string name="template_problem_unknown">Unknown placeholder %1$s.</string>
+    <string name="template_problem_duplicate">%1$s is used twice.</string>
+    <string name="template_problem_adjacent">Put some text between two placeholders, otherwise they can\'t be told apart.</string>
 </resources>

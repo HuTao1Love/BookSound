@@ -429,4 +429,18 @@
     <string name="torrent_peers_of">пиры: %1$d из %2$d</string>
     <string name="torrent_tracker_error">Трекер: %1$s</string>
     <string name="torrent_looking_for_peers">ищем пиров</string>
+
+    <!-- Шаблоны названия -->
+    <string name="template_section">Шаблон названия</string>
+    <string name="template_add">Добавить шаблон</string>
+    <string name="template_hint">Нажмите на шаблон, чтобы заполнить поля. Удерживайте, чтобы удалить.</string>
+    <string name="template_dialog_title">Новый шаблон</string>
+    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% — пропустить часть. Остальной текст должен совпадать с названием.</string>
+    <string name="template_no_match">Не подходит к этому названию, но сохранить можно.</string>
+    <string name="template_skipped">Пропущено</string>
+    <string name="template_delete_title">Удалить шаблон?</string>
+    <string name="template_problem_none">Добавьте хотя бы одну метку, например %1$s.</string>
+    <string name="template_problem_unknown">Неизвестная метка %1$s.</string>
+    <string name="template_problem_duplicate">%1$s указан дважды.</string>
+    <string name="template_problem_adjacent">Между двумя метками должен быть текст, иначе их не различить.</string>
 </resources>

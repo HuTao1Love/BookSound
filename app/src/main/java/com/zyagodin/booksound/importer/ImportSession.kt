@@ -83,6 +83,9 @@ class ImportSession(val id: String, val selection: ImportSelection) {
     val coverCandidates = MutableStateFlow<List<CoverCandidate>>(emptyList())
     val online = MutableStateFlow<OnlineCoverState>(OnlineCoverState.Idle)
     var autoSearchDone = false
+    /** The last used name template was considered for auto-applying (only once per session). */
+    var templateChecked = false
+    val appliedTemplate = MutableStateFlow<String?>(null)
     /** Persisted read grants taken for the picked sources; handed over to the import job. */
     var heldPermissions: List<Uri> = emptyList()
     /** BookSound id embedded in the source, or the edited book's id. */
