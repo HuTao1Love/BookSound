@@ -220,7 +220,7 @@ class ImportPipeline(
     private suspend fun convert(request: ImportRequest, output: File, report: Progress) {
         val uris = request.parts.map { it.uri }
         report.report(ImportStage.CONVERTING, 0f)
-        if (encodesInParallel(request)) {
+        if (encodesInParallel(request) && !parallelUnreliable) {
             try {
                 transcodeInParallel(request, output, report)
                 report.report(ImportStage.CONVERTING, 1f)
@@ -228,6 +228,13 @@ class ImportPipeline(
             } catch (e: JoinFailed) {
                 // Joining the encoded parts failed: encode everything in one pass instead.
                 Log.i(TAG, "Joining encoded parts failed, transcoding in one pass", e.cause)
+                output.delete()
+                report.report(ImportStage.CONVERTING, 0f)
+            } catch (e: CodecTrouble) {
+                // Several codecs at once are too much for some phones (codec errors, reclaimed
+                // instances): encode in one pass with a single codec, and stop trying in parallel.
+                Log.w(TAG, "Codec failed while encoding parts in parallel, transcoding in one pass", e.cause)
+                parallelUnreliable = true
                 output.delete()
                 report.report(ImportStage.CONVERTING, 0f)
             }
@@ -252,6 +259,13 @@ class ImportPipeline(
 
     private class JoinFailed(cause: Throwable) : Exception(cause)
 
+    /** A codec failed while several parts were encoded at once; one pass may still work. */
+    private class CodecTrouble(cause: Throwable) : Exception(cause)
+
+    /** Set after parallel encoding hit codec trouble on this phone; one pass is used from then on. */
+    @Volatile
+    private var parallelUnreliable = false
+
     private fun encodesInParallel(request: ImportRequest) = request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1
 
     /**
@@ -272,6 +286,34 @@ class ImportPipeline(
 
         val files = parts.indices.map { File(workDir, "part-%04d.m4a".format(it)) }
         val gate = Semaphore(PARALLEL_ENCODERS.coerceAtMost(maxOf(2, Runtime.getRuntime().availableProcessors() / 2)))
+        try {
+            encodeParts(parts, files, gate, request, sampleRate, channels, progress, ::publish)
+        } catch (t: Throwable) {
+            // Free the temporary space before a one-pass retry (or the error).
+            files.forEach(File::delete)
+            throw t
+        }
+        try {
+            transcoder.run(files.map(Uri::fromFile), output, request.bitrateKbps, downmixToMono = false, transmux = true) { p ->
+                report.report(ImportStage.CONVERTING, (ENCODE_SHARE + (1 - ENCODE_SHARE) * p).toFloat())
+            }
+        } catch (e: ExportException) {
+            throw JoinFailed(e)
+        } finally {
+            files.forEach(File::delete)
+        }
+    }
+
+    private suspend fun encodeParts(
+        parts: List<SourcePart>,
+        files: List<File>,
+        gate: Semaphore,
+        request: ImportRequest,
+        sampleRate: Int?,
+        channels: Int,
+        progress: DoubleArray,
+        publish: () -> Unit,
+    ) {
         coroutineScope {
             parts.mapIndexed { i, part ->
                 async {
@@ -285,23 +327,19 @@ class ImportPipeline(
                                 publish()
                             }
                         } catch (e: ExportException) {
-                            // Out of space is reported as such by mapFailure; anything else names the part.
-                            throw if (isOutOfSpace(e)) e else exportFailure(e, part.displayName)
+                            // Out of space is reported as such by mapFailure; codec trouble is retried in
+                            // one pass by convert(); anything else names the part.
+                            throw when {
+                                isOutOfSpace(e) -> e
+                                e.errorCode in CODEC_ERRORS -> CodecTrouble(e)
+                                else -> exportFailure(e, part.displayName)
+                            }
                         }
                         progress[i] = 1.0
                         publish()
                     }
                 }
             }.awaitAll()
-        }
-        try {
-            transcoder.run(files.map(Uri::fromFile), output, request.bitrateKbps, downmixToMono = false, transmux = true) { p ->
-                report.report(ImportStage.CONVERTING, (ENCODE_SHARE + (1 - ENCODE_SHARE) * p).toFloat())
-            }
-        } catch (e: ExportException) {
-            throw JoinFailed(e)
-        } finally {
-            files.forEach(File::delete)
         }
     }
 
@@ -482,6 +520,13 @@ class ImportPipeline(
 
         /** Upper bound of parts encoded at the same time (codec instances and memory are limited). */
         private const val PARALLEL_ENCODERS = 4
+
+        /** Codec errors that may come from running several codecs at once rather than from the file. */
+        private val CODEC_ERRORS = setOf(
+            ExportException.ERROR_CODE_ENCODING_FAILED,
+            ExportException.ERROR_CODE_ENCODER_INIT_FAILED,
+            ExportException.ERROR_CODE_DECODER_INIT_FAILED,
+        )
 
         /** Share of the conversion progress spent encoding; the rest is joining. */
         private const val ENCODE_SHARE = 0.95
