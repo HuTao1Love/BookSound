@@ -254,28 +254,53 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<In
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = Spacing.xl)) {
         PlayerTopBar(now, cb)
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xxl)) {
-            Box(Modifier.weight(1f).fillMaxSize().padding(vertical = Spacing.lg), contentAlignment = Alignment.Center) {
-                BookCover(
-                    now.details.item.coverPath, now.details.item.metadata.title, now.details.item.metadata.author,
-                    Modifier.widthIn(max = 520.dp),
-                    shape = Radii.coverLarge,
-                    elevation = 24.dp,
-                )
-            }
-            Column(Modifier.weight(1f).fillMaxSize()) {
-                val showList = !window.isShort && now.chapters.size > 1
-                if (!showList) Spacer(Modifier.weight(1f))
-                TitleBlock(now, centered = false)
-                Spacer(Modifier.height(Spacing.lg))
-                ProblemBanner(now.state.problem, cb)
-                SeekSection(now, cb)
-                TransportControls(now, skip, cb, playSize = if (window.isShort) 64.dp else 88.dp)
-                Spacer(Modifier.height(Spacing.lg))
-                ActionChips(now, sleep, cb, showChapters = !showList)
-                if (showList) {
+            if (!window.isShort && now.chapters.size > 1) {
+                // Unfolded: the whole player on the left, the chapter list alone on the right.
+                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = Spacing.lg), contentAlignment = Alignment.Center) {
+                        BookCover(
+                            now.details.item.coverPath, now.details.item.metadata.title, now.details.item.metadata.author,
+                            Modifier.widthIn(max = 460.dp),
+                            shape = Radii.coverLarge,
+                            elevation = 24.dp,
+                        )
+                    }
+                    TitleBlock(now, centered = true)
                     Spacer(Modifier.height(Spacing.lg))
+                    ProblemBanner(now.state.problem, cb)
+                    SeekSection(now, cb)
+                    TransportControls(now, skip, cb, playSize = 80.dp)
+                    Spacer(Modifier.height(Spacing.lg))
+                    ActionChips(now, sleep, cb, showChapters = false)
+                    Spacer(Modifier.height(Spacing.lg))
+                }
+                Column(Modifier.weight(1f).fillMaxHeight().padding(top = Spacing.lg, bottom = Spacing.lg)) {
+                    Text(
+                        stringResource(R.string.chapters_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = Spacing.sm, bottom = Spacing.sm),
+                    )
                     InlineChapters(now, cb, Modifier.weight(1f))
-                } else {
+                }
+            } else {
+                // No chapters, or a short window (landscape phone): cover left, controls right.
+                Box(Modifier.weight(1f).fillMaxSize().padding(vertical = Spacing.lg), contentAlignment = Alignment.Center) {
+                    BookCover(
+                        now.details.item.coverPath, now.details.item.metadata.title, now.details.item.metadata.author,
+                        Modifier.widthIn(max = 520.dp),
+                        shape = Radii.coverLarge,
+                        elevation = 24.dp,
+                    )
+                }
+                Column(Modifier.weight(1f).fillMaxSize()) {
+                    Spacer(Modifier.weight(1f))
+                    TitleBlock(now, centered = false)
+                    Spacer(Modifier.height(Spacing.lg))
+                    ProblemBanner(now.state.problem, cb)
+                    SeekSection(now, cb)
+                    TransportControls(now, skip, cb, playSize = if (window.isShort) 64.dp else 88.dp)
+                    Spacer(Modifier.height(Spacing.lg))
+                    ActionChips(now, sleep, cb, showChapters = true)
                     Spacer(Modifier.weight(1f))
                 }
             }
