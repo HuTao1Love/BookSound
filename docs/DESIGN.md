@@ -77,6 +77,12 @@ add link/file ─► (magnet: fetch file list) ─► validate file list ─► 
 * Each torrent is a persisted `TorrentRecord` (`noBackupFilesDir/torrents`), with the .torrent
   metadata, libtorrent resume data and the chosen cover next to it. A reconcile loop drives every
   record from its stored phase, so app restarts, crashes and network loss resume where they were.
+* A torrent may hold several books: sub-folders below the folder with all audio ("Series/Book 1",
+  "Series/Book 2") or several M4B files. Folders named like discs or parts ("CD1", "Disc 2",
+  "Часть 3", "02") still make one book. Each book gets its own record (title from its folder, the
+  torrent's title as series); the records share a `group` key, the .torrent file, the download
+  folder and one engine download, and are then reviewed, verified and converted one by one. The
+  downloaded files are deleted once no book of the torrent needs them.
 * The editor of a torrent is an import session with a deterministic id (`torrent-<id>`), rebuilt
   from the record if the process was killed while it was open. Edits are saved as they are typed.
   Fields the user left as suggested may be filled from the downloaded files' tags; edited ones win.

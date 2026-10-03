@@ -26,8 +26,10 @@ class TorrentStore(private val context: Context) {
     val metadataTempDir: File get() = File(context.cacheDir, "magnet-metadata")
 
     fun dir(id: String): File = File(root, id)
-    fun torrentFile(id: String): File = File(dir(id), "meta.torrent")
-    fun resumeFile(id: String): File = File(dir(id), "resume.dat")
+
+    /** The .torrent metadata and resume data belong to a download ([TorrentRecord.downloadKey]), the cover to a book. */
+    fun torrentFile(downloadKey: String): File = File(dir(downloadKey), "meta.torrent")
+    fun resumeFile(downloadKey: String): File = File(dir(downloadKey), "resume.dat")
     fun coverFile(id: String): File = File(dir(id), "cover.img")
 
     /** Where a new torrent's files are downloaded: app-specific external storage when available. */
@@ -38,7 +40,12 @@ class TorrentStore(private val context: Context) {
 
     operator fun get(id: String): TorrentRecord? = _records.value.firstOrNull { it.id == id }
 
-    fun add(record: TorrentRecord) = mutate { list -> list.filterNot { it.id == record.id } + record }
+    fun add(record: TorrentRecord) = addAll(listOf(record))
+
+    fun addAll(records: List<TorrentRecord>) = mutate { list ->
+        val ids = records.mapTo(HashSet()) { it.id }
+        list.filterNot { it.id in ids } + records
+    }
 
     /** Applies [change] to the record and returns the result, or null if it no longer exists. */
     fun update(id: String, change: (TorrentRecord) -> TorrentRecord): TorrentRecord? {
@@ -49,18 +56,24 @@ class TorrentStore(private val context: Context) {
         return result
     }
 
-    /** Removes the record and everything stored for it, including downloaded files. */
+    /**
+     * Removes the record and everything stored for it. The download (metadata and downloaded files)
+     * goes with the last record that uses it; other books of the same torrent keep it.
+     */
     fun delete(id: String) {
         val record = get(id)
         mutate { list -> list.filterNot { it.id == id } }
         dir(id).deleteRecursively()
-        record?.let { File(it.dataDir).deleteRecursively() }
+        if (record != null && _records.value.none { it.downloadKey == record.downloadKey }) {
+            dir(record.downloadKey).deleteRecursively()
+            File(record.dataDir).deleteRecursively()
+        }
     }
 
-    fun writeTorrent(id: String, bytes: ByteArray) = TorrentEngine.writeAtomically(torrentFile(id), bytes)
+    fun writeTorrent(downloadKey: String, bytes: ByteArray) = TorrentEngine.writeAtomically(torrentFile(downloadKey), bytes)
 
-    fun writeResume(id: String, bytes: ByteArray) {
-        if (dir(id).isDirectory) TorrentEngine.writeAtomically(resumeFile(id), bytes)
+    fun writeResume(downloadKey: String, bytes: ByteArray) {
+        if (dir(downloadKey).isDirectory) TorrentEngine.writeAtomically(resumeFile(downloadKey), bytes)
     }
 
     private fun mutate(change: (List<TorrentRecord>) -> List<TorrentRecord>) = synchronized(lock) {

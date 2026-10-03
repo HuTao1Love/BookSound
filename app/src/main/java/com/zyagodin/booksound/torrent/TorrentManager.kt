@@ -71,7 +71,8 @@ sealed interface TorrentSource {
 }
 
 sealed interface AddResult {
-    data class Added(val torrentId: String) : AddResult
+    /** [books] records were added for a torrent of several books; [torrentId] is the first one. */
+    data class Added(val torrentId: String, val books: Int = 1) : AddResult
     data class AlreadyAdded(val torrentId: String) : AddResult
     data class Rejected(val error: AddError, val problem: TorrentContentProblem? = null, val files: List<String> = emptyList()) : AddResult
 }
@@ -87,6 +88,10 @@ enum class AddError { NOT_A_LINK, INVALID_TORRENT, UNREADABLE_FILE, DOWNLOAD_FAI
  * cover files while the user reviews the details → when both are done, verify the downloaded
  * files → hand the book to the [ImportManager] (strict validation) → book in library, download
  * deleted. A book that fails any check never reaches the library.
+ *
+ * A torrent of several books becomes one record per book (see [TorrentRecord.group]). The books
+ * share one download in the engine, which fetches the files of all of them; from then on each
+ * book is reviewed, verified and converted on its own.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TorrentManager(
@@ -119,7 +124,7 @@ class TorrentManager(
     private var lastProgressSave = 0L
 
     val items: StateFlow<List<TorrentItem>> = combine(store.records, live, imports.jobs, network.online, editing) { records, liveMap, jobs, online, open ->
-        records.sortedByDescending { it.addedAt }.map { r ->
+        records.sortedWith(compareByDescending<TorrentRecord> { it.addedAt }.thenBy { it.position }).map { r ->
             TorrentItem(
                 record = r,
                 live = liveMap[r.id],
@@ -234,10 +239,8 @@ class TorrentManager(
         store.records.value.firstOrNull { it.infoHash == meta.infoHash }?.let { return@withContext AddResult.AlreadyAdded(it.id) }
         when (val check = TorrentContentValidator.validate(meta.files)) {
             is TorrentContentCheck.Invalid -> AddResult.Rejected(AddError.CONTENT_INVALID, check.problem, check.files)
-            is TorrentContentCheck.Valid -> {
+            is TorrentContentCheck.Valid, is TorrentContentCheck.Collection -> {
                 val id = UUID.randomUUID().toString()
-                store.dir(id).mkdirs()
-                store.writeTorrent(id, bytes)
                 val base = TorrentRecord(
                     id = id,
                     name = meta.name,
@@ -248,15 +251,34 @@ class TorrentManager(
                     dataDir = store.newDataDir(id).absolutePath,
                     bookId = UUID.randomUUID().toString(),
                 )
-                store.add(withContent(base, meta, check))
+                val records = withContent(base, meta, check)
+                store.dir(id).mkdirs()
+                store.writeTorrent(records.first().downloadKey, bytes)
+                store.addAll(records)
                 startDownload(id)
-                AddResult.Added(id)
+                AddResult.Added(id, records.size)
             }
         }
     }
 
-    private fun withContent(record: TorrentRecord, meta: TorrentMeta, content: TorrentContentCheck.Valid): TorrentRecord {
-        val suggestion = TorrentSuggestions.build(meta.name, content) { context.getString(R.string.chapter_number, it) }
+    /**
+     * Fills [record] with the torrent's content. A torrent of several books gives one record per
+     * book: [record] becomes the first one (an open editor keeps showing it), the others are new.
+     */
+    private fun withContent(record: TorrentRecord, meta: TorrentMeta, content: TorrentContentCheck): List<TorrentRecord> = when (content) {
+        is TorrentContentCheck.Valid -> listOf(withBook(record, meta, content, 0))
+        is TorrentContentCheck.Collection -> {
+            val group = UUID.randomUUID().toString()
+            content.books.mapIndexed { i, book ->
+                val base = if (i == 0) record else record.copy(id = UUID.randomUUID().toString(), bookId = UUID.randomUUID().toString())
+                withBook(base, meta, book, i).copy(group = group, volume = book.volume, position = i)
+            }
+        }
+        is TorrentContentCheck.Invalid -> throw IllegalArgumentException("Invalid content: ${content.problem}")
+    }
+
+    private fun withBook(record: TorrentRecord, meta: TorrentMeta, content: TorrentContentCheck.Valid, position: Int): TorrentRecord {
+        val suggestion = TorrentSuggestions.build(meta.name, content, position) { context.getString(R.string.chapter_number, it) }
         return record.copy(
             name = meta.name,
             layout = content.layout,
@@ -300,15 +322,18 @@ class TorrentManager(
 
     // ------------------------------------------------------------------ user actions
 
+    /** Pauses the download; for a torrent of several books, the shared download of all of them. */
     fun pause(id: String) = scope.launch(serial) {
-        val r = store.update(id) { if (it.isActive) it.copy(paused = true) else it } ?: return@launch
+        val r = store[id] ?: return@launch
+        for (book in sharingDownload(r)) store.update(book.id) { if (it.isActive) it.copy(paused = true) else it }
         if (r.phase == TorrentPhase.FETCHING_METADATA) fetchJobs.remove(id)?.cancel()
         runCatching { engine.pause(r.infoHash) }
         tick()
     }
 
     fun resume(id: String) = scope.launch(serial) {
-        val r = store.update(id) { it.copy(paused = false) } ?: return@launch
+        val r = store[id] ?: return@launch
+        for (book in sharingDownload(r)) store.update(book.id) { it.copy(paused = false) }
         runCatching { engine.resume(r.infoHash) }
         tick()
     }
@@ -318,23 +343,31 @@ class TorrentManager(
         val r = store[id] ?: return@launch
         val failure = r.failure ?: return@launch
         if (r.phase != TorrentPhase.FAILED || !failure.retryable) return@launch
-        r.importJobId?.let { imports.dismiss(it) }
         val next = when (failure.code) {
             TorrentFailureCode.METADATA_NOT_FOUND -> TorrentPhase.FETCHING_METADATA
             TorrentFailureCode.CONVERSION_FAILED, TorrentFailureCode.CONVERSION_CANCELLED -> TorrentPhase.VERIFYING
             else -> {
                 // Re-add from scratch: libtorrent re-checks what is on disk and fetches what is missing.
                 runCatching { engine.remove(r.infoHash, deleteFiles = false) }
-                store.resumeFile(id).delete()
+                store.resumeFile(r.downloadKey).delete()
                 TorrentPhase.DOWNLOADING
             }
         }
-        store.update(id) { it.copy(phase = next, failure = null, importJobId = null, paused = false) }
+        // A failed shared download failed every book of the torrent: retry them together.
+        val books = if (failure.code == TorrentFailureCode.DOWNLOAD_ERROR || failure.code == TorrentFailureCode.NOT_ENOUGH_SPACE) {
+            store.records.value.filter { it.downloadKey == r.downloadKey && it.phase == TorrentPhase.FAILED && it.failure?.code == failure.code }
+        } else {
+            listOf(r)
+        }
+        for (book in books) {
+            book.importJobId?.let { imports.dismiss(it) }
+            store.update(book.id) { it.copy(phase = next, failure = null, importJobId = null, paused = false) }
+        }
         if (next == TorrentPhase.DOWNLOADING) startDownload(id)
         tick()
     }
 
-    /** Stops and forgets the torrent, deleting everything it downloaded. */
+    /** Stops and forgets the torrent (one book of it), deleting everything it downloaded that no other book needs. */
     fun remove(id: String) = scope.launch(serial) {
         val r = store[id] ?: return@launch
         fetchJobs.remove(id)?.cancel()
@@ -342,7 +375,17 @@ class TorrentManager(
         r.importJobId?.let { jobId ->
             if (imports.jobs.value.any { it.id == jobId && it.isActive }) imports.cancel(jobId) else imports.dismiss(jobId)
         }
-        runCatching { engine.remove(r.infoHash, deleteFiles = true) }
+        val others = store.records.value.filter { it.id != id && it.downloadKey == r.downloadKey }
+        if (others.isEmpty()) {
+            runCatching { engine.remove(r.infoHash, deleteFiles = true) }
+        } else {
+            val downloading = others.filter { it.phase == TorrentPhase.DOWNLOADING }
+            if (r.phase == TorrentPhase.DOWNLOADING) {
+                if (downloading.isEmpty()) runCatching { engine.remove(r.infoHash, deleteFiles = false) }
+                else runCatching { engine.setWanted(r.infoHash, wantedFlags(downloading)) }
+            }
+            deleteOwnFiles(r, others)
+        }
         store.delete(id)
         live.update { it - id }
     }
@@ -388,7 +431,7 @@ class TorrentManager(
             )
         } ?: return@launch
         if (wanted != record.wanted && updated.phase == TorrentPhase.DOWNLOADING) {
-            runCatching { engine.setWanted(updated.infoHash, wantedFlags(updated)) }
+            runCatching { engine.setWanted(updated.infoHash, wantedFlags(downloadingWith(updated))) }
         }
         if (confirm) tick()
     }
@@ -465,7 +508,7 @@ class TorrentManager(
         for (r in records) {
             when (r.phase) {
                 TorrentPhase.FETCHING_METADATA -> if (!r.paused && online) ensureFetching(r)
-                TorrentPhase.DOWNLOADING -> reconcileDownload(r)?.let { liveNow[r.id] = it }
+                TorrentPhase.DOWNLOADING -> Unit // Below, once per download.
                 TorrentPhase.DOWNLOADED -> if (r.reviewed && r.id !in editing.value) {
                     store.update(r.id) { it.copy(phase = TorrentPhase.VERIFYING) }?.let(::ensureVerifying)
                 }
@@ -473,6 +516,9 @@ class TorrentManager(
                 TorrentPhase.CONVERTING -> recoverConversion(r)
                 TorrentPhase.COMPLETED, TorrentPhase.FAILED -> Unit
             }
+        }
+        for (books in records.filter { it.phase == TorrentPhase.DOWNLOADING }.groupBy { it.downloadKey }.values) {
+            reconcileDownload(books)?.let { l -> books.forEach { liveNow[it.id] = l } }
         }
         live.value = liveNow
 
@@ -498,8 +544,10 @@ class TorrentManager(
         }
     }
 
-    private fun reconcileDownload(r: TorrentRecord): TorrentLive? {
-        if (r.paused) {
+    /** Drives one download in the engine: a torrent's single record, or all downloading books of a torrent. */
+    private fun reconcileDownload(books: List<TorrentRecord>): TorrentLive? {
+        val r = books.first()
+        if (books.all { it.paused }) {
             if (engine.isRunning && engine.contains(r.infoHash)) {
                 engine.status(r.infoHash)?.takeIf { !it.paused }?.let { engine.pause(r.infoHash) }
             }
@@ -507,30 +555,30 @@ class TorrentManager(
         }
         if (!engine.contains(r.infoHash)) {
             val now = System.currentTimeMillis()
-            if (now - (pendingAdds[r.id] ?: 0L) < ADD_RETRY_MS) return null
-            val torrent = store.torrentFile(r.id)
+            if (now - (pendingAdds[r.downloadKey] ?: 0L) < ADD_RETRY_MS) return null
+            val torrent = store.torrentFile(r.downloadKey)
             if (!torrent.isFile) {
-                fail(r.id, TorrentFailure(TorrentFailureCode.DOWNLOAD_ERROR, "missing torrent metadata"))
+                books.forEach { fail(it.id, TorrentFailure(TorrentFailureCode.DOWNLOAD_ERROR, "missing torrent metadata")) }
                 return null
             }
             try {
-                engine.add(torrent.readBytes(), File(r.dataDir), store.resumeFile(r.id), wantedFlags(r))
-                pendingAdds[r.id] = now
+                engine.add(torrent.readBytes(), File(r.dataDir), store.resumeFile(r.downloadKey), wantedFlags(books))
+                pendingAdds[r.downloadKey] = now
             } catch (t: Throwable) {
                 Log.e(TAG, "Could not start ${r.name}", t)
-                fail(r.id, TorrentFailure(TorrentFailureCode.DOWNLOAD_ERROR, t.message ?: t.javaClass.simpleName))
+                books.forEach { fail(it.id, TorrentFailure(TorrentFailureCode.DOWNLOAD_ERROR, t.message ?: t.javaClass.simpleName)) }
             }
             return null
         }
-        pendingAdds.remove(r.id)
+        pendingAdds.remove(r.downloadKey)
         val status = engine.status(r.infoHash) ?: return null
         if (status.paused) engine.resume(r.infoHash)
         if (status.error != null) {
-            onEngineError(r.id, status.error, outOfSpace = false)
+            books.forEach { onEngineError(it.id, status.error, outOfSpace = false) }
             return null
         }
         if (status.isComplete) {
-            onDownloaded(r)
+            books.forEach(::onDownloaded)
             return null
         }
         return TorrentLive(
@@ -546,19 +594,23 @@ class TorrentManager(
 
     private fun startDownload(id: String) {
         val r = store[id] ?: return
+        val books = downloadingWith(r)
         val dir = File(r.dataDir).apply { mkdirs() }
-        val onDisk = r.files.filter { it.index in r.wanted }.sumOf { f -> File(dir, f.path).length().coerceAtMost(f.size) }
-        val required = r.wantedBytes - onDisk + SPACE_MARGIN
+        val wanted = books.flatMapTo(HashSet()) { it.wanted }
+        val files = r.files.filter { it.index in wanted }
+        val onDisk = files.sumOf { f -> File(dir, f.path).length().coerceAtMost(f.size) }
+        val required = files.sumOf { it.size } - onDisk + SPACE_MARGIN
         val available = dir.usableSpace
         if (available in 1 until required) {
-            fail(id, TorrentFailure(TorrentFailureCode.NOT_ENOUGH_SPACE, context.getString(R.string.torrent_space_detail, formatBytes(required), formatBytes(available))))
+            val detail = context.getString(R.string.torrent_space_detail, formatBytes(required), formatBytes(available))
+            books.forEach { fail(it.id, TorrentFailure(TorrentFailureCode.NOT_ENOUGH_SPACE, detail)) }
         }
     }
 
     private fun onDownloaded(r: TorrentRecord) {
         // No seeding: stop sharing as soon as the book is complete and keep only the files.
         runCatching { engine.remove(r.infoHash, deleteFiles = false) }
-        store.resumeFile(r.id).delete()
+        store.resumeFile(r.downloadKey).delete()
         val next = if (r.reviewed && r.id !in editing.value) TorrentPhase.VERIFYING else TorrentPhase.DOWNLOADED
         store.update(r.id) { it.copy(phase = next, progress = 1f) }?.let { if (next == TorrentPhase.VERIFYING) ensureVerifying(it) }
     }
@@ -597,10 +649,12 @@ class TorrentManager(
         }
         when (val check = TorrentContentValidator.validate(meta.files)) {
             is TorrentContentCheck.Invalid -> fail(id, TorrentFailure(TorrentFailureCode.CONTENT_INVALID, problem = check.problem.name, files = check.files))
-            is TorrentContentCheck.Valid -> {
+            is TorrentContentCheck.Valid, is TorrentContentCheck.Collection -> {
+                val records = withContent(record, meta, check).map { it.copy(phase = TorrentPhase.DOWNLOADING, infoHash = meta.infoHash) }
                 store.dir(id).mkdirs()
-                store.writeTorrent(id, bytes)
-                store.update(id) { withContent(it, meta, check).copy(phase = TorrentPhase.DOWNLOADING, infoHash = meta.infoHash) }
+                store.writeTorrent(records.first().downloadKey, bytes)
+                store.update(id) { records.first() }
+                store.addAll(records.drop(1))
                 startDownload(id)
                 if (record.name != meta.name) Log.i(TAG, "Metadata received for ${meta.name}")
             }
@@ -650,7 +704,8 @@ class TorrentManager(
         if (missing.isNotEmpty()) return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING, files = missing.map { it.path }))
 
         val inputs = wantedFiles.map { f -> File(dir, f.path) to f.path.split('/').dropLast(1) }
-        val analysis = analyzer.analyzeLocalFiles(inputs, r.name)
+        // A book of a collection is named after its folder, not after the whole torrent.
+        val analysis = analyzer.analyzeLocalFiles(inputs, r.volume ?: r.name)
         val ready = analysis as? AnalysisState.Ready
             ?: return Verification.Failed(TorrentFailure(TorrentFailureCode.AUDIOBOOK_INVALID, files = (analysis as? AnalysisState.Failed)?.skipped.orEmpty().map { it.name }))
         if (ready.skipped.isNotEmpty()) {
@@ -678,7 +733,7 @@ class TorrentManager(
                 parts = merged.parts,
                 files = ready.files.associateBy { it.id },
                 cover = cover,
-                sourceName = r.name,
+                sourceName = r.volume ?: r.name,
                 isEdit = false,
                 existingBookId = null,
                 heldPermissions = emptyList(),
@@ -724,16 +779,33 @@ class TorrentManager(
         store.update(r.id) {
             it.copy(phase = TorrentPhase.COMPLETED, resultBookId = bookId, failure = null, finishedAt = System.currentTimeMillis(), progress = 1f)
         }
-        // The book is in the library as a verified M4B; the download is no longer needed.
+        // The book is in the library as a verified M4B; the download is no longer needed, unless
+        // other books of the same torrent still are to be imported from it.
+        val others = store.records.value.filter { it.id != r.id && it.downloadKey == r.downloadKey && it.phase != TorrentPhase.COMPLETED }
+        if (others.isNotEmpty()) return deleteOwnFiles(r, others)
         runCatching { engine.remove(r.infoHash, deleteFiles = true) }
         File(r.dataDir).deleteRecursively()
-        store.resumeFile(r.id).delete()
-        store.torrentFile(r.id).delete()
+        store.resumeFile(r.downloadKey).delete()
+        store.torrentFile(r.downloadKey).delete()
+    }
+
+    /** Deletes the downloaded files only [r] needed, once no book of the torrent is downloading into the folder any more. */
+    private fun deleteOwnFiles(r: TorrentRecord, others: List<TorrentRecord>) {
+        if (others.any { it.phase == TorrentPhase.DOWNLOADING }) return
+        val needed = others.flatMapTo(HashSet()) { it.wanted }
+        val root = File(r.dataDir)
+        for (f in r.files) {
+            if (f.index !in r.wanted || f.index in needed) continue
+            var file: File? = File(root, f.path).takeIf { it.delete() }?.parentFile
+            // Remove folders left empty, up to the download folder.
+            while (file != null && file != root && file.list()?.isEmpty() == true && file.delete()) file = file.parentFile
+        }
     }
 
     private fun fail(id: String, failure: TorrentFailure) {
         val r = store.update(id) { it.copy(phase = TorrentPhase.FAILED, failure = failure) } ?: return
-        runCatching { engine.pause(r.infoHash) }
+        // Other books of the torrent may still be downloading.
+        if (store.records.value.none { it.downloadKey == r.downloadKey && it.phase == TorrentPhase.DOWNLOADING }) runCatching { engine.pause(r.infoHash) }
         Log.w(TAG, "Torrent ${r.name} failed: ${failure.code} ${failure.detail.orEmpty()} ${failure.files.take(3)}")
     }
 
@@ -742,9 +814,9 @@ class TorrentManager(
     private fun onEngineEvent(event: TorrentEngine.Event) {
         when (event) {
             is TorrentEngine.Event.ResumeData -> store.records.value.firstOrNull { it.infoHash == event.infoHash && it.phase == TorrentPhase.DOWNLOADING }
-                ?.let { store.writeResume(it.id, event.data) }
-            is TorrentEngine.Event.Error -> store.records.value.firstOrNull { it.infoHash == event.infoHash && it.phase == TorrentPhase.DOWNLOADING }
-                ?.let { onEngineError(it.id, event.message, event.outOfSpace) }
+                ?.let { store.writeResume(it.downloadKey, event.data) }
+            is TorrentEngine.Event.Error -> store.records.value.filter { it.infoHash == event.infoHash && it.phase == TorrentPhase.DOWNLOADING }
+                .forEach { onEngineError(it.id, event.message, event.outOfSpace) }
         }
     }
 
@@ -755,9 +827,20 @@ class TorrentManager(
 
     // ------------------------------------------------------------------ helpers
 
-    private fun wantedFlags(r: TorrentRecord): BooleanArray {
-        val count = (r.files.maxOfOrNull { it.index } ?: -1) + 1
-        return BooleanArray(count) { it in r.wanted }
+    /** Files to download for [books] (records of one torrent): everything any of them wants. */
+    private fun wantedFlags(books: List<TorrentRecord>): BooleanArray {
+        val count = (books.first().files.maxOfOrNull { it.index } ?: -1) + 1
+        val wanted = books.flatMapTo(HashSet()) { it.wanted }
+        return BooleanArray(count) { it in wanted }
+    }
+
+    /** [r] and the other books of its torrent that download together with it. */
+    private fun downloadingWith(r: TorrentRecord): List<TorrentRecord> =
+        listOf(r) + store.records.value.filter { it.id != r.id && it.downloadKey == r.downloadKey && it.phase == TorrentPhase.DOWNLOADING }
+
+    /** [r] and the other books of its torrent whose download is still running or waiting. */
+    private fun sharingDownload(r: TorrentRecord): List<TorrentRecord> = listOf(r) + store.records.value.filter {
+        it.id != r.id && it.downloadKey == r.downloadKey && (it.phase == TorrentPhase.DOWNLOADING || it.phase == TorrentPhase.FETCHING_METADATA)
     }
 
     private fun uriOf(r: TorrentRecord, path: String): String = Uri.fromFile(File(r.dataDir, path)).toString()

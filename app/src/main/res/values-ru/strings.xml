@@ -359,7 +359,7 @@
     <string name="torrent_problem_unsupported">В торренте есть файлы, не относящиеся к аудиокниге MP3 или M4B: %1$s.</string>
     <string name="torrent_problem_no_audio">В торренте нет файлов MP3 или M4B.</string>
     <string name="torrent_problem_mixed">В торренте есть и MP3, и M4B — непонятно, что из этого книга.</string>
-    <string name="torrent_problem_multiple_m4b">В торренте несколько файлов M4B — вероятно, несколько книг. Добавьте торрент с одной книгой.</string>
+    <string name="torrent_problem_multiple_m4b">В папках одной книги лежат несколько файлов M4B — непонятно, какой из них книга.</string>
     <string name="torrent_problem_empty_file">В торренте есть пустые аудиофайлы: %1$s.</string>
     <string name="editor_title_torrent">Проверка торрента</string>
     <string name="editor_fetching_torrent">Получаем список файлов торрента…</string>
@@ -396,6 +396,7 @@
         <item quantity="other">%1$d пира</item>
     </plurals>
     <string name="torrent_downloaded">Загружено</string>
+    <string name="torrent_book_of">Книга %1$d из «%2$s»</string>
     <string name="torrent_review_needed">Проверьте данные: книга будет сконвертирована после подтверждения.</string>
     <string name="torrent_review_needed_short">Нужна проверка: %1$s</string>
     <string name="torrent_waiting_review">Загружено. Проверьте данные, чтобы начать конвертацию.</string>

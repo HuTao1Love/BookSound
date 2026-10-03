@@ -124,7 +124,19 @@ data class TorrentRecord(
     /** Last known download progress, shown before the engine reports after a restart. */
     val progress: Float = 0f,
     val finishedAt: Long? = null,
+    /**
+     * Set when the torrent holds several books: each book is its own record, and all of them share
+     * this key, the .torrent file, the download folder and one download in the engine.
+     */
+    val group: String? = null,
+    /** Folder (or file) name of this book inside a torrent of several books. */
+    val volume: String? = null,
+    /** Order of the book inside its torrent. */
+    val position: Int = 0,
 ) {
+    /** Key of the download this record's files come from (stored .torrent file and resume data). */
+    val downloadKey: String get() = group ?: id
+
     val title: String get() = edited?.title?.takeIf { it.isNotBlank() } ?: suggested?.title?.takeIf { it.isNotBlank() } ?: name
     val author: String? get() = edited?.author ?: suggested?.author
     val wantedBytes: Long get() = files.filter { it.index in wanted }.sumOf { it.size }

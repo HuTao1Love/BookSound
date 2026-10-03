@@ -2,9 +2,11 @@ package com.zyagodin.booksound.core.torrent
 
 import com.zyagodin.booksound.core.metadata.AudioContainer
 import com.zyagodin.booksound.core.model.BookMetadata
+import com.zyagodin.booksound.core.model.SeriesIndex
 import com.zyagodin.booksound.core.organize.DraftPart
 import com.zyagodin.booksound.core.organize.ImportDraftBuilder
 import com.zyagodin.booksound.core.organize.ImportSourceFile
+import com.zyagodin.booksound.core.organize.NameGuess
 import com.zyagodin.booksound.core.organize.NamePatternParser
 
 /** One audio file of a torrent as a part of the book, before it is downloaded. */
@@ -34,17 +36,31 @@ data class ReviewedPart(val path: String, val title: String, val suggestedTitle:
 
 object TorrentSuggestions {
 
-    /** Guesses metadata from the torrent name (e.g. "Author - Title (read by X) [2014, MP3]"). */
-    fun build(torrentName: String, content: TorrentContentCheck.Valid, untitledPart: (Int) -> String = { "Chapter $it" }): TorrentSuggestion {
+    /**
+     * Guesses metadata from the torrent name (e.g. "Author - Title (read by X) [2014, MP3]"). A book
+     * of a collection ([TorrentContentCheck.Valid.volume] set, [position] counted from 0) takes its
+     * title from its folder or file name, and the torrent's title becomes its series.
+     */
+    fun build(
+        torrentName: String,
+        content: TorrentContentCheck.Valid,
+        position: Int = 0,
+        untitledPart: (Int) -> String = { "Chapter $it" },
+    ): TorrentSuggestion {
         val guess = NamePatternParser.parse(torrentName)
-        val metadata = BookMetadata(
-            title = guess.title ?: torrentName,
-            author = guess.author,
-            narrator = guess.narrator,
-            series = guess.series,
-            seriesIndex = guess.seriesIndex?.takeIf { guess.series != null },
-            year = guess.year,
-        ).normalized().let { if (it.title.isBlank()) it.copy(title = torrentName.trim()) else it }
+        val volume = content.volume
+        val metadata = if (volume == null) {
+            BookMetadata(
+                title = guess.title ?: torrentName,
+                author = guess.author,
+                narrator = guess.narrator,
+                series = guess.series,
+                seriesIndex = guess.seriesIndex?.takeIf { guess.series != null },
+                year = guess.year,
+            ).normalized().let { if (it.title.isBlank()) it.copy(title = torrentName.trim()) else it }
+        } else {
+            volumeMetadata(guess, volume, position).let { if (it.title.isBlank()) it.copy(title = volume.trim()) else it }
+        }
         val audio = content.audio
         val titles = if (content.layout == AudiobookLayout.SINGLE_M4B) {
             listOf(metadata.title)
@@ -55,6 +71,28 @@ object TorrentSuggestions {
             metadata = metadata,
             parts = audio.mapIndexed { i, f -> TorrentPart(f.index, f.path, titles[i], f.sizeBytes) },
         )
+    }
+
+    /** "Книга 2. Title", "Том 3", "Book 1 - Title", "Vol. 4: Title": the volume's number and the rest of the name. */
+    private val VOLUME_NUMBER = Regex(
+        """^(?:книга|кн\.?|том|т\.|book|volume|vol\.?|часть|ч\.|part|pt\.?|#|№)\s*(\d{1,4}(?:[.,]\d{1,2})?)(?![\p{L}\p{N}])\s*[.:)\-–—_]?\s*(.*)$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun volumeMetadata(collection: NameGuess, volume: String, position: Int): BookMetadata {
+        val name = volume.replace('_', ' ').trim()
+        val numbered = VOLUME_NUMBER.find(name)
+        val rest = numbered?.groupValues?.get(2)?.trim() ?: name
+        val guess = if (rest.any { it.isLetter() }) NamePatternParser.parse(rest) else NameGuess()
+        return BookMetadata(
+            // "Книга 2" alone stays the title; the series in front of it tells the books apart.
+            title = guess.title ?: name,
+            author = guess.author ?: collection.author,
+            narrator = guess.narrator ?: collection.narrator,
+            series = guess.series ?: collection.series ?: collection.title,
+            seriesIndex = guess.seriesIndex ?: numbered?.groupValues?.get(1)?.let(SeriesIndex::normalize) ?: (position + 1).toString(),
+            year = guess.year ?: collection.year,
+        ).normalized()
     }
 }
 

@@ -74,6 +74,16 @@ fun TorrentCard(item: TorrentItem, actions: TorrentActions, modifier: Modifier =
                     r.author?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
+                    // A book of a torrent with several books: name the torrent it comes from.
+                    if (r.group != null) {
+                        Text(
+                            stringResource(R.string.torrent_book_of, r.position + 1, r.name),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Spacer(Modifier.height(2.dp))
                     StatusLine(item)
                 }

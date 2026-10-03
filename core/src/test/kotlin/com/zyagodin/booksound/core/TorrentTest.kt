@@ -31,6 +31,7 @@ class TorrentTest {
     private fun files(vararg entries: Pair<String, Long>) = entries.mapIndexed { i, (path, size) -> TorrentFile(i, path, size) }
 
     private fun valid(check: TorrentContentCheck) = check as? TorrentContentCheck.Valid ?: error("Expected valid, got $check")
+    private fun collection(check: TorrentContentCheck) = check as? TorrentContentCheck.Collection ?: error("Expected a collection, got $check")
     private fun problem(check: TorrentContentCheck) = (check as? TorrentContentCheck.Invalid ?: error("Expected invalid, got $check")).problem
 
     // ---------------------------------------------------------------- content validation
@@ -65,6 +66,53 @@ class TorrentTest {
     }
 
     @Test
+    fun `sub-folders named like discs or parts keep the torrent one book`() {
+        for (names in listOf(listOf("CD1", "CD2"), listOf("Disc 1 (01-10)", "Disc 2"), listOf("Диск 1", "Диск 2"), listOf("Часть 1", "Часть 2"), listOf("01", "02"), listOf("CD1", "Bonus"))) {
+            val check = TorrentContentValidator.validate(files("B/${names[0]}/01.mp3" to 5, "B/${names[1]}/01.mp3" to 5))
+            assertTrue(names.toString(), check is TorrentContentCheck.Valid)
+        }
+        // Parts next to a sub-folder are one book too.
+        valid(TorrentContentValidator.validate(files("B/01.mp3" to 5, "B/Extra/01.mp3" to 5)))
+    }
+
+    @Test
+    fun `book sub-folders make a collection`() {
+        val check = collection(
+            TorrentContentValidator.validate(
+                files(
+                    "Series/Книга 2/01.mp3" to 5,
+                    "Series/Книга 1/02.mp3" to 5,
+                    "Series/Книга 1/01.mp3" to 5,
+                    "Series/Книга 1/cover.jpg" to 5,
+                    "Series/Книга 2/CD1/02.mp3" to 5,
+                    "Series/folder.jpg" to 5,
+                    "Series/info.txt" to 5,
+                ),
+            ),
+        )
+        assertEquals(listOf("Книга 1", "Книга 2"), check.books.map { it.volume })
+        assertEquals(listOf("Series/Книга 1/01.mp3", "Series/Книга 1/02.mp3"), check.books[0].audio.map { it.path })
+        assertEquals(listOf("Series/Книга 2/01.mp3", "Series/Книга 2/CD1/02.mp3"), check.books[1].audio.map { it.path })
+        // A book's own cover is only its own; one outside every book folder is shared.
+        assertEquals(listOf("Series/Книга 1/cover.jpg", "Series/folder.jpg"), check.books[0].images.map { it.path })
+        assertEquals(listOf("Series/folder.jpg"), check.books[1].images.map { it.path })
+        assertEquals(listOf("Series/info.txt"), check.skipped.map { it.path })
+        assertTrue(check.books.all { it.layout == AudiobookLayout.MP3_PARTS })
+    }
+
+    @Test
+    fun `several m4b files are several books`() {
+        val check = collection(TorrentContentValidator.validate(files("s/2 - Second.m4b" to 5, "s/1 - First.m4b" to 5, "s/1 - First.jpg" to 5, "s/all.png" to 5)))
+        assertEquals(listOf("1 - First", "2 - Second"), check.books.map { it.volume })
+        assertTrue(check.books.all { it.layout == AudiobookLayout.SINGLE_M4B && it.audio.size == 1 })
+        assertEquals(listOf("s/1 - First.jpg", "s/all.png"), check.books[0].images.map { it.path })
+        assertEquals(listOf("s/all.png"), check.books[1].images.map { it.path })
+        // In book folders as well, also mixed with folders of MP3 files.
+        val mixed = collection(TorrentContentValidator.validate(files("s/Book 1/a.m4b" to 5, "s/Book 2/01.mp3" to 5, "s/Book 2/02.mp3" to 5)))
+        assertEquals(listOf(AudiobookLayout.SINGLE_M4B, AudiobookLayout.MP3_PARTS), mixed.books.map { it.layout })
+    }
+
+    @Test
     fun `single m4b with image is valid`() {
         val check = valid(TorrentContentValidator.validate(files("Dune.m4b" to 10_000)))
         assertEquals(AudiobookLayout.SINGLE_M4B, check.layout)
@@ -84,7 +132,11 @@ class TorrentTest {
         assertEquals(TorrentContentProblem.EMPTY, problem(TorrentContentValidator.validate(emptyList())))
         assertEquals(TorrentContentProblem.NO_AUDIO, problem(TorrentContentValidator.validate(files("a/readme.txt" to 1, "a/cover.jpg" to 5))))
         assertEquals(TorrentContentProblem.MIXED_FORMATS, problem(TorrentContentValidator.validate(files("a/1.mp3" to 1, "a/book.m4b" to 5))))
-        assertEquals(TorrentContentProblem.MULTIPLE_M4B, problem(TorrentContentValidator.validate(files("s/Book 1.m4b" to 1, "s/Book 2.m4b" to 5))))
+        assertEquals(TorrentContentProblem.MULTIPLE_M4B, problem(TorrentContentValidator.validate(files("s/CD1/a.m4b" to 1, "s/CD2/b.m4b" to 5))))
+        assertEquals(
+            TorrentContentProblem.MIXED_FORMATS,
+            problem(TorrentContentValidator.validate(files("s/Book 1/1.mp3" to 1, "s/Book 2/1.mp3" to 1, "s/Book 2/b.m4b" to 5))),
+        )
         assertEquals(TorrentContentProblem.EMPTY_AUDIO_FILE, problem(TorrentContentValidator.validate(files("a/1.mp3" to 0, "a/2.mp3" to 5))))
         assertEquals(TorrentContentProblem.UNSAFE_PATH, problem(TorrentContentValidator.validate(files("a/../../evil.mp3" to 5))))
     }
@@ -154,6 +206,25 @@ class TorrentTest {
         assertEquals("Simon Vance", s.metadata.narrator)
         assertEquals("2007", s.metadata.year)
         assertEquals(listOf("01 Prologue", "02 Arrakis"), s.parts.map { it.title })
+    }
+
+    @Test
+    fun `books of a collection take their title from the folder and the series from the torrent`() {
+        val check = collection(
+            TorrentContentValidator.validate(
+                files(
+                    "Гарри Поттер/Книга 1. Философский камень/01.mp3" to 5,
+                    "Гарри Поттер/Книга 2/01.mp3" to 5,
+                    "Гарри Поттер/03 - Узник Азкабана/01.mp3" to 5,
+                    "Гарри Поттер/Бонус/01.mp3" to 5,
+                ),
+            ),
+        )
+        val name = "Роулинг Джоан - Гарри Поттер (читает Иванов) [2015, MP3]"
+        val books = check.books.mapIndexed { i, book -> TorrentSuggestions.build(name, book, i).metadata }
+        assertEquals(listOf("Узник Азкабана", "Бонус", "Философский камень", "Книга 2"), books.map { it.title })
+        assertEquals(listOf("3", "2", "1", "2"), books.map { it.seriesIndex })
+        assertTrue(books.all { it.series == "Гарри Поттер" && it.author == "Роулинг Джоан" && it.narrator == "Иванов" && it.year == "2015" })
     }
 
     @Test
