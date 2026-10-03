@@ -41,6 +41,15 @@ class TorrentRecordTest {
     }
 
     @Test
+    fun `books of one torrent share its download`() {
+        val book = record().copy(id = "t2", group = "g1", volume = "Книга 2", position = 1)
+        assertEquals(book, json.decodeFromString<List<TorrentRecord>>(json.encodeToString(listOf(book))).single())
+        assertEquals("g1", book.downloadKey)
+        // Records stored before collections existed download on their own.
+        assertEquals("t1", record().downloadKey)
+    }
+
+    @Test
     fun `unknown fields from newer versions are ignored`() {
         val text = json.encodeToString(listOf(record())).replaceFirst("{", "{\"future\":42,")
         assertEquals("t1", json.decodeFromString<List<TorrentRecord>>(text).single().id)

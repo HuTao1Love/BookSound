@@ -358,7 +358,7 @@
     <string name="torrent_problem_unsupported">The torrent contains files that aren\'t part of an MP3 or M4B audiobook: %1$s.</string>
     <string name="torrent_problem_no_audio">The torrent contains no MP3 or M4B files.</string>
     <string name="torrent_problem_mixed">The torrent contains both MP3 and M4B files, so it\'s unclear which one is the book.</string>
-    <string name="torrent_problem_multiple_m4b">The torrent contains several M4B files, probably several books. Add a torrent with a single book.</string>
+    <string name="torrent_problem_multiple_m4b">The torrent contains several M4B files in the folders of one book, so it is unclear which one is the book.</string>
     <string name="torrent_problem_empty_file">The torrent contains empty audio files: %1$s.</string>
     <string name="editor_title_torrent">Review torrent</string>
     <string name="editor_fetching_torrent">Getting the torrent\'s file list…</string>
@@ -393,6 +393,7 @@
         <item quantity="other">%1$d peers</item>
     </plurals>
     <string name="torrent_downloaded">Downloaded</string>
+    <string name="torrent_book_of">Book %1$d of “%2$s”</string>
     <string name="torrent_review_needed">Review the details: the book is converted after you confirm them.</string>
     <string name="torrent_review_needed_short">Review needed: %1$s</string>
     <string name="torrent_waiting_review">Downloaded. Review the details to start the conversion.</string>

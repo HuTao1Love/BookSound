@@ -97,7 +97,8 @@ fun AddTorrentDialog(
                 busy = false
             }
             when (result) {
-                is AddResult.Added -> onAdded(result.torrentId)
+                // Several books in one torrent: each is reviewed from the Imports screen.
+                is AddResult.Added -> if (result.books > 1) onAddedSeveral() else onAdded(result.torrentId)
                 is AddResult.AlreadyAdded -> onAlreadyAdded(result.torrentId)
                 is AddResult.Rejected -> error = addErrorMessage(context, result)
             }
