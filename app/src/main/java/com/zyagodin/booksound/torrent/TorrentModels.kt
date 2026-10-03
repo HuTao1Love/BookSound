@@ -139,6 +139,8 @@ data class TorrentRecord(
 
     val title: String get() = edited?.title?.takeIf { it.isNotBlank() } ?: suggested?.title?.takeIf { it.isNotBlank() } ?: name
     val author: String? get() = edited?.author ?: suggested?.author
+    val series: String? get() = (edited ?: suggested)?.series
+    val seriesIndex: String? get() = (edited ?: suggested)?.seriesIndex
     val wantedBytes: Long get() = files.filter { it.index in wanted }.sumOf { it.size }
     val isActive: Boolean get() = phase != TorrentPhase.COMPLETED && phase != TorrentPhase.FAILED
 

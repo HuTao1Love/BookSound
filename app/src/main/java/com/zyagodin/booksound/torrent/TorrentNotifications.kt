@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.zyagodin.booksound.BookSoundApp
 import com.zyagodin.booksound.MainActivity
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.ui.components.showsSeriesInTitle
 import kotlin.math.roundToInt
 
 /**
@@ -28,8 +29,18 @@ object TorrentNotifications {
         )
     }
 
+    /** One entry per running download: the books of one torrent share theirs. */
     private fun downloading(items: List<TorrentItem>) =
         items.filter { !it.record.paused && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.FETCHING_METADATA) }
+            .distinctBy { it.record.downloadKey }
+
+    /** The title with the series in front, as the library shows it ("Series #2. Book 2"). */
+    fun displayTitle(context: Context, r: TorrentRecord): String {
+        val series = r.series?.trim()
+        if (series == null || !showsSeriesInTitle(r.title, series)) return r.title
+        val prefix = r.seriesIndex?.takeIf { it.isNotBlank() }?.let { context.getString(R.string.series_in_title, series, it) } ?: series
+        return "$prefix. ${r.title}"
+    }
 
     private fun converting(items: List<TorrentItem>) =
         items.filter { it.record.phase == TorrentPhase.VERIFYING || it.record.phase == TorrentPhase.CONVERTING }
@@ -53,7 +64,7 @@ object TorrentNotifications {
         if (first == null) {
             // Downloads are done; the book is being checked and converted (its own notification shows progress).
             val book = converting(items).firstOrNull()
-            return builder.setContentTitle(book?.record?.title ?: context.getString(R.string.torrent_notification_title))
+            return builder.setContentTitle(book?.record?.let { displayTitle(context, it) } ?: context.getString(R.string.torrent_notification_title))
                 .apply { if (book != null) setContentText(context.getString(R.string.import_stage_converting)) }
                 .setProgress(0, 0, true)
                 .build()
@@ -68,7 +79,7 @@ object TorrentNotifications {
                 first.live?.downloadRate?.takeIf { it > 0 }?.let { context.getString(R.string.torrent_speed, Formatter.formatShortFileSize(context, it.toLong())) },
             ).joinToString(" · ")
         } + if (active.size > 1) " · " + context.resources.getQuantityString(R.plurals.torrent_more_downloading, active.size - 1, active.size - 1) else ""
-        return builder.setContentTitle(first.record.title)
+        return builder.setContentTitle(if (first.record.group != null) first.record.name else displayTitle(context, first.record))
             .setContentText(text)
             .setProgress(100, percent ?: 0, percent == null)
             .build()
