@@ -15,6 +15,19 @@ val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
 }
 
+/** An environment variable (CI) or, on your PC, a local.properties entry. */
+fun secret(env: String, property: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() } ?: localProperties.getProperty(property)?.takeIf { it.isNotBlank() }
+
+// Release signing. CI passes BOOKSOUND_KEYSTORE* variables (see .github/workflows/release.yml);
+// locally put signing.storeFile/storePassword/keyAlias/keyPassword into local.properties.
+// Without them the release APK is built unsigned (it can't be installed).
+val releaseKeystore = secret("BOOKSOUND_KEYSTORE", "signing.storeFile")
+
+// CI sets these from the release tag and run number; local builds stay 1 / "1.0".
+val appVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 1
+val appVersionName = providers.gradleProperty("versionName").orNull ?: "1.0"
+
 android {
     namespace = "com.zyagodin.booksound"
     compileSdk {
@@ -25,15 +38,27 @@ android {
         applicationId = "com.zyagodin.booksound"
         minSdk = 33
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${localProperties.getProperty("googleBooksApiKey", "").trim()}\"")
+        buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${secret("GOOGLE_BOOKS_API_KEY", "googleBooksApiKey").orEmpty().trim()}\"")
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystore)
+                storePassword = secret("BOOKSOUND_KEYSTORE_PASSWORD", "signing.storePassword")
+                keyAlias = secret("BOOKSOUND_KEY_ALIAS", "signing.keyAlias")
+                keyPassword = secret("BOOKSOUND_KEY_PASSWORD", "signing.keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")

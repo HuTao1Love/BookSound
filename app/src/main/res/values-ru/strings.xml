@@ -486,4 +486,12 @@
     <string name="voice_old_recording_hint">Оставляет только диапазон речи: меньше фона и шипения</string>
     <string name="voice_clarity">Разборчивость речи</string>
     <string name="voice_clarity_hint">Для тихого или невнятного чтения: выводит согласные вперёд</string>
+    <!-- Работа в фоне (оптимизация батареи) -->
+    <string name="background_title">Не останавливать загрузки?</string>
+    <string name="background_message">Чтобы экономить батарею, Android может усыплять BookSound в фоне — тогда загрузки встают до следующего открытия приложения. Разрешите BookSound работать без ограничений батареи.\n\nНа некоторых телефонах (Samsung, Xiaomi) проверьте ещё, что BookSound нет в списке спящих приложений: Настройки → Батарея.</string>
+    <string name="background_allow">Разрешить</string>
+    <string name="background_later">Не сейчас</string>
+    <string name="settings_background">Работа в фоне</string>
+    <string name="settings_background_on">Без ограничений — загрузки не останавливаются</string>
+    <string name="settings_background_off">Ограничена экономией батареи — нажмите, чтобы разрешить</string>
 </resources>
