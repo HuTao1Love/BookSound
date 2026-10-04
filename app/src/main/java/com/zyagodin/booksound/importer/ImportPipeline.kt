@@ -37,13 +37,13 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -300,17 +300,23 @@ class ImportPipeline(
                 report.report(ImportStage.CONVERTING, it)
             }
         }
-        val alone = parallelUnreliable
-        try {
-            encode()
-        } catch (e: ExportException) {
-            // Other imports encode at the same time; on some phones that alone makes a codec fail.
-            if (alone || e.errorCode !in CODEC_ERRORS) throw e
-            Log.w(TAG, "Codec failed next to other encodes, transcoding alone", e)
-            parallelUnreliable = true
-            output.delete()
-            report.report(ImportStage.CONVERTING, 0f)
-            encode()
+        var attempt = 1
+        while (true) {
+            try {
+                encode()
+                return
+            } catch (e: ExportException) {
+                // Codecs fail next to other encodes on some phones, and now and then even alone (the
+                // phone's media service drops every codec at once): the file is not at fault, so
+                // try again alone with fresh codecs before giving up.
+                if (e.errorCode !in CODEC_ERRORS || attempt >= CODEC_ATTEMPTS) throw e
+                Log.w(TAG, "Codec failed (attempt $attempt), transcoding alone again", e)
+                parallelUnreliable = true
+                output.delete()
+                report.report(ImportStage.CONVERTING, 0f)
+                delay(CODEC_RETRY_DELAY_MS * attempt)
+                attempt++
+            }
         }
     }
 
@@ -337,7 +343,19 @@ class ImportPipeline(
     private val libraryWrites = Mutex()
 
     private suspend fun <T> withCodec(block: suspend () -> T): T {
-        if (!parallelUnreliable) return codecs.withPermit { block() }
+        if (!parallelUnreliable) {
+            codecs.acquire()
+            // Codec trouble may have been noticed while this waited for a permit: then go alone too,
+            // or every part already queued would still start side by side and fail again.
+            if (!parallelUnreliable) {
+                try {
+                    return block()
+                } finally {
+                    codecs.release()
+                }
+            }
+            codecs.release()
+        }
         // Alone means alone: wait until codecs started before the trouble was noticed are done too.
         // Only the holder of soloCodec collects permits, so collecting them can't deadlock.
         return soloCodec.withLock {
@@ -623,7 +641,13 @@ class ImportPipeline(
             ExportException.ERROR_CODE_ENCODING_FAILED,
             ExportException.ERROR_CODE_ENCODER_INIT_FAILED,
             ExportException.ERROR_CODE_DECODER_INIT_FAILED,
+            // The phone's media service dropping every codec at once shows up on the decoder too.
+            ExportException.ERROR_CODE_DECODING_FAILED,
         )
+
+        /** Encodes of one book in one pass, counting the first, while codecs keep failing. */
+        private const val CODEC_ATTEMPTS = 3
+        private const val CODEC_RETRY_DELAY_MS = 3_000L
 
         /** Share of the conversion progress spent encoding; the rest is joining. */
         private const val ENCODE_SHARE = 0.95

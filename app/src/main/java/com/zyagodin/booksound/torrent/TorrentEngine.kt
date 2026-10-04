@@ -3,6 +3,8 @@ package com.zyagodin.booksound.torrent
 import com.zyagodin.booksound.core.torrent.TorrentFile
 import org.libtorrent4j.AddTorrentParams
 import org.libtorrent4j.AlertListener
+import org.libtorrent4j.AnnounceEntry
+import org.libtorrent4j.Entry
 import org.libtorrent4j.EnumNet
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionHandle
@@ -21,6 +23,9 @@ import org.libtorrent4j.alerts.DhtBootstrapAlert
 import org.libtorrent4j.alerts.FileErrorAlert
 import org.libtorrent4j.alerts.ListenFailedAlert
 import org.libtorrent4j.alerts.ListenSucceededAlert
+import org.libtorrent4j.alerts.PeerConnectAlert
+import org.libtorrent4j.alerts.PeerDisconnectedAlert
+import org.libtorrent4j.alerts.PeerErrorAlert
 import org.libtorrent4j.alerts.SaveResumeDataAlert
 import org.libtorrent4j.alerts.TorrentErrorAlert
 import org.libtorrent4j.alerts.TrackerErrorAlert
@@ -73,6 +78,10 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
 
     private val session = SessionManager(false)
     private val trackerErrors = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** Trackers each torrent must have once it is in the session, by info-hash. */
+    private val wantedTrackers = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+    /** Outgoing peer connections and why peers dropped, since the last [diagnostics]. */
+    private val peerEvents = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
     @Volatile private var lastReopen = 0L
 
     private val alerts = object : AlertListener {
@@ -88,6 +97,9 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             AlertType.LISTEN_SUCCEEDED.swig(),
             AlertType.LISTEN_FAILED.swig(),
             AlertType.DHT_BOOTSTRAP.swig(),
+            AlertType.PEER_CONNECT.swig(),
+            AlertType.PEER_ERROR.swig(),
+            AlertType.PEER_DISCONNECTED.swig(),
         )
 
         override fun alert(alert: Alert<*>) {
@@ -110,6 +122,9 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
                         null,
                     )
                     is DhtBootstrapAlert -> log("DHT bootstrapped", null)
+                    is PeerConnectAlert -> countPeerEvent("connecting")
+                    is PeerErrorAlert -> countPeerEvent("error ${alert.operation()} ${alert.error().message}")
+                    is PeerDisconnectedAlert -> countPeerEvent("disconnected ${alert.operation()} ${alert.error().message}")
                     is SaveResumeDataAlert -> {
                         val bytes = AddTorrentParams.writeResumeDataBuf(alert.params())
                         listener?.invoke(Event.ResumeData(hashOf(alert.handle()), bytes))
@@ -118,6 +133,7 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
                     is TorrentErrorAlert -> report(alert.handle(), alert.error().message, alert.error().value)
                     is AddTorrentAlert -> {
                         val error = alert.error()
+                        if (!error.isError) ensureTrackers(alert.handle())
                         // A repeated add of a torrent already in the session is harmless.
                         if (error.isError && !error.message.contains("duplicate", ignoreCase = true)) {
                             val hash = alert.params().infoHashes.best.toHex().lowercase()
@@ -186,7 +202,10 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
                 "scrape=${s.numComplete()}/${s.numIncomplete()} trackers=${s.announcingToTrackers()} dht=${s.announcingToDht()} " +
                 "error=${s.errorCode().takeIf { it.isError }?.message} trackers: $trackers"
         }
+        val peers = peerEvents.entries.sortedByDescending { it.value.get() }.take(8).joinToString { "${it.key}: ${it.value.get()}" }
+        peerEvents.clear()
         return listOf(
+            "Peers since last time: ${peers.ifEmpty { "nothing" }}",
             "Session paused=${session.isPaused} listen=${session.listenEndpoints()} dhtRunning=${session.isDhtRunning} " +
                 "dhtNodes=${session.dhtNodes()} external=${session.externalAddress()} interfaces: ${interfaces()}",
         ) + torrents
@@ -228,10 +247,12 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
      * finished pieces. The torrent appears in the session asynchronously.
      */
     @Synchronized
-    fun add(torrent: ByteArray, saveDir: File, resumeFile: File?, wanted: BooleanArray) {
+    fun add(torrent: ByteArray, saveDir: File, resumeFile: File?, wanted: BooleanArray, magnetUri: String?) {
         start()
         val info = TorrentInfo.bdecode(torrent)
         saveDir.mkdirs()
+        val infoHash = info.infoHash().toHex().lowercase()
+        wantedTrackers[infoHash] = trackersFor(torrent, magnetUri, info.isPrivate)
         val priorities = Array(info.numFiles()) { if (wanted.getOrElse(it) { false }) Priority.DEFAULT else Priority.IGNORE }
         val resume = resumeFile?.takeIf { it.isFile && it.length() > 0 }
         val flags = TorrentFlags.AUTO_MANAGED
@@ -243,6 +264,29 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             resume?.delete()
             session.download(info, saveDir, null, priorities, null, flags)
         }
+        // Already in the session: no AddTorrentAlert follows, so check the trackers now.
+        handle(infoHash)?.let(::ensureTrackers)
+    }
+
+    /**
+     * Gives a torrent the trackers it must have. A torrent added with libtorrent4j's
+     * `download(TorrentInfo, …)` starts without the .torrent's trackers, and resume data replaces
+     * the list with the one saved before, so without this every torrent relied on DHT alone and
+     * often found no peers at all.
+     */
+    private fun ensureTrackers(handle: TorrentHandle) {
+        if (!handle.isValid) return
+        val wanted = wantedTrackers[hashOf(handle)] ?: return
+        val present = handle.trackers().mapTo(HashSet()) { it.url() }
+        val missing = wanted.filter { it !in present }
+        if (missing.isEmpty()) return
+        missing.forEach { handle.addTracker(AnnounceEntry(it)) }
+        log("Added ${missing.size} trackers to ${hashOf(handle).take(8)} (had ${present.size})", null)
+        handle.forceReannounce()
+    }
+
+    private fun countPeerEvent(key: String) {
+        peerEvents.getOrPut(key) { java.util.concurrent.atomic.AtomicInteger() }.incrementAndGet()
     }
 
     fun contains(infoHash: String): Boolean = handle(infoHash) != null
@@ -285,6 +329,7 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
     fun remove(infoHash: String, deleteFiles: Boolean) {
         val h = handle(infoHash) ?: return
         trackerErrors.remove(infoHash)
+        wantedTrackers.remove(infoHash)
         if (deleteFiles) session.remove(h, SessionHandle.DELETE_FILES) else session.remove(h)
     }
 
@@ -329,6 +374,33 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
     companion object {
         private const val ENOSPC = 28
         private const val REOPEN_MIN_INTERVAL_MS = 10_000L
+
+        /**
+         * Open trackers added to every public torrent, so peers are found even when the torrent's
+         * own trackers are missing or unreachable and DHT is slow. Ports below 1024 other than
+         * 80/443 are blocked by libtorrent4j's port filter, so none are used here.
+         */
+        private val PUBLIC_TRACKERS = listOf(
+            "udp://tracker.opentrackr.org:1337/announce",
+            "http://tracker.opentrackr.org:1337/announce",
+            "udp://open.demonii.com:1337/announce",
+            "udp://open.stealth.si:80/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://explodie.org:6969/announce",
+            "udp://tracker.dler.org:6969/announce",
+        )
+
+        /** The .torrent's own trackers, the magnet link's, and open trackers unless the torrent is private. */
+        fun trackersFor(torrent: ByteArray, magnetUri: String?, isPrivate: Boolean): List<String> {
+            val own = runCatching {
+                val dict = Entry.bdecode(torrent).dictionary()
+                val list = dict["announce-list"]?.list()?.flatMap { tier -> tier.list().map { it.string() } }.orEmpty()
+                listOfNotNull(dict["announce"]?.string()) + list
+            }.getOrDefault(emptyList())
+            val fromMagnet = magnetUri?.let { runCatching { AddTorrentParams.parseMagnetUri(it).trackers }.getOrNull() }.orEmpty()
+            val open = if (isPrivate) emptyList() else PUBLIC_TRACKERS
+            return (own + fromMagnet + open).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        }
 
         fun hashOf(handle: TorrentHandle): String = handle.infoHash().toHex().lowercase()
 
