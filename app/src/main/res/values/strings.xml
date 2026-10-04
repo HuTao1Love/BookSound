@@ -273,6 +273,7 @@
     <string name="failure_unsupported">This audio format isn\'t supported (%1$s).</string>
     <string name="failure_corrupted">A source file is damaged or incomplete.</string>
     <string name="failure_conversion">Conversion failed (%1$s).</string>
+    <string name="failure_codec">The phone\'s audio codecs kept failing, even after restarting them (%1$s). Try again later, or lower “Encoders at once” in Settings.</string>
     <string name="failure_library">The library folder is no longer accessible. Choose it again in Settings.</string>
     <string name="failure_write">Couldn\'t write to the library folder (%1$s).</string>
     <string name="failure_verification">The new file didn\'t pass verification and was discarded. Your library was not changed.</string>
@@ -306,6 +307,17 @@
     <string name="settings_sleep_fade">Fade out</string>
     <string name="settings_sleep_fade_hint">Lower the volume gently before pausing</string>
     <string name="settings_quality">Conversion quality</string>
+    <string name="settings_parallel_books">Books at once</string>
+    <string name="settings_parallel_codecs">Encoders at once</string>
+    <string name="parallel_codecs_auto">Automatic (%1$d)</string>
+    <plurals name="parallel_books">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
+    <plurals name="parallel_codecs">
+        <item quantity="one">%1$d encoder</item>
+        <item quantity="other">%1$d encoders</item>
+    </plurals>
     <string name="settings_mono">Mono</string>
     <string name="settings_mono_hint">Smaller files; fine for most narration</string>
     <string name="settings_auto_cover">Find covers online</string>

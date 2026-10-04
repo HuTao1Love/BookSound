@@ -269,6 +269,7 @@ fun failureMessage(context: Context, failure: ImportFailure): String = when (fai
     is ImportFailure.UnsupportedFormat -> context.getString(R.string.failure_unsupported, failure.fileName ?: failure.detail.orEmpty())
     is ImportFailure.CorruptedInput -> context.getString(R.string.failure_corrupted)
     is ImportFailure.ConversionFailed -> context.getString(R.string.failure_conversion, failure.detail.orEmpty())
+    is ImportFailure.CodecFailure -> context.getString(R.string.failure_codec, failure.detail.orEmpty())
     is ImportFailure.LibraryUnavailable -> context.getString(R.string.failure_library)
     is ImportFailure.WriteFailed -> context.getString(R.string.failure_write, failure.detail.orEmpty())
     is ImportFailure.VerificationFailed -> context.getString(R.string.failure_verification)

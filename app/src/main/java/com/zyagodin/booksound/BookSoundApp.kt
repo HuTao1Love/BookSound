@@ -10,13 +10,13 @@ import com.zyagodin.booksound.data.db.AppDatabase
 import com.zyagodin.booksound.data.library.LibraryRepository
 import com.zyagodin.booksound.data.library.LibraryScanner
 import com.zyagodin.booksound.data.settings.SettingsRepository
-import com.zyagodin.booksound.importer.AudioTranscoder
 import com.zyagodin.booksound.importer.ImportAnalyzer
 import com.zyagodin.booksound.importer.ImportJournal
 import com.zyagodin.booksound.importer.ImportManager
 import com.zyagodin.booksound.importer.ImportPipeline
 import com.zyagodin.booksound.importer.ImportPlanner
 import com.zyagodin.booksound.importer.ImportSessionStore
+import com.zyagodin.booksound.importer.RemoteTranscoder
 import com.zyagodin.booksound.playback.PlayerConnection
 import com.zyagodin.booksound.playback.SleepTimer
 import com.zyagodin.booksound.storage.DocumentStore
@@ -51,6 +51,8 @@ class BookSoundApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // The ":converter" process only runs ConverterService; it needs none of the app.
+        if (getProcessName() != packageName) return
         container = AppContainer(this)
         container.appScope.launch(Dispatchers.IO) {
             // Undo anything an interrupted import left behind before new work starts.
@@ -100,9 +102,15 @@ class AppContainer(app: Application) {
     val importManager: ImportManager = ImportManager(
         context = app,
         scope = appScope,
-        pipeline = ImportPipeline(documents, library, covers, settings, importJournal, AudioTranscoder(app)),
+        pipeline = ImportPipeline(
+            documents, library, covers, settings, importJournal,
+            transcoder = RemoteTranscoder(app),
+            codecLimit = settings.state.map { ImportPipeline.codecLimit(it.parallelCodecs) }
+                .stateIn(appScope, SharingStarted.Eagerly, ImportPipeline.codecLimit(settings.state.value.parallelCodecs)),
+        ),
         documents = documents,
         covers = covers,
+        parallelImports = settings.state.map { it.parallelImports }.stateIn(appScope, SharingStarted.Eagerly, settings.state.value.parallelImports),
         onBookFileChanged = { bookId -> reopenIfPlaying(bookId) },
     )
 

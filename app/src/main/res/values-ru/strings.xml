@@ -275,6 +275,7 @@
     <string name="failure_unsupported">Этот аудиоформат не поддерживается (%1$s).</string>
     <string name="failure_corrupted">Один из исходных файлов повреждён или неполный.</string>
     <string name="failure_conversion">Ошибка конвертации (%1$s).</string>
+    <string name="failure_codec">Аудиокодеки телефона сбоили даже после перезапуска (%1$s). Повторите позже или уменьшите «Кодеков одновременно» в настройках.</string>
     <string name="failure_library">Папка библиотеки больше недоступна. Выберите её снова в настройках.</string>
     <string name="failure_write">Не удалось записать в папку библиотеки (%1$s).</string>
     <string name="failure_verification">Новый файл не прошёл проверку и был удалён. Библиотека не изменилась.</string>
@@ -306,6 +307,21 @@
     <string name="settings_sleep_default">Длительность по умолчанию</string>
     <string name="settings_sleep_fade">Плавное затухание</string>
     <string name="settings_sleep_fade_hint">Мягко убавлять громкость перед паузой</string>
+    <string name="settings_parallel_books">Книг одновременно</string>
+    <string name="settings_parallel_codecs">Кодеков одновременно</string>
+    <string name="parallel_codecs_auto">Авто (%1$d)</string>
+    <plurals name="parallel_books">
+        <item quantity="one">%1$d книга</item>
+        <item quantity="few">%1$d книги</item>
+        <item quantity="many">%1$d книг</item>
+        <item quantity="other">%1$d книги</item>
+    </plurals>
+    <plurals name="parallel_codecs">
+        <item quantity="one">%1$d кодек</item>
+        <item quantity="few">%1$d кодека</item>
+        <item quantity="many">%1$d кодеков</item>
+        <item quantity="other">%1$d кодека</item>
+    </plurals>
     <string name="settings_quality">Качество конвертации</string>
     <string name="settings_mono">Моно</string>
     <string name="settings_mono_hint">Файлы меньше; для чтения обычно достаточно</string>

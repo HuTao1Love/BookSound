@@ -35,27 +35,22 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * Concatenates the input files into one AAC/MP4 file using Media3 Transformer (hardware codecs,
- * no native libraries). With [transmux] the AAC stream is copied instead of re-encoded.
+ * no native libraries), in this process. Imports use it through [RemoteTranscoder], which runs it
+ * in [ConverterService]'s own process.
  */
 @OptIn(UnstableApi::class)
-class AudioTranscoder(private val context: Context) {
+class AudioTranscoder(private val context: Context) : Transcoder {
 
-    data class Result(val durationMs: Long, val sizeBytes: Long)
-
-    /**
-     * [outputSampleRate] / [outputChannels] force one output format (for parts encoded separately
-     * that are joined afterwards); null keeps the input's.
-     */
-    suspend fun run(
+    override suspend fun run(
         inputs: List<Uri>,
         output: File,
         bitrateKbps: Int,
         downmixToMono: Boolean,
         transmux: Boolean,
-        outputSampleRate: Int? = null,
-        outputChannels: Int? = null,
+        outputSampleRate: Int?,
+        outputChannels: Int?,
         onProgress: (Float) -> Unit,
-    ): Result = withContext(Dispatchers.Main) {
+    ): Transcoder.Result = withContext(Dispatchers.Main) {
         output.delete()
         coroutineScope {
             var transformerRef: Transformer? = null
@@ -96,7 +91,7 @@ class AudioTranscoder(private val context: Context) {
                         .setLooper(Looper.getMainLooper())
                         .addListener(object : Transformer.Listener {
                             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                                if (cont.isActive) cont.resume(Result(exportResult.approximateDurationMs, exportResult.fileSizeBytes))
+                                if (cont.isActive) cont.resume(Transcoder.Result(exportResult.approximateDurationMs, exportResult.fileSizeBytes))
                             }
 
                             override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
