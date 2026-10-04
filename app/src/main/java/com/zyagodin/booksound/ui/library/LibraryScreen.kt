@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -41,11 +40,13 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -59,8 +60,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -431,38 +430,29 @@ private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
 
 @Composable
 private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit, onSort: (SortField) -> Unit) {
+    var filterMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.weight(1f)) {
-            items(ProgressFilter.entries.size) { i ->
-                val filter = ProgressFilter.entries[i]
-                FilterChip(
-                    selected = state.filter == filter,
-                    onClick = { onFilter(filter) },
-                    label = { Text(stringResource(filter.label()), style = MaterialTheme.typography.labelMedium) },
-                    shape = Radii.pill,
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.onSurface,
-                        selectedLabelColor = MaterialTheme.colorScheme.surface,
-                    ),
-                    border = null,
-                )
-            }
-        }
         Box {
-            Surface(
-                onClick = { sortMenu = true },
-                shape = Radii.pill,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.padding(start = Spacing.sm).heightIn(min = 40.dp),
-            ) {
-                Row(Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.SwapVert, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(Spacing.xs))
-                    Text(stringResource(state.sort.label()), style = MaterialTheme.typography.labelMedium)
+            MenuPill(Icons.Rounded.FilterList, stringResource(state.filter.label()), onClick = { filterMenu = true })
+            DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, shape = MaterialTheme.shapes.large) {
+                ProgressFilter.entries.forEach { filter ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(filter.label()), style = MaterialTheme.typography.bodyLarge) },
+                        trailingIcon = {
+                            if (state.filter == filter) Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        onClick = {
+                            filterMenu = false
+                            onFilter(filter)
+                        },
+                    )
                 }
             }
+        }
+        Spacer(Modifier.weight(1f))
+        Box {
+            MenuPill(Icons.Rounded.SwapVert, stringResource(state.sort.label()), onClick = { sortMenu = true }, modifier = Modifier.padding(start = Spacing.sm))
             DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }, shape = MaterialTheme.shapes.large) {
                 SortField.entries.forEach { field ->
                     DropdownMenuItem(
@@ -483,6 +473,22 @@ private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit,
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MenuPill(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = Radii.pill,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.heightIn(min = 40.dp),
+    ) {
+        Row(Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Spacing.xs))
+            Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
