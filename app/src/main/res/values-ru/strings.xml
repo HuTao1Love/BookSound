@@ -449,7 +449,8 @@
     <string name="template_add">Добавить шаблон</string>
     <string name="template_hint">Нажмите на шаблон, чтобы заполнить поля. Удерживайте, чтобы удалить.</string>
     <string name="template_dialog_title">Новый шаблон</string>
-    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% — пропустить часть. Остальной текст должен совпадать с названием.</string>
+    <string name="template_help" formatted="false">Выделите часть названия и нажмите поле, чтобы заменить её этим полем (%author%, %title%…). «Пропустить» игнорирует часть. Остальной текст должен совпадать с названием.</string>
+    <string name="template_insert_skip">Пропустить</string>
     <string name="template_no_match">Не подходит к этому названию, но сохранить можно.</string>
     <string name="template_skipped">Пропущено</string>
     <string name="template_delete_title">Удалить шаблон?</string>

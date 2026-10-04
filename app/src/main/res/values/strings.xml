@@ -443,7 +443,8 @@
     <string name="template_add">Add template</string>
     <string name="template_hint">Tap a template to fill in the details. Hold it to delete.</string>
     <string name="template_dialog_title">New template</string>
-    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% to skip a part. Everything else must match the name as written.</string>
+    <string name="template_help" formatted="false">Select a part of the name and tap a field to replace it with that field (%author%, %title%…). “Skip” ignores a part. Everything else must match the name as written.</string>
+    <string name="template_insert_skip">Skip</string>
     <string name="template_no_match">Doesn\'t fit this name, but it can still be saved.</string>
     <string name="template_skipped">Skipped</string>
     <string name="template_delete_title">Delete template?</string>
