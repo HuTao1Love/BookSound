@@ -3,6 +3,7 @@ package com.zyagodin.booksound.torrent
 import com.zyagodin.booksound.core.torrent.TorrentFile
 import org.libtorrent4j.AddTorrentParams
 import org.libtorrent4j.AlertListener
+import org.libtorrent4j.EnumNet
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionHandle
 import org.libtorrent4j.SessionManager
@@ -16,11 +17,16 @@ import org.libtorrent4j.TorrentStatus
 import org.libtorrent4j.alerts.AddTorrentAlert
 import org.libtorrent4j.alerts.Alert
 import org.libtorrent4j.alerts.AlertType
+import org.libtorrent4j.alerts.DhtBootstrapAlert
 import org.libtorrent4j.alerts.FileErrorAlert
+import org.libtorrent4j.alerts.ListenFailedAlert
+import org.libtorrent4j.alerts.ListenSucceededAlert
 import org.libtorrent4j.alerts.SaveResumeDataAlert
 import org.libtorrent4j.alerts.TorrentErrorAlert
+import org.libtorrent4j.alerts.TrackerAnnounceAlert
 import org.libtorrent4j.alerts.TrackerErrorAlert
 import org.libtorrent4j.alerts.TrackerReplyAlert
+import org.libtorrent4j.alerts.TrackerWarningAlert
 import java.io.File
 
 /** Metadata of a torrent, read from .torrent bytes. */
@@ -78,6 +84,12 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             AlertType.ADD_TORRENT.swig(),
             AlertType.TRACKER_ERROR.swig(),
             AlertType.TRACKER_REPLY.swig(),
+            // Diagnostics only: why a torrent finds no peers.
+            AlertType.TRACKER_ANNOUNCE.swig(),
+            AlertType.TRACKER_WARNING.swig(),
+            AlertType.LISTEN_SUCCEEDED.swig(),
+            AlertType.LISTEN_FAILED.swig(),
+            AlertType.DHT_BOOTSTRAP.swig(),
         )
 
         override fun alert(alert: Alert<*>) {
@@ -88,7 +100,19 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
                         trackerErrors[hashOf(alert.handle())] = message
                         log("Tracker ${alert.trackerUrl()} failed: $message", null)
                     }
-                    is TrackerReplyAlert -> trackerErrors.remove(hashOf(alert.handle()))
+                    is TrackerReplyAlert -> {
+                        trackerErrors.remove(hashOf(alert.handle()))
+                        log("Tracker ${alert.trackerUrl()} replied: ${alert.numPeers()} peers", null)
+                    }
+                    is TrackerAnnounceAlert -> log("Announcing to ${alert.trackerUrl()} from ${alert.localEndpoint()}", null)
+                    is TrackerWarningAlert -> log("Tracker ${alert.trackerUrl()} warning: ${alert.warningMessage()}", null)
+                    is ListenSucceededAlert -> log("Listening on ${alert.address()}:${alert.port()} (${alert.socketType()})", null)
+                    is ListenFailedAlert -> log(
+                        "Could not listen on ${alert.listenInterface()} ${alert.address()}:${alert.port()} (${alert.socketType()}): " +
+                            "${alert.operation()} ${alert.error().message}",
+                        null,
+                    )
+                    is DhtBootstrapAlert -> log("DHT bootstrapped", null)
                     is SaveResumeDataAlert -> {
                         val bytes = AddTorrentParams.writeResumeDataBuf(alert.params())
                         listener?.invoke(Event.ResumeData(hashOf(alert.handle()), bytes))
@@ -135,6 +159,36 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
         params.setPosixDiskIO()
         session.addListener(alerts)
         session.start(params)
+        log("Session started, interfaces: " + interfaces(), null)
+    }
+
+    /** Network interfaces as libtorrent sees them; empty when it can't enumerate them. */
+    private fun interfaces(): String = runCatching {
+        EnumNet.enumInterfaces(session.swig()).joinToString { "${it.name()} ${it.interfaceAddress()}" }.ifEmpty { "none" }
+    }.getOrElse { "failed: ${it.message}" }
+
+    /** One-paragraph state of the session and every torrent, for the debug log. */
+    fun diagnostics(): String {
+        if (!session.isRunning) return "Session stopped"
+        session.postSessionStats()
+        val torrents = handles().filter { it.isValid }.joinToString("\n") { h ->
+            val s = h.status()
+            val trackers = runCatching {
+                h.trackers().joinToString { t ->
+                    val endpoints = t.endpoints().joinToString { e ->
+                        val ih = e.infohashV1()
+                        "${e.localEndpoint()} fails=${ih.fails()} working=${ih.isWorking} ${ih.message()}".trim()
+                    }
+                    "${t.url()} [$endpoints]"
+                }
+            }.getOrElse { "failed: ${it.message}" }
+            "  ${hashOf(h).take(8)} ${s.state()} paused=${s.flags().and_(TorrentFlags.PAUSED).non_zero()} " +
+                "peers=${s.numPeers()} known=${s.listPeers()} candidates=${s.connectCandidates()} " +
+                "scrape=${s.numComplete()}/${s.numIncomplete()} trackers=${s.announcingToTrackers()} dht=${s.announcingToDht()} " +
+                "error=${s.errorCode().takeIf { it.isError }?.message} trackers: $trackers"
+        }
+        return "Session paused=${session.isPaused} listen=${session.listenEndpoints()} dhtRunning=${session.isDhtRunning} " +
+            "dhtNodes=${session.dhtNodes()} external=${session.externalAddress()} interfaces: ${interfaces()}\n$torrents"
     }
 
     /** Saves DHT state and stops the session; torrents must have saved their resume data before. */
