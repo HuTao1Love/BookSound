@@ -12,9 +12,9 @@ cover, tags) in a folder you choose. No account, no server, no cloud.
 
 ## Screenshots
 
-| Library | Grid view | Book |
+| Library | Series | Book |
 |:---:|:---:|:---:|
-| <img src="screenshots/library.png" width="250" alt="Library with a series"> | <img src="screenshots/grid.png" width="250" alt="Library grid view"> | <img src="screenshots/detail.png" width="250" alt="Book details"> |
+| <img src="screenshots/library.png" width="250" alt="Library with a series"> | <img src="screenshots/series.png" width="250" alt="Series screen"> | <img src="screenshots/detail.png" width="250" alt="Book details"> |
 
 | Player | Narrator's voice | Sleep timer |
 |:---:|:---:|:---:|
@@ -40,7 +40,8 @@ cover, tags) in a folder you choose. No account, no server, no cloud.
 - **Torrents done carefully.** Only audiobook-shaped torrents are accepted, only the audio and
   cover files are downloaded, nothing is seeded, and downloads survive restarts and lost
   connections.
-- **Series.** Books in a series are grouped together and shown in order.
+- **Series.** Books in a series are grouped together in the library and have their own screen
+  that shows them in order and plays the next unfinished one.
 - **A proper player.** Background playback with notification, lock screen and Bluetooth
   controls, chapters, per-book speed, sleep timer (minutes, end of chapter or book, with fade-out
   and shake to start it over), smart rewind after a pause, and voice equalizer presets for the
@@ -53,65 +54,9 @@ cover, tags) in a folder you choose. No account, no server, no cloud.
 
 Android 13 (API 33) or newer.
 
-## Install
-
-Download the latest `BookSound-*.apk` from
-[Releases](https://github.com/HuTao1Love/BookSound/releases) and open it on your phone. Every
-release is signed with the same key, so a new APK installs over the previous one.
-
-## Building
-
-You need a recent JDK (the Gradle daemon asks for JDK 25; Android Studio's bundled runtime
-works) and the Android SDK.
-
-```bash
-./gradlew :core:test :app:assembleDebug
-```
-
-The debug APK ends up in `app/build/outputs/apk/debug/`.
-
-### Project layout
+## Project layout
 
 | Module | Contents |
 |---|---|
 | `:core` | Pure Kotlin/JVM, no Android: MP4/ID3/MP3 parsing, M4B tag and chapter writer, metadata guessing, file naming and library layout, search/sort/series grouping, torrent validation, sync contracts. |
 | `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Jetpack Compose UI. |
-
-### Signed release builds
-
-`.github/workflows/release.yml` runs the `:core` tests, builds a signed APK and publishes it:
-
-- every push to `main` becomes a release tagged `<appVersion>.<run number>` (`appVersion` is in
-  `gradle.properties`);
-- a release published by hand gets its APK attached (tag `v1.2` → `BookSound-1.2.apk`);
-- a manual run (Actions → Release APK → Run workflow) keeps the APK as a workflow artifact.
-
-It needs these repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret | Value |
-|---|---|
-| `KEYSTORE_BASE64` | the release keystore, base64-encoded |
-| `KEYSTORE_PASSWORD` | the keystore password |
-| `KEY_ALIAS` | the key alias |
-| `KEY_PASSWORD` | the key password |
-| `GOOGLE_BOOKS_API_KEY` | optional, enables Google Books cover search |
-
-Create a keystore once with `keytool` (it ships with the JDK, and with Android Studio under
-`jbr/bin`):
-
-```bash
-keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
-```
-
-Keep the keystore and its password safe and out of the repository: Android only installs an
-update signed with the same key.
-
-To build the same signed APK locally, add this to `local.properties` and run
-`./gradlew :app:assembleRelease`:
-
-```properties
-signing.storeFile=/path/to/booksound.jks
-signing.storePassword=...
-signing.keyAlias=booksound
-signing.keyPassword=...
-```
