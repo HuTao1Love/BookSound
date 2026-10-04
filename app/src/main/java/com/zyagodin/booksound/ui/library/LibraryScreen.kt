@@ -59,6 +59,8 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -101,8 +103,8 @@ import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.data.settings.LibraryLayoutMode
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
-import com.zyagodin.booksound.ui.torrent.TorrentBanner
 import com.zyagodin.booksound.importer.ImportService
+import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.AppBottomSheet
@@ -212,16 +214,12 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onSort = vm::setSort,
                         onToggleLayout = vm::toggleLayout,
                         onSettings = navigator::openSettings,
+                        onDownloads = { navigator.openImports() },
                     )
                 }
                 if (state.activeImports.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "imports") {
                         ImportBanner(state.activeImports, onClick = { navigator.openImports() })
-                    }
-                }
-                if (state.activeTorrents.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "torrents") {
-                        TorrentBanner(state.activeTorrents, onClick = { navigator.openImports() })
                     }
                 }
                 state.continueListening?.let { item ->
@@ -375,6 +373,7 @@ private fun LibraryHeader(
     onSort: (SortField) -> Unit,
     onToggleLayout: () -> Unit,
     onSettings: () -> Unit,
+    onDownloads: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = Spacing.lg)) {
@@ -406,6 +405,7 @@ private fun LibraryHeader(
                     ),
                 )
             }
+            DownloadsButton(state, onDownloads)
             IconButton(onClick = onSettings) {
                 Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.settings_title))
             }
@@ -445,6 +445,33 @@ private fun LibraryHeader(
             Spacer(Modifier.height(Spacing.md))
             FilterRow(state, onFilter, onSort)
             Spacer(Modifier.height(Spacing.sm))
+        }
+    }
+}
+
+/**
+ * Opens the downloads. The badge counts torrents in progress (the books of one torrent count once)
+ * and turns to the accent colour when one waits for its details to be reviewed.
+ */
+@Composable
+private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
+    val torrents = state.activeTorrents
+    val downloads = torrents.distinctBy { it.record.downloadKey }.size
+    val needsReview = torrents.any {
+        !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED)
+    }
+    IconButton(onClick = onClick) {
+        BadgedBox(
+            badge = {
+                if (downloads > 0) {
+                    Badge(
+                        containerColor = if (needsReview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (needsReview) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                    ) { Text("$downloads") }
+                }
+            },
+        ) {
+            Icon(Icons.Rounded.Download, contentDescription = stringResource(R.string.torrents_section))
         }
     }
 }

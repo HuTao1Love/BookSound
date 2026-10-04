@@ -400,7 +400,6 @@
     <string name="torrent_downloaded">Downloaded</string>
     <string name="torrent_book_of">Book %1$d of “%2$s”</string>
     <string name="torrent_review_needed">Review the details: the book is converted after you confirm them.</string>
-    <string name="torrent_review_needed_short">Review needed: %1$s</string>
     <string name="torrent_waiting_review">Downloaded. Review the details to start the conversion.</string>
     <string name="torrent_editing">Waiting until you finish editing</string>
     <string name="torrent_verifying">Checking the audiobook</string>
@@ -424,10 +423,6 @@
     <plurals name="torrent_more_downloading">
         <item quantity="one">+%1$d more</item>
         <item quantity="other">+%1$d more</item>
-    </plurals>
-    <plurals name="torrent_banner_many">
-        <item quantity="one">%1$d torrent</item>
-        <item quantity="other">%1$d torrents</item>
     </plurals>
 
     <!-- Cover crop -->

@@ -36,6 +36,8 @@ covers, 32 sheets; pill buttons. Material Symbols Rounded. Touch targets ≥ 48 
 ## Library
 
 Three layouts (toggle in the top bar): **Series** (default), Grid, List.
+The top bar also holds a downloads button: its badge counts torrents in progress and turns to
+the accent colour when one waits for its details to be reviewed.
 Series view is a vertical list: first "Without series" (shelf of standalone books), then one card
 per series with stacked-cover emblem, authors, book count, total length, finished count, overall
 progress and a carousel ordered by book number (#1, #2…). Search, filters and sort apply to all

@@ -402,7 +402,6 @@
     <string name="torrent_downloaded">Загружено</string>
     <string name="torrent_book_of">Книга %1$d из «%2$s»</string>
     <string name="torrent_review_needed">Проверьте данные: книга будет сконвертирована после подтверждения.</string>
-    <string name="torrent_review_needed_short">Нужна проверка: %1$s</string>
     <string name="torrent_waiting_review">Загружено. Проверьте данные, чтобы начать конвертацию.</string>
     <string name="torrent_editing">Ждём, пока вы закончите редактирование</string>
     <string name="torrent_verifying">Проверка аудиокниги</string>
@@ -428,12 +427,6 @@
         <item quantity="few">ещё %1$d</item>
         <item quantity="many">ещё %1$d</item>
         <item quantity="other">ещё %1$d</item>
-    </plurals>
-    <plurals name="torrent_banner_many">
-        <item quantity="one">%1$d торрент</item>
-        <item quantity="few">%1$d торрента</item>
-        <item quantity="many">%1$d торрентов</item>
-        <item quantity="other">%1$d торрента</item>
     </plurals>
 
     <!-- Обрезка обложки -->
