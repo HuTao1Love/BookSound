@@ -34,8 +34,6 @@
     <string name="action_rescan">Пересканировать</string>
     <string name="action_restore">Вернуть</string>
     <string name="action_forget">Забыть</string>
-    <string name="action_show_grid">Показать сеткой</string>
-    <string name="action_show_list">Показать списком</string>
     <string name="action_save_changes">Сохранить</string>
     <string name="action_discard">Отменить</string>
     <string name="action_keep_editing">Продолжить</string>
@@ -89,7 +87,7 @@
     <string name="state_file_missing">Файл не найден</string>
 
     <string name="library_title">Библиотека</string>
-    <string name="library_search_hint">Название, автор, чтец, серия</string>
+    <string name="library_search_hint">Поиск</string>
     <string name="library_empty_title">Полка пока пуста</string>
     <string name="library_empty_message">Импортируйте файл M4B или папку с MP3. BookSound соберёт из них одну книгу с главами и сохранит её в папке библиотеки.</string>
     <string name="library_no_results_title">Ничего не найдено</string>
@@ -337,7 +335,6 @@
     <string name="onboarding_folder_lost">Нет доступа к папке с книгами. Выберите её снова, прогресс не потеряется.</string>
     <string name="onboarding_permission_failed">Эту папку выбрать нельзя. Попробуйте другую.</string>
     <string name="series_finished_of">%1$d/%2$d прослушано</string>
-    <string name="action_show_series">Показать по сериям</string>
     <string name="action_open_series">Открыть серию</string>
     <string name="series_up_next">Далее: %1$s</string>
     <string name="series_empty_title">В серии нет книг</string>

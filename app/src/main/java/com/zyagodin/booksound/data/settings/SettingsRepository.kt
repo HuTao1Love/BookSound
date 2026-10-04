@@ -25,9 +25,6 @@ import java.util.UUID
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-/** SERIES groups books into a vertical list of series (books without a series first). */
-enum class LibraryLayoutMode { SERIES, GRID, LIST }
-
 data class AppSettings(
     val libraryTreeUri: String? = null,
     val themeMode: ThemeMode = ThemeMode.DARK,
@@ -55,7 +52,6 @@ data class AppSettings(
     val librarySort: SortField = SortField.RECENT,
     val libraryDescending: Boolean = true,
     val libraryFilter: ProgressFilter = ProgressFilter.ALL,
-    val libraryLayout: LibraryLayoutMode = LibraryLayoutMode.SERIES,
     val lastBookId: String? = null,
     /** The "let BookSound run in the background" question was answered; don't ask again. */
     val backgroundPromptShown: Boolean = false,
@@ -104,7 +100,6 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val sort = stringPreferencesKey("library_sort")
         val descending = booleanPreferencesKey("library_descending")
         val filter = stringPreferencesKey("library_filter")
-        val layout = stringPreferencesKey("library_layout")
         val lastBook = stringPreferencesKey("last_book_id")
         val backgroundPrompt = booleanPreferencesKey("background_prompt_shown")
         val deviceId = stringPreferencesKey("device_id")
@@ -135,7 +130,6 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             librarySort = enumOrDefault(p[Keys.sort], SortField.RECENT),
             libraryDescending = p[Keys.descending] ?: true,
             libraryFilter = enumOrDefault(p[Keys.filter], ProgressFilter.ALL),
-            libraryLayout = enumOrDefault(p[Keys.layout], LibraryLayoutMode.SERIES),
             lastBookId = p[Keys.lastBook],
             backgroundPromptShown = p[Keys.backgroundPrompt] ?: false,
             nameTemplates = p[Keys.nameTemplates]?.split(TEMPLATE_SEPARATOR)?.filter { it.isNotBlank() } ?: NameTemplate.DEFAULTS,
@@ -176,7 +170,6 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         it[Keys.descending] = descending
     }
     suspend fun setLibraryFilter(filter: ProgressFilter) = edit { it[Keys.filter] = filter.name }
-    suspend fun setLibraryLayout(layout: LibraryLayoutMode) = edit { it[Keys.layout] = layout.name }
     suspend fun setNameTemplates(templates: List<String>) = edit {
         it[Keys.nameTemplates] = templates.map { t -> t.replace(TEMPLATE_SEPARATOR, " ") }.joinToString(TEMPLATE_SEPARATOR)
     }

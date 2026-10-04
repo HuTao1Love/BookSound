@@ -37,8 +37,6 @@
     <string name="action_rescan">Rescan</string>
     <string name="action_restore">Restore</string>
     <string name="action_forget">Forget</string>
-    <string name="action_show_grid">Show as grid</string>
-    <string name="action_show_list">Show as list</string>
     <string name="action_save_changes">Save changes</string>
     <string name="action_discard">Discard</string>
     <string name="action_keep_editing">Keep editing</string>
@@ -89,7 +87,7 @@
 
     <!-- Library -->
     <string name="library_title">Library</string>
-    <string name="library_search_hint">Title, author, narrator, series</string>
+    <string name="library_search_hint">Search</string>
     <string name="library_empty_title">Your shelf is empty</string>
     <string name="library_empty_message">Import an M4B file or a folder of MP3s. BookSound turns it into a single audiobook with chapters and keeps it in your library folder.</string>
     <string name="library_no_results_title">Nothing found</string>
@@ -337,7 +335,6 @@
     <string name="onboarding_folder_lost">BookSound can\'t open your library folder anymore. Pick it again, your progress is safe.</string>
     <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
-    <string name="action_show_series">Show by series</string>
     <string name="action_open_series">Open series</string>
     <string name="series_up_next">Up next: %1$s</string>
     <string name="series_empty_title">No books in this series</string>

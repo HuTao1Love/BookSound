@@ -100,58 +100,6 @@ fun remainingLabel(item: LibraryItem): String {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookGridCard(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
-    val meta = item.metadata
-    Column(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick, role = Role.Button)
-            .padding(Spacing.xs),
-    ) {
-        Box {
-            BookCover(item.coverPath, meta.title, meta.author, Modifier.fillMaxWidth(), elevation = 6.dp)
-            StatusBadge(item, Modifier.align(Alignment.TopEnd).padding(Spacing.sm))
-            if (item.entry.positionMs > 0 && !item.entry.finished) {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                ) {
-                    BookProgressBar(
-                        item.entry.progress,
-                        Modifier.padding(horizontal = Spacing.sm, vertical = 7.dp),
-                        height = 3.dp,
-                        trackColor = Color.White.copy(alpha = 0.3f),
-                        color = Color.White,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(Spacing.sm))
-        Text(
-            titleWithSeries(meta.title, meta.series, meta.seriesIndex),
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = MaterialTheme.typography.titleSmall.fontSize),
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        meta.author?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        // The series is already in front of the title unless the title names it itself.
-        val series = seriesLabel(meta.series, meta.seriesIndex).takeUnless { showsSeriesInTitle(meta.title, meta.series) }
-        Text(
-            listOfNotNull(series, remainingLabel(item)).joinToString(" · "),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
 fun BookListRow(
     item: LibraryItem,
     onClick: () -> Unit,

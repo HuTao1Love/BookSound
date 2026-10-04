@@ -37,19 +37,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
-import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AudioFile
-import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
@@ -85,6 +82,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -98,7 +97,6 @@ import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
-import com.zyagodin.booksound.data.settings.LibraryLayoutMode
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.importer.ImportService
@@ -107,8 +105,6 @@ import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.AppBottomSheet
 import com.zyagodin.booksound.ui.components.BookCover
-import com.zyagodin.booksound.ui.components.BookGridCard
-import com.zyagodin.booksound.ui.components.BookListRow
 import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.GradientCircleButton
 import com.zyagodin.booksound.ui.components.LoadingDots
@@ -186,20 +182,16 @@ fun LibraryScreen(navigator: AppNavigator) {
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             val gridState = rememberLazyGridState()
-            val cells = when (state.layout) {
-                LibraryLayoutMode.GRID -> GridCells.Adaptive(if (window.isCompact) 148.dp else 168.dp)
-                LibraryLayoutMode.LIST -> GridCells.Adaptive(360.dp)
-                LibraryLayoutMode.SERIES -> GridCells.Adaptive(520.dp)
-            }
             LazyVerticalGrid(
-                columns = cells,
+                // Series cards, two side by side on wide windows.
+                columns = GridCells.Adaptive(520.dp),
                 state = gridState,
                 contentPadding = PaddingValues(
                     start = Spacing.lg, end = Spacing.lg,
                     bottom = Spacing.xxxl + 56.dp + bottomOverlay + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
                 ),
-                horizontalArrangement = Arrangement.spacedBy(if (state.layout == LibraryLayoutMode.LIST) Spacing.sm else Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(if (state.layout == LibraryLayoutMode.GRID) Spacing.lg else Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
@@ -208,7 +200,6 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onSearch = vm::setQuery,
                         onFilter = vm::setFilter,
                         onSort = vm::setSort,
-                        onToggleLayout = vm::toggleLayout,
                         onSettings = navigator::openSettings,
                         onDownloads = { navigator.openImports() },
                     )
@@ -241,7 +232,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                             modifier = Modifier.heightIn(min = 320.dp),
                         )
                     }
-                    state.layout == LibraryLayoutMode.SERIES -> items(state.groups, key = { "series:" + (it.series ?: "") }) { section ->
+                    else -> items(state.groups, key = { "series:" + (it.series ?: "") }) { section ->
                         SeriesSectionView(
                             section = section,
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
@@ -250,27 +241,6 @@ fun LibraryScreen(navigator: AppNavigator) {
                             onOpenSeries = navigator::openSeries,
                             modifier = Modifier.animateItem(),
                         )
-                    }
-                    else -> items(state.items, key = { it.id }) { item ->
-                        if (state.layout == LibraryLayoutMode.GRID) {
-                            BookGridCard(
-                                item = item,
-                                onClick = { navigator.openBook(item.id) },
-                                onLongClick = { actionsFor = item.id },
-                                modifier = Modifier.animateItem(),
-                            )
-                        } else {
-                            BookListRow(
-                                item = item,
-                                onClick = { navigator.openBook(item.id) },
-                                onLongClick = { actionsFor = item.id },
-                                onPlay = {
-                                    vm.play(item)
-                                    navigator.openPlayer()
-                                },
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
                     }
                 }
             }
@@ -355,11 +325,21 @@ private fun LibraryHeader(
     onSearch: (String) -> Unit,
     onFilter: (ProgressFilter) -> Unit,
     onSort: (SortField) -> Unit,
-    onToggleLayout: () -> Unit,
     onSettings: () -> Unit,
     onDownloads: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
+    // Search hides behind a button in the top bar; it stays open while it holds text.
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var text by rememberSaveable { mutableStateOf(state.query) }
+    val searchShown = searching || text.isNotEmpty()
+    val focusRequester = remember { FocusRequester() }
+    fun closeSearch() {
+        text = ""
+        onSearch("")
+        searching = false
+        focus.clearFocus()
+    }
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = Spacing.lg)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = Spacing.xs)) {
             Column(Modifier.weight(1f)) {
@@ -372,31 +352,22 @@ private fun LibraryHeader(
                     )
                 }
             }
-            IconButton(onClick = onToggleLayout) {
-                // Shows the mode the button switches to: series → grid → list → series.
-                Icon(
-                    when (state.layout) {
-                        LibraryLayoutMode.SERIES -> Icons.Rounded.GridView
-                        LibraryLayoutMode.GRID -> Icons.AutoMirrored.Rounded.ViewList
-                        LibraryLayoutMode.LIST -> Icons.Rounded.AutoStories
-                    },
-                    contentDescription = stringResource(
-                        when (state.layout) {
-                            LibraryLayoutMode.SERIES -> R.string.action_show_grid
-                            LibraryLayoutMode.GRID -> R.string.action_show_list
-                            LibraryLayoutMode.LIST -> R.string.action_show_series
-                        },
-                    ),
-                )
+            if (state.totalCount > 0) {
+                IconButton(onClick = { if (searchShown) closeSearch() else searching = true }) {
+                    Icon(
+                        if (searchShown) Icons.Rounded.SearchOff else Icons.Rounded.Search,
+                        contentDescription = stringResource(R.string.library_search_hint),
+                    )
+                }
             }
             DownloadsButton(state, onDownloads)
             IconButton(onClick = onSettings) {
                 Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.settings_title))
             }
         }
-        if (state.totalCount > 0) {
+        if (state.totalCount > 0 && searchShown) {
             Spacer(Modifier.height(Spacing.lg))
-            var text by rememberSaveable { mutableStateOf(state.query) }
+            LaunchedEffect(Unit) { if (text.isEmpty()) runCatching { focusRequester.requestFocus() } }
             TextField(
                 value = text,
                 onValueChange = {
@@ -407,11 +378,7 @@ private fun LibraryHeader(
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (text.isNotEmpty()) {
-                        IconButton(onClick = {
-                            text = ""
-                            onSearch("")
-                            focus.clearFocus()
-                        }) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.action_clear)) }
+                        IconButton(onClick = ::closeSearch) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.action_clear)) }
                     }
                 },
                 singleLine = true,
@@ -424,8 +391,10 @@ private fun LibraryHeader(
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 textStyle = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
             )
+        }
+        if (state.totalCount > 0) {
             Spacer(Modifier.height(Spacing.md))
             FilterRow(state, onFilter, onSort)
             Spacer(Modifier.height(Spacing.sm))

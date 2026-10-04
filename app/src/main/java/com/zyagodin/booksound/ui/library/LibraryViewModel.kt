@@ -13,7 +13,6 @@ import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.library.defaultDescending
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
-import com.zyagodin.booksound.data.settings.LibraryLayoutMode
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.torrent.TorrentItem
@@ -34,7 +33,6 @@ data class LibraryUiState(
     val sort: SortField = SortField.RECENT,
     val descending: Boolean = true,
     val filter: ProgressFilter = ProgressFilter.ALL,
-    val layout: LibraryLayoutMode = LibraryLayoutMode.GRID,
     val activeImports: List<ImportJob> = emptyList(),
     /** Torrents still downloading, waiting for review or being converted. */
     val activeTorrents: List<TorrentItem> = emptyList(),
@@ -71,11 +69,9 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         val libraryQuery = LibraryQuery(q, settings.librarySort, settings.libraryDescending, settings.libraryFilter)
         val byId = items.associateBy { it.id }
         val ordered = LibrarySearch.apply(items.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
-        val groups = if (settings.libraryLayout == LibraryLayoutMode.SERIES) {
-            LibrarySearch.groupBySeries(ordered.map { it.entry }).map { g ->
-                SeriesSection(g.series, g.entries.mapNotNull { byId[it.book.id.value] }, g)
-            }
-        } else emptyList()
+        val groups = LibrarySearch.groupBySeries(ordered.map { it.entry }).map { g ->
+            SeriesSection(g.series, g.entries.mapNotNull { byId[it.book.id.value] }, g)
+        }
         LibraryUiState(
             loading = false,
             items = ordered,
@@ -84,7 +80,6 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             sort = settings.librarySort,
             descending = settings.libraryDescending,
             filter = settings.libraryFilter,
-            layout = settings.libraryLayout,
             // Torrent conversions are shown in the downloads.
             activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
             activeTorrents = torrents.filter { it.record.isActive },
@@ -105,14 +100,6 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setFilter(filter: ProgressFilter) = viewModelScope.launch { container.settings.setLibraryFilter(filter) }
 
-    fun toggleLayout() = viewModelScope.launch {
-        val next = when (container.settings.state.value.libraryLayout) {
-            LibraryLayoutMode.SERIES -> LibraryLayoutMode.GRID
-            LibraryLayoutMode.GRID -> LibraryLayoutMode.LIST
-            LibraryLayoutMode.LIST -> LibraryLayoutMode.SERIES
-        }
-        container.settings.setLibraryLayout(next)
-    }
 
     fun refresh() = viewModelScope.launch {
         _events.emit(LibraryEvent.ScanFinished(container.scanner.scan()))
