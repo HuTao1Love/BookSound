@@ -60,6 +60,7 @@ class ImportService : Service() {
         }
         if (!enterForeground()) {
             // The import still runs while the app process lives; only background survival is lost.
+            // Started with a plain startService(), so stopping without the foreground is allowed.
             stopSelf()
             return START_NOT_STICKY
         }

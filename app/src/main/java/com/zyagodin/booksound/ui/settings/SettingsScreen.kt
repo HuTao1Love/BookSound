@@ -40,6 +40,8 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Replay
@@ -70,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -78,6 +81,7 @@ import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.BuildConfigInfo
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.importer.ImportPipeline
 import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.data.settings.AppSettings
@@ -138,9 +142,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setBitrate(v: Int) = viewModelScope.launch { s.setEncoderBitrate(v) }
     fun setMono(v: Boolean) = viewModelScope.launch { s.setDownmixToMono(v) }
     fun setAutoCover(v: Boolean) = viewModelScope.launch { s.setAutoCoverSearch(v) }
+    fun setParallelImports(v: Int) = viewModelScope.launch { s.setParallelImports(v) }
+    fun setParallelCodecs(v: Int) = viewModelScope.launch { s.setParallelCodecs(v) }
 }
 
-private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE }
+private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS }
 
 @Composable
 fun SettingsScreen(navigator: AppNavigator) {
@@ -215,6 +221,8 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Item(Icons.Rounded.GraphicEq, stringResource(R.string.settings_quality), bitrateLabel(settings.encoderBitrateKbps), onClick = { choice = ChoiceKind.BITRATE })
                             Toggle(Icons.Rounded.Speaker, stringResource(R.string.settings_mono), stringResource(R.string.settings_mono_hint), settings.downmixToMono, vm::setMono)
                             Toggle(Icons.Rounded.ImageSearch, stringResource(R.string.settings_auto_cover), stringResource(R.string.settings_auto_cover_hint), settings.autoCoverSearch, vm::setAutoCover)
+                            Item(Icons.Rounded.Layers, stringResource(R.string.settings_parallel_books), parallelBooksLabel(settings.parallelImports), onClick = { choice = ChoiceKind.PARALLEL_BOOKS })
+                            Item(Icons.Rounded.Memory, stringResource(R.string.settings_parallel_codecs), parallelCodecsLabel(settings.parallelCodecs), onClick = { choice = ChoiceKind.PARALLEL_CODECS })
                             Item(
                                 Icons.Rounded.BatteryFull,
                                 stringResource(R.string.settings_background),
@@ -282,6 +290,8 @@ fun SettingsScreen(navigator: AppNavigator) {
         ChoiceKind.REWIND_AFTER -> OptionsSheet(stringResource(R.string.settings_smart_rewind_after), listOf(10, 30, 60, 300, 900, 1800), settings.smartRewindAfterSeconds, { pauseLabel(it) }, { vm.setSmartRewindAfter(it); choice = null }) { choice = null }
         ChoiceKind.VOICE -> OptionsSheet(stringResource(R.string.settings_voice_default), VoicePreset.entries, settings.voicePreset, { voicePresetName(it) }, { vm.setVoicePreset(it); choice = null }) { choice = null }
         ChoiceKind.BITRATE -> OptionsSheet(stringResource(R.string.settings_quality), listOf(48, 64, 96, 128), settings.encoderBitrateKbps, { bitrateLabel(it) }, { vm.setBitrate(it); choice = null }) { choice = null }
+        ChoiceKind.PARALLEL_BOOKS -> OptionsSheet(stringResource(R.string.settings_parallel_books), listOf(1, 2, 3), settings.parallelImports, { parallelBooksLabel(it) }, { vm.setParallelImports(it); choice = null }) { choice = null }
+        ChoiceKind.PARALLEL_CODECS -> OptionsSheet(stringResource(R.string.settings_parallel_codecs), listOf(0, 1, 2, 3, 4), settings.parallelCodecs, { parallelCodecsLabel(it) }, { vm.setParallelCodecs(it); choice = null }) { choice = null }
         null -> Unit
     }
 }
@@ -289,6 +299,15 @@ fun SettingsScreen(navigator: AppNavigator) {
 @Composable
 private fun pauseLabel(seconds: Int): String =
     if (seconds < 60) stringResource(R.string.seconds_value, seconds) else stringResource(R.string.minutes_short, seconds / 60)
+
+@Composable
+private fun parallelBooksLabel(books: Int): String = pluralStringResource(R.plurals.parallel_books, books, books)
+
+/** 0 is automatic: half the CPU cores, 2 to 4. */
+@Composable
+private fun parallelCodecsLabel(codecs: Int): String =
+    if (codecs <= 0) stringResource(R.string.parallel_codecs_auto, ImportPipeline.AUTO_CODECS)
+    else pluralStringResource(R.plurals.parallel_codecs, codecs, codecs)
 
 @Composable
 private fun bitrateLabel(kbps: Int): String = stringResource(
