@@ -35,7 +35,6 @@ data class LibraryUiState(
     val descending: Boolean = true,
     val filter: ProgressFilter = ProgressFilter.ALL,
     val layout: LibraryLayoutMode = LibraryLayoutMode.GRID,
-    val continueListening: LibraryItem? = null,
     val activeImports: List<ImportJob> = emptyList(),
     /** Torrents still downloading, waiting for review or being converted. */
     val activeTorrents: List<TorrentItem> = emptyList(),
@@ -77,9 +76,6 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
                 SeriesSection(g.series, g.entries.mapNotNull { byId[it.book.id.value] }, g)
             }
         } else emptyList()
-        val continueItem = items
-            .filter { !it.entry.finished && it.entry.positionMs > 0 && it.entry.lastPlayedAt != null && !it.isMissing }
-            .maxByOrNull { it.entry.lastPlayedAt!! }
         LibraryUiState(
             loading = false,
             items = ordered,
@@ -89,8 +85,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             descending = settings.libraryDescending,
             filter = settings.libraryFilter,
             layout = settings.libraryLayout,
-            continueListening = continueItem.takeIf { q.isBlank() && settings.libraryFilter == ProgressFilter.ALL },
-            // Torrent conversions are shown by the torrent banner.
+            // Torrent conversions are shown in the downloads.
             activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
             activeTorrents = torrents.filter { it.record.isActive },
             scanning = scanning,

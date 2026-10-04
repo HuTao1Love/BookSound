@@ -25,9 +25,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -112,14 +110,12 @@ import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.BookGridCard
 import com.zyagodin.booksound.ui.components.BookListRow
 import com.zyagodin.booksound.ui.components.BookProgressBar
-import com.zyagodin.booksound.ui.components.CoverBackdrop
 import com.zyagodin.booksound.ui.components.GradientCircleButton
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SheetAction
-import com.zyagodin.booksound.ui.components.remainingLabel
 import com.zyagodin.booksound.ui.components.titleWithSeries
 import com.zyagodin.booksound.ui.components.rememberWindowLayout
 import com.zyagodin.booksound.ui.navigation.appViewModel
@@ -220,18 +216,6 @@ fun LibraryScreen(navigator: AppNavigator) {
                 if (state.activeImports.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "imports") {
                         ImportBanner(state.activeImports, onClick = { navigator.openImports() })
-                    }
-                }
-                state.continueListening?.let { item ->
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "continue") {
-                        ContinueListeningCard(
-                            item = item,
-                            onOpen = { navigator.openBook(item.id) },
-                            onPlay = {
-                                vm.play(item)
-                                navigator.openPlayer()
-                            },
-                        )
                     }
                 }
                 when {
@@ -549,50 +533,6 @@ private fun SortField.label(): Int = when (this) {
     SortField.SERIES -> R.string.sort_series
     SortField.DURATION -> R.string.sort_duration
     SortField.PROGRESS -> R.string.sort_progress
-}
-
-/** A slim "pick up where you left off" strip: small cover, title, progress and a play button. */
-@Composable
-private fun ContinueListeningCard(item: LibraryItem, onOpen: () -> Unit, onPlay: () -> Unit) {
-    Surface(
-        onClick = onOpen,
-        shape = Radii.card,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-    ) {
-        Box {
-            CoverBackdrop(item.coverPath, item.metadata.title, Modifier.matchParentSize(), intensity = 0.5f)
-            Row(Modifier.padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(56.dp), shape = RoundedCornerShape(12.dp), elevation = 4.dp)
-                Spacer(Modifier.width(Spacing.md))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.continue_listening),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                    )
-                    Text(
-                        titleWithSeries(item.metadata.title, item.metadata.series, item.metadata.seriesIndex),
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        BookProgressBar(item.entry.progress, Modifier.weight(1f), height = 3.dp)
-                        Spacer(Modifier.width(Spacing.sm))
-                        Text(remainingLabel(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                    }
-                }
-                Spacer(Modifier.width(Spacing.md))
-                GradientCircleButton(onClick = onPlay, size = 44.dp) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.action_resume), modifier = Modifier.size(24.dp))
-                }
-            }
-        }
-    }
 }
 
 @Composable

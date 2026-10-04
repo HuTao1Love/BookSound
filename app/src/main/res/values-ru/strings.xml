@@ -94,7 +94,6 @@
     <string name="library_empty_message">Импортируйте файл M4B или папку с MP3. BookSound соберёт из них одну книгу с главами и сохранит её в папке библиотеки.</string>
     <string name="library_no_results_title">Ничего не найдено</string>
     <string name="library_no_results_message">Попробуйте другое название, автора или серию либо смените фильтр.</string>
-    <string name="continue_listening">Продолжить</string>
     <string name="filter_all">Все</string>
     <string name="filter_in_progress">Слушаю</string>
     <string name="filter_not_started">Не начаты</string>

@@ -94,7 +94,6 @@
     <string name="library_empty_message">Import an M4B file or a folder of MP3s. BookSound turns it into a single audiobook with chapters and keeps it in your library folder.</string>
     <string name="library_no_results_title">Nothing found</string>
     <string name="library_no_results_message">Try another title, author or series, or change the filter.</string>
-    <string name="continue_listening">Continue listening</string>
     <string name="filter_all">All</string>
     <string name="filter_in_progress">In progress</string>
     <string name="filter_not_started">Not started</string>
