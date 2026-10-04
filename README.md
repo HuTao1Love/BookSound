@@ -1,118 +1,117 @@
 # BookSound
 
-Local-first Android audiobook player. Imports M4B/M4A files or folders of MP3s, lets you review
-and edit the metadata, and stores every book as a single M4B (chapters, cover, tags) in a folder
-you choose.
+> [!WARNING]
+> **This project is, at the moment, 100% AI-generated ("neuroslop") code.** Nearly every line
+> was written by an LLM and has had little human review. Expect bugs, odd design decisions and
+> code that may not hold up to scrutiny. Use it at your own risk and keep backups of your
+> audiobooks.
 
-## Modules
+A local-first audiobook player for Android. Import M4B/M4A files, folders of MP3s or torrents,
+review and fix the metadata, and BookSound stores every book as a single M4B file (chapters,
+cover, tags) in a folder you choose. No account, no server, no cloud.
 
-| Module | Contents |
-|---|---|
-| `:core` | Pure Kotlin/JVM, no Android: MP4/ID3/MP3 parsing, M4B tag & chapter writer, metadata guessing, file naming and library layout, search/sort/series grouping, torrent content validation and review merging, sync contracts and conflict resolution. Reusable by a future server. |
-| `:app` | Android app: Room, DataStore, SAF storage, import pipeline (Media3 Transformer), torrent downloads (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Compose UI. |
+## Screenshots
 
-## Key behaviour
+| Library | Grid view | Book |
+|:---:|:---:|:---:|
+| <img src="screenshots/library.png" width="250" alt="Library with a series"> | <img src="screenshots/grid.png" width="250" alt="Library grid view"> | <img src="screenshots/detail.png" width="250" alt="Book details"> |
 
-* **Storage** — the library is a user-picked folder (Storage Access Framework), laid out as
-  `Author/Series/NN - Title.m4b`. File names are sanitized for ext4/FAT/exFAT/NTFS, keep Unicode,
-  never overwrite without confirmation, and fall back deterministically when metadata is missing.
-* **Import** — single AAC M4B: copied without re-encoding; compatible AAC parts: joined without
-  re-encoding; anything else: transcoded to AAC. Output is written as a hidden
-  `.booksound-partial-*` file, verified (parsed back + SHA-256), then atomically renamed; only then
-  is the book added to the database. Cancellation, failures and crashes clean up temporary files
-  (crash recovery via an import journal at startup). Free space is checked up front. Up to three
-  books are imported side by side; encoders are shared between them (half the CPU cores, 2–4 at
-  a time, parts of one book in parallel too) and files are written into the library one at a
-  time.
-* **Torrents** — add a magnet link, a link to a .torrent file or a .torrent file (also opened from
-  other apps); several links can be pasted at once, one per line. Before anything is downloaded the file list must be one audiobook: MP3 files with
-  optional cover images, or a single M4B; harmless extras (.nfo, .txt, .cue, playlists) are skipped,
-  anything else rejects the torrent. The review editor opens right away and the user edits the
-  details while only the audio and cover files download (libtorrent via libtorrent4j, no seeding).
-  When the download is done and the details are confirmed, the files are checked again (every
-  file must parse, match its format and have a plausible size for its length) and converted with
-  strict validation (decoded length must match the sources), so a damaged book never reaches the
-  library. Torrents, their review and libtorrent resume data are persisted: closing the app, a
-  crash or losing the connection only pauses the work, which continues on next start. Downloads
-  run as a user-initiated data transfer job (Android 14+), which — unlike a `dataSync` foreground
-  service — has no 6-hour daily limit on Android 15+; Android 13 (or a refused job) falls back to
-  the foreground service. Downloads are deleted once the book is in the library.
-* **Identity** — each book has a UUID embedded in the M4B (`----:com.zyagodin.booksound:BOOK_ID`),
-  independent of its path; folder rescans re-link moved files and adopt files copied in manually.
-* **Playback** — background playback with MediaSession (notification, lock screen, Bluetooth),
-  audio focus, pause on headphone disconnect, chapter navigation, per-book speed, sleep timer
-  (minutes, end of chapter or book, fade-out, shake to start over), smart rewind (configurable
-  amount and pause length, also after the app was closed), voice equalizer presets for the
-  narrator's timbre (remembered per book, DSP in `:core`), position saved continuously.
-* **Sync-ready** — records carry revision/updatedAt/device/dirty stamps; `SyncBackend`,
-  `SyncEngine` and `PlaybackConflictResolver` live in `:core`. No backend is required or
-  implemented yet (`NoBackend`).
+| Player | Narrator's voice | Sleep timer |
+|:---:|:---:|:---:|
+| <img src="screenshots/player.png" width="250" alt="Player"> | <img src="screenshots/eq.png" width="250" alt="Voice equalizer"> | <img src="screenshots/sleep.png" width="250" alt="Sleep timer"> |
 
-## Build
+| Import | Review import | Cover search |
+|:---:|:---:|:---:|
+| <img src="screenshots/import.png" width="250" alt="Import"> | <img src="screenshots/review.png" width="250" alt="Review import"> | <img src="screenshots/cover.png" width="250" alt="Cover search"> |
 
-```
+## Features
+
+- **Your files, your folder.** The library is a folder you pick, laid out as
+  `Author/Series/NN - Title.m4b`. Every book is one standard M4B that any other player can open.
+- **Import from anywhere.** A single M4B/M4A, several MP3/M4A parts, a whole folder (including
+  `CD1`, `CD2` sub-folders), or a torrent (magnet link, link to a `.torrent` file, or a `.torrent`
+  file).
+- **Review before converting.** Title, author, narrator, series and number, cover (from the file,
+  your gallery or an online search) and name templates such as `%author% - %series% %number% - %title%`.
+- **No needless re-encoding.** AAC sources are copied or joined as-is; everything else is
+  converted to AAC. Several books can be imported side by side.
+- **Safe imports.** Output is written to a temporary file, verified, and only then moved into
+  the library. Cancelled, failed or interrupted imports clean up after themselves.
+- **Torrents done carefully.** Only audiobook-shaped torrents are accepted, only the audio and
+  cover files are downloaded, nothing is seeded, and downloads survive restarts and lost
+  connections.
+- **Series.** Books in a series are grouped together and shown in order.
+- **A proper player.** Background playback with notification, lock screen and Bluetooth
+  controls, chapters, per-book speed, sleep timer (minutes, end of chapter or book, with fade-out
+  and shake to start it over), smart rewind after a pause, and voice equalizer presets for the
+  narrator, remembered per book.
+- **Rescans.** Each book carries an ID inside its M4B, so moved files are found again and books
+  copied into the folder by hand are picked up.
+- Dark and light themes, AMOLED black, English and Russian UI.
+
+## Requirements
+
+Android 13 (API 33) or newer.
+
+## Install
+
+Download the latest `BookSound-*.apk` from
+[Releases](https://github.com/HuTao1Love/BookSound/releases) and open it on your phone. Every
+release is signed with the same key, so a new APK installs over the previous one.
+
+## Building
+
+You need a recent JDK (the Gradle daemon asks for JDK 25; Android Studio's bundled runtime
+works) and the Android SDK.
+
+```bash
 ./gradlew :core:test :app:assembleDebug
 ```
 
-## Releases (APK on GitHub)
+The debug APK ends up in `app/build/outputs/apk/debug/`.
 
-`.github/workflows/release.yml` tests `:core`, builds a signed release APK and publishes it:
+### Project layout
 
-* **Every push to `main`** (each merged pull request) becomes a release tagged
-  `<appVersion>.<run number>`, e.g. `0.1.57`, with `BookSound-0.1.57.apk` attached.
-  `appVersion` lives in `gradle.properties`; raise it for a new major/minor version.
-* **A release published by hand** gets its APK attached (tag `v1.2` → `BookSound-1.2.apk`).
-* **Actions → Release APK → Run workflow** keeps the APK under the run's Artifacts.
-
-The run number is also the APK's `versionCode`, so each build installs over the previous one.
-
-### One-time setup
-
-**1. Create a release key.** `keytool` comes with the JDK; on Windows it is inside Android
-Studio. In PowerShell:
-
-```powershell
-& "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
-```
-
-(macOS/Linux: `keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000`.)
-It asks for a password and a few name fields (any values). Keep `booksound.jks` and the
-password safe and out of the repository: every update must be signed with this same key,
-otherwise Android makes you uninstall the app (and lose its library data) first.
-
-**2. Copy the key as text.** PowerShell (puts it into the clipboard):
-
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("booksound.jks")) | Set-Clipboard
-```
-
-(macOS/Linux: `base64 -w0 booksound.jks`.)
-
-**3. Add repository secrets** — GitHub → the repository → Settings → Secrets and variables →
-Actions → New repository secret:
-
-| Name | Value |
+| Module | Contents |
 |---|---|
-| `KEYSTORE_BASE64` | the text from step 2 |
+| `:core` | Pure Kotlin/JVM, no Android: MP4/ID3/MP3 parsing, M4B tag and chapter writer, metadata guessing, file naming and library layout, search/sort/series grouping, torrent validation, sync contracts. |
+| `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Jetpack Compose UI. |
+
+### Signed release builds
+
+`.github/workflows/release.yml` runs the `:core` tests, builds a signed APK and publishes it:
+
+- every push to `main` becomes a release tagged `<appVersion>.<run number>` (`appVersion` is in
+  `gradle.properties`);
+- a release published by hand gets its APK attached (tag `v1.2` → `BookSound-1.2.apk`);
+- a manual run (Actions → Release APK → Run workflow) keeps the APK as a workflow artifact.
+
+It needs these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `KEYSTORE_BASE64` | the release keystore, base64-encoded |
 | `KEYSTORE_PASSWORD` | the keystore password |
-| `KEY_ALIAS` | `booksound` |
-| `KEY_PASSWORD` | the key password (the same as the keystore password unless you chose another) |
-| `GOOGLE_BOOKS_API_KEY` | optional, for Google Books cover search |
+| `KEY_ALIAS` | the key alias |
+| `KEY_PASSWORD` | the key password |
+| `GOOGLE_BOOKS_API_KEY` | optional, enables Google Books cover search |
 
-**4. (Optional) the same signed APK on your PC** — add to `local.properties`, then run
-`gradlew :app:assembleRelease` (output: `app/build/outputs/apk/release/app-release.apk`):
+Create a keystore once with `keytool` (it ships with the JDK, and with Android Studio under
+`jbr/bin`):
 
+```bash
+keytool -genkeypair -v -keystore booksound.jks -alias booksound -keyalg RSA -keysize 4096 -validity 10000
 ```
-signing.storeFile=C:/path/to/booksound.jks
+
+Keep the keystore and its password safe and out of the repository: Android only installs an
+update signed with the same key.
+
+To build the same signed APK locally, add this to `local.properties` and run
+`./gradlew :app:assembleRelease`:
+
+```properties
+signing.storeFile=/path/to/booksound.jks
 signing.storePassword=...
 signing.keyAlias=booksound
 signing.keyPassword=...
 ```
-
-### Publishing a version
-
-GitHub → Releases → Draft a new release → Choose a tag → type e.g. `v1.2` → Create new tag →
-Publish release. A few minutes later `BookSound-1.2.apk` appears under the release's Assets;
-open that link on the phone to install or update.
-
-Design notes: [docs/DESIGN.md](docs/DESIGN.md).
