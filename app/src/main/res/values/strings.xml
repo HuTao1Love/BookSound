@@ -37,8 +37,6 @@
     <string name="action_rescan">Rescan</string>
     <string name="action_restore">Restore</string>
     <string name="action_forget">Forget</string>
-    <string name="action_show_grid">Show as grid</string>
-    <string name="action_show_list">Show as list</string>
     <string name="action_save_changes">Save changes</string>
     <string name="action_discard">Discard</string>
     <string name="action_keep_editing">Keep editing</string>
@@ -66,6 +64,7 @@
     <string name="time_left_in_book">%1$s left</string>
     <string name="series_with_index">%1$s · #%2$s</string>
     <string name="series_in_title">%1$s #%2$s</string>
+    <string name="series_number">#%1$s</string>
     <string name="narrated_by">Narrated by %1$s</string>
     <string name="chapter_number">Chapter %1$d</string>
     <string name="chapter_of">Chapter %1$d of %2$d</string>
@@ -88,12 +87,11 @@
 
     <!-- Library -->
     <string name="library_title">Library</string>
-    <string name="library_search_hint">Title, author, narrator, series</string>
+    <string name="library_search_hint">Search</string>
     <string name="library_empty_title">Your shelf is empty</string>
     <string name="library_empty_message">Import an M4B file or a folder of MP3s. BookSound turns it into a single audiobook with chapters and keeps it in your library folder.</string>
     <string name="library_no_results_title">Nothing found</string>
     <string name="library_no_results_message">Try another title, author or series, or change the filter.</string>
-    <string name="continue_listening">Continue listening</string>
     <string name="filter_all">All</string>
     <string name="filter_in_progress">In progress</string>
     <string name="filter_not_started">Not started</string>
@@ -337,7 +335,6 @@
     <string name="onboarding_folder_lost">BookSound can\'t open your library folder anymore. Pick it again, your progress is safe.</string>
     <string name="onboarding_permission_failed">This folder can\'t be used. Try another one.</string>
     <string name="series_finished_of">%1$d/%2$d done</string>
-    <string name="action_show_series">Show by series</string>
     <string name="action_open_series">Open series</string>
     <string name="series_up_next">Up next: %1$s</string>
     <string name="series_empty_title">No books in this series</string>
@@ -399,7 +396,6 @@
     <string name="torrent_downloaded">Downloaded</string>
     <string name="torrent_book_of">Book %1$d of “%2$s”</string>
     <string name="torrent_review_needed">Review the details: the book is converted after you confirm them.</string>
-    <string name="torrent_review_needed_short">Review needed: %1$s</string>
     <string name="torrent_waiting_review">Downloaded. Review the details to start the conversion.</string>
     <string name="torrent_editing">Waiting until you finish editing</string>
     <string name="torrent_verifying">Checking the audiobook</string>
@@ -424,10 +420,6 @@
         <item quantity="one">+%1$d more</item>
         <item quantity="other">+%1$d more</item>
     </plurals>
-    <plurals name="torrent_banner_many">
-        <item quantity="one">%1$d torrent</item>
-        <item quantity="other">%1$d torrents</item>
-    </plurals>
 
     <!-- Cover crop -->
     <string name="crop_title">Crop to a square</string>
@@ -442,7 +434,8 @@
     <string name="template_add">Add template</string>
     <string name="template_hint">Tap a template to fill in the details. Hold it to delete.</string>
     <string name="template_dialog_title">New template</string>
-    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% to skip a part. Everything else must match the name as written.</string>
+    <string name="template_help" formatted="false">Select a part of the name and tap a field to replace it with that field (%author%, %title%…). “Skip” ignores a part. Everything else must match the name as written.</string>
+    <string name="template_insert_skip">Skip</string>
     <string name="template_no_match">Doesn\'t fit this name, but it can still be saved.</string>
     <string name="template_skipped">Skipped</string>
     <string name="template_delete_title">Delete template?</string>

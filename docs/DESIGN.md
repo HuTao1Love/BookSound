@@ -35,11 +35,13 @@ covers, 32 sheets; pill buttons. Material Symbols Rounded. Touch targets ≥ 48 
 
 ## Library
 
-Three layouts (toggle in the top bar): **Series** (default), Grid, List.
-Series view is a vertical list: first "Without series" (shelf of standalone books), then one card
-per series with stacked-cover emblem, authors, book count, total length, finished count, overall
-progress and a carousel ordered by book number (#1, #2…). Search, filters and sort apply to all
-layouts; in Series view the sort decides which series comes first. Tapping a series card opens the
+One layout, by series. The top bar holds a search button (the search field opens under it and
+stays while it holds text), a downloads button (its badge counts torrents in progress and turns
+to the accent colour when one waits for its details to be reviewed) and settings; importing is
+the round + button at the bottom. The library is a vertical list: first "Without series" (shelf
+of standalone books), then one card per series with stacked-cover emblem, authors, book count, total length, finished count, overall
+progress and a carousel ordered by book number (#1, #2…). Search and filters narrow the books;
+the sort decides which series comes first. Tapping a series card opens the
 series screen: emblem, totals, progress, a play button for the next unfinished book, and every
 book of the series as a list ordered by number (regardless of the library's search and filter).
 

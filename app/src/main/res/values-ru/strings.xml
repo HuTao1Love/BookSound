@@ -34,8 +34,6 @@
     <string name="action_rescan">Пересканировать</string>
     <string name="action_restore">Вернуть</string>
     <string name="action_forget">Забыть</string>
-    <string name="action_show_grid">Показать сеткой</string>
-    <string name="action_show_list">Показать списком</string>
     <string name="action_save_changes">Сохранить</string>
     <string name="action_discard">Отменить</string>
     <string name="action_keep_editing">Продолжить</string>
@@ -62,6 +60,7 @@
     <string name="time_left_in_book">осталось %1$s</string>
     <string name="series_with_index">%1$s · №%2$s</string>
     <string name="series_in_title">%1$s №%2$s</string>
+    <string name="series_number">№%1$s</string>
     <string name="narrated_by">Читает %1$s</string>
     <string name="chapter_number">Глава %1$d</string>
     <string name="chapter_of">Глава %1$d из %2$d</string>
@@ -88,12 +87,11 @@
     <string name="state_file_missing">Файл не найден</string>
 
     <string name="library_title">Библиотека</string>
-    <string name="library_search_hint">Название, автор, чтец, серия</string>
+    <string name="library_search_hint">Поиск</string>
     <string name="library_empty_title">Полка пока пуста</string>
     <string name="library_empty_message">Импортируйте файл M4B или папку с MP3. BookSound соберёт из них одну книгу с главами и сохранит её в папке библиотеки.</string>
     <string name="library_no_results_title">Ничего не найдено</string>
     <string name="library_no_results_message">Попробуйте другое название, автора или серию либо смените фильтр.</string>
-    <string name="continue_listening">Продолжить</string>
     <string name="filter_all">Все</string>
     <string name="filter_in_progress">Слушаю</string>
     <string name="filter_not_started">Не начаты</string>
@@ -337,7 +335,6 @@
     <string name="onboarding_folder_lost">Нет доступа к папке с книгами. Выберите её снова, прогресс не потеряется.</string>
     <string name="onboarding_permission_failed">Эту папку выбрать нельзя. Попробуйте другую.</string>
     <string name="series_finished_of">%1$d/%2$d прослушано</string>
-    <string name="action_show_series">Показать по сериям</string>
     <string name="action_open_series">Открыть серию</string>
     <string name="series_up_next">Далее: %1$s</string>
     <string name="series_empty_title">В серии нет книг</string>
@@ -401,7 +398,6 @@
     <string name="torrent_downloaded">Загружено</string>
     <string name="torrent_book_of">Книга %1$d из «%2$s»</string>
     <string name="torrent_review_needed">Проверьте данные: книга будет сконвертирована после подтверждения.</string>
-    <string name="torrent_review_needed_short">Нужна проверка: %1$s</string>
     <string name="torrent_waiting_review">Загружено. Проверьте данные, чтобы начать конвертацию.</string>
     <string name="torrent_editing">Ждём, пока вы закончите редактирование</string>
     <string name="torrent_verifying">Проверка аудиокниги</string>
@@ -428,12 +424,6 @@
         <item quantity="many">ещё %1$d</item>
         <item quantity="other">ещё %1$d</item>
     </plurals>
-    <plurals name="torrent_banner_many">
-        <item quantity="one">%1$d торрент</item>
-        <item quantity="few">%1$d торрента</item>
-        <item quantity="many">%1$d торрентов</item>
-        <item quantity="other">%1$d торрента</item>
-    </plurals>
 
     <!-- Обрезка обложки -->
     <string name="crop_title">Обрезка до квадрата</string>
@@ -448,7 +438,8 @@
     <string name="template_add">Добавить шаблон</string>
     <string name="template_hint">Нажмите на шаблон, чтобы заполнить поля. Удерживайте, чтобы удалить.</string>
     <string name="template_dialog_title">Новый шаблон</string>
-    <string name="template_help" formatted="false">%author%, %title%, %series%, %number%, %narrator%, %year%, %*% — пропустить часть. Остальной текст должен совпадать с названием.</string>
+    <string name="template_help" formatted="false">Выделите часть названия и нажмите поле, чтобы заменить её этим полем (%author%, %title%…). «Пропустить» игнорирует часть. Остальной текст должен совпадать с названием.</string>
+    <string name="template_insert_skip">Пропустить</string>
     <string name="template_no_match">Не подходит к этому названию, но сохранить можно.</string>
     <string name="template_skipped">Пропущено</string>
     <string name="template_delete_title">Удалить шаблон?</string>

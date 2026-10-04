@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +33,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
@@ -128,11 +131,18 @@ fun NameTemplateSection(ui: EditorUi, onApply: (String) -> Unit, onAdd: (String)
     }
 }
 
-/** Editing a new template with a live preview of what it reads from [sourceName]. */
+/**
+ * Editing a new template with a live preview of what it reads from [sourceName]. It starts from
+ * the source name itself: select a part and tap a field to replace that part with its placeholder.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameTemplateDialog(sourceName: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var text by rememberSaveable { mutableStateOf("%author% - %title%") }
+    var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(sourceName, TextRange(sourceName.length)))
+    }
+    val text = value.text
     val problem = NameTemplate.validate(text)
     val fields = if (problem == null) NameTemplate.parse(text, sourceName) else null
     AlertDialog(
@@ -143,14 +153,32 @@ private fun NameTemplateDialog(sourceName: String, onSave: (String) -> Unit, onD
         text = {
             Column {
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it.replace('\n', ' ') },
+                    value = value,
+                    onValueChange = { value = it.copy(text = it.text.replace('\n', ' ')) },
                     singleLine = true,
                     isError = problem != null,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    modifier = Modifier.fillMaxWidth().padding(top = Spacing.md),
+                ) {
+                    INSERTABLE.forEach { (field, token) ->
+                        AssistChip(
+                            onClick = { value = value.replacingSelection(token) },
+                            label = {
+                                Text(
+                                    if (field == NameField.SKIP) stringResource(R.string.template_insert_skip) else fieldLabel(context, field),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                    }
+                }
                 Text(
                     stringResource(R.string.template_help),
                     style = MaterialTheme.typography.bodySmall,
@@ -181,6 +209,24 @@ private fun NameTemplateDialog(sourceName: String, onSave: (String) -> Unit, onD
             }
         },
     )
+}
+
+/** Fields offered as buttons in [NameTemplateDialog], with the placeholder each one inserts. */
+private val INSERTABLE = listOf(
+    NameField.AUTHOR to "%author%",
+    NameField.TITLE to "%title%",
+    NameField.SERIES to "%series%",
+    NameField.NUMBER to "%number%",
+    NameField.NARRATOR to "%narrator%",
+    NameField.YEAR to "%year%",
+    NameField.SKIP to "%*%",
+)
+
+/** Puts [token] in place of the selected text, or at the cursor, and moves the cursor after it. */
+private fun TextFieldValue.replacingSelection(token: String): TextFieldValue {
+    val start = minOf(selection.start, selection.end).coerceIn(0, text.length)
+    val end = maxOf(selection.start, selection.end).coerceIn(0, text.length)
+    return TextFieldValue(text.replaceRange(start, end, token), TextRange(start + token.length))
 }
 
 private fun fieldLabel(context: Context, field: NameField): String = context.getString(

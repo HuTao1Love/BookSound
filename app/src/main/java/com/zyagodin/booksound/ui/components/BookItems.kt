@@ -74,6 +74,19 @@ fun titleWithSeries(title: String, series: String?, index: String?): AnnotatedSt
     }
 }
 
+/** The title inside its own series' list, where the series is known: "**#3**. Childhood — Home Tutor". */
+@Composable
+fun numberedTitle(title: String, index: String?): AnnotatedString {
+    val number = index?.takeIf { it.isNotBlank() } ?: return AnnotatedString(title)
+    val prefix = stringResource(R.string.series_number, number)
+    val accent = MaterialTheme.colorScheme.primary
+    return buildAnnotatedString {
+        withStyle(SpanStyle(color = accent)) { append(prefix) }
+        append(". ")
+        append(title)
+    }
+}
+
 @Composable
 fun remainingLabel(item: LibraryItem): String {
     val context = LocalContext.current
@@ -87,59 +100,15 @@ fun remainingLabel(item: LibraryItem): String {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookGridCard(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
-    val meta = item.metadata
-    Column(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick, role = Role.Button)
-            .padding(Spacing.xs),
-    ) {
-        Box {
-            BookCover(item.coverPath, meta.title, meta.author, Modifier.fillMaxWidth(), elevation = 6.dp)
-            StatusBadge(item, Modifier.align(Alignment.TopEnd).padding(Spacing.sm))
-            if (item.entry.positionMs > 0 && !item.entry.finished) {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                ) {
-                    BookProgressBar(
-                        item.entry.progress,
-                        Modifier.padding(horizontal = Spacing.sm, vertical = 7.dp),
-                        height = 3.dp,
-                        trackColor = Color.White.copy(alpha = 0.3f),
-                        color = Color.White,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(Spacing.sm))
-        Text(
-            titleWithSeries(meta.title, meta.series, meta.seriesIndex),
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = MaterialTheme.typography.titleSmall.fontSize),
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        meta.author?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        // The series is already in front of the title unless the title names it itself.
-        val series = seriesLabel(meta.series, meta.seriesIndex).takeUnless { showsSeriesInTitle(meta.title, meta.series) }
-        Text(
-            listOfNotNull(series, remainingLabel(item)).joinToString(" · "),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun BookListRow(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit, onPlay: () -> Unit, modifier: Modifier = Modifier) {
+fun BookListRow(
+    item: LibraryItem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onPlay: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** In the list of one series: only the book's number in front of the title, no series name. */
+    inSeries: Boolean = false,
+) {
     val meta = item.metadata
     Row(
         modifier
@@ -154,11 +123,16 @@ fun BookListRow(item: LibraryItem, onClick: () -> Unit, onLongClick: () -> Unit,
         }
         Spacer(Modifier.width(Spacing.lg))
         Column(Modifier.weight(1f)) {
-            Text(titleWithSeries(meta.title, meta.series, meta.seriesIndex), style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(
+                if (inSeries) numberedTitle(meta.title, meta.seriesIndex) else titleWithSeries(meta.title, meta.series, meta.seriesIndex),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
             meta.author?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            seriesLabel(meta.series, meta.seriesIndex)?.takeUnless { showsSeriesInTitle(meta.title, meta.series) }?.let {
+            seriesLabel(meta.series, meta.seriesIndex)?.takeUnless { inSeries || showsSeriesInTitle(meta.title, meta.series) }?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(6.dp))

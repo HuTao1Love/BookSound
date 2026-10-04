@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
@@ -237,50 +236,5 @@ fun failureMessage(context: Context, failure: TorrentFailure): String {
         TorrentFailureCode.AUDIOBOOK_INVALID -> withFiles(context.getString(R.string.torrent_failure_invalid_audiobook))
         TorrentFailureCode.CONVERSION_FAILED -> failure.detail ?: context.getString(R.string.failure_unexpected, "")
         TorrentFailureCode.CONVERSION_CANCELLED -> context.getString(R.string.torrent_failure_cancelled)
-    }
-}
-
-/** Library banner for torrents in progress; tapping it opens the downloads. */
-@Composable
-fun TorrentBanner(items: List<TorrentItem>, onClick: () -> Unit) {
-    val review = items.firstOrNull { !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED) }
-    val first = review ?: items.first()
-    /** The books of one torrent share one download and count as one torrent. */
-    val downloads = items.distinctBy { it.record.downloadKey }.size
-    Surface(
-        onClick = onClick,
-        shape = Radii.card,
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-    ) {
-        Column(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        when {
-                            downloads > 1 -> pluralStringResource(R.plurals.torrent_banner_many, downloads, downloads)
-                            // Several books of one torrent: name the torrent.
-                            items.size > 1 -> first.record.name
-                            else -> titleWithSeries(first.record.title, first.record.series, first.record.seriesIndex).text
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        if (review != null) stringResource(R.string.torrent_review_needed_short, titleWithSeries(review.record.title, review.record.series, review.record.seriesIndex).text) else statusText(first),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (review != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
-            }
-            progressOf(first)?.let {
-                Spacer(Modifier.height(Spacing.sm))
-                BookProgressBar(it, height = 4.dp)
-            }
-        }
     }
 }

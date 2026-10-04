@@ -61,7 +61,7 @@ import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
-import com.zyagodin.booksound.ui.components.titleWithSeries
+import com.zyagodin.booksound.ui.components.numberedTitle
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
@@ -178,6 +178,7 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                                 navigator.openPlayer()
                             },
                             modifier = Modifier.animateItem().padding(horizontal = Spacing.lg).widthIn(max = 720.dp).fillMaxWidth(),
+                            inSeries = true,
                         )
                     }
                 }
@@ -282,7 +283,7 @@ private fun SeriesHeader(section: SeriesSection, upNext: LibraryItem?, onPlay: (
             )
             Spacer(Modifier.height(Spacing.sm))
             Text(
-                stringResource(R.string.series_up_next, titleWithSeries(upNext.metadata.title, upNext.metadata.series, upNext.metadata.seriesIndex).text),
+                stringResource(R.string.series_up_next, numberedTitle(upNext.metadata.title, upNext.metadata.seriesIndex).text),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
