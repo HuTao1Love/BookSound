@@ -158,11 +158,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                     else context.getString(R.string.scan_result, r.added, r.missing)
                     ScanResult.PermissionLost, ScanResult.NoLibraryFolder -> context.getString(R.string.scan_permission_lost)
                 }
-                is LibraryEvent.Removed -> when {
-                    event.fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, event.title)
-                    event.fileDeleted -> context.getString(R.string.removed_with_file, event.title)
-                    else -> context.getString(R.string.removed_kept_file, event.title)
-                }
+                is LibraryEvent.Removed -> event.message(context)
             }
             if (message != null) snackbar.showSnackbar(message)
         }
@@ -269,6 +265,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
                             onOpen = { navigator.openBook(it.id) },
                             onLongClick = { actionsFor = it.id },
+                            onOpenSeries = navigator::openSeries,
                             modifier = Modifier.animateItem(),
                         )
                     }
@@ -422,7 +419,7 @@ private fun LibraryHeader(
                     text = it
                     onSearch(it)
                 },
-                placeholder = { Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyLarge) },
+                placeholder = { Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (text.isNotEmpty()) {
@@ -644,8 +641,9 @@ private fun ImportOption(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     }
 }
 
+/** Long-press menu of a book in the library and in a series. */
 @Composable
-private fun BookActionsSheet(
+internal fun BookActionsSheet(
     item: LibraryItem,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,

@@ -338,6 +338,10 @@
     <string name="onboarding_permission_failed">Эту папку выбрать нельзя. Попробуйте другую.</string>
     <string name="series_finished_of">%1$d/%2$d прослушано</string>
     <string name="action_show_series">Показать по сериям</string>
+    <string name="action_open_series">Открыть серию</string>
+    <string name="series_up_next">Далее: %1$s</string>
+    <string name="series_empty_title">В серии нет книг</string>
+    <string name="series_empty_message">Её книги удалены из библиотеки или перенесены в другую серию.</string>
 
     <!-- Торренты -->
     <string name="import_option_torrent">Торрент</string>

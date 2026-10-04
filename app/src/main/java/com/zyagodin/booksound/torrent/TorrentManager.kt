@@ -122,6 +122,7 @@ class TorrentManager(
     private var idleSince = 0L
     private var lastResumeSave = 0L
     private var lastProgressSave = 0L
+    private var lastDiagnostics = 0L
 
     val items: StateFlow<List<TorrentItem>> = combine(store.records, live, imports.jobs, network.online, editing) { records, liveMap, jobs, online, open ->
         records.sortedWith(compareByDescending<TorrentRecord> { it.addedAt }.thenBy { it.position }).map { r ->
@@ -536,6 +537,11 @@ class TorrentManager(
                     lastResumeSave = now
                     engine.requestAllResumeData()
                 }
+                // For the debug log: why downloads find no peers (listen sockets, trackers, DHT).
+                if (now - lastDiagnostics > DIAGNOSTICS_INTERVAL_MS) {
+                    lastDiagnostics = now
+                    runCatching { engine.diagnostics().forEach { Log.i(TAG, it) } }.onFailure { Log.w(TAG, "Diagnostics failed", it) }
+                }
             } else if (idleSince == 0L) {
                 idleSince = now
                 engine.requestAllResumeData()
@@ -886,5 +892,6 @@ class TorrentManager(
         private const val PROGRESS_SAVE_INTERVAL_MS = 15_000L
         private const val ENGINE_IDLE_STOP_MS = 20_000L
         private const val ADD_RETRY_MS = 15_000L
+        private const val DIAGNOSTICS_INTERVAL_MS = 60_000L
     }
 }
