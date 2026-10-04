@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+   Backup rules for Android 11 and lower.
+   See https://developer.android.com/guide/topics/data/autobackup
+-->
+<full-backup-content>
+    <!-- Torrent downloads are large, temporary and tied to this device. -->
+    <exclude domain="external" path="torrent-downloads/" />
+</full-backup-content>
