@@ -114,10 +114,10 @@ class SeriesViewModel(private val container: AppContainer, series: String) : Vie
     }
 }
 
-/** The book to continue the series with: the one being listened to, else the first unfinished one. */
+/** The book to continue the series with: the one listened to last, else the first unfinished one. */
 private fun upNext(items: List<LibraryItem>): LibraryItem? {
     val available = items.filter { !it.isMissing && !it.entry.finished }
-    return available.firstOrNull { it.entry.positionMs > 0 } ?: available.firstOrNull()
+    return available.filter { it.entry.positionMs > 0 }.maxByOrNull { it.entry.lastPlayedAt ?: 0L } ?: available.firstOrNull()
 }
 
 /** All books of one series, opened from its card in the library. */

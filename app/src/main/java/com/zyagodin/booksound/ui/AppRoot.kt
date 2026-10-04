@@ -91,6 +91,8 @@ class AppNavigator(
     }
 
     fun openSeries(series: String) {
+        // In list-detail mode the library stays visible next to a book: the series replaces that book.
+        if (backStack.lastOrNull() is BookKey) backStack.removeLastOrNull()
         if ((backStack.lastOrNull() as? SeriesKey)?.series != series) backStack.add(SeriesKey(series))
     }
 
@@ -185,7 +187,9 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val showMiniPlayer = nowPlaying != null && playerState.hasBook &&
         (top == LibraryKey || top is SeriesKey || top is BookKey || top == ImportsKey || top == SettingsKey)
     // Two panes side by side: the bar docks under the list pane instead of straddling both.
-    val besideDetail = directive.maxHorizontalPartitions > 1 && (top == LibraryKey || top is SeriesKey || top is BookKey)
+    val listPaneShown = top == LibraryKey || top is SeriesKey ||
+        (top is BookKey && backStack.getOrNull(backStack.lastIndex - 1).let { it == LibraryKey || it is SeriesKey })
+    val besideDetail = directive.maxHorizontalPartitions > 1 && listPaneShown
     // Screens add the navigation bar inset themselves; the docked bar sits right on top of it.
     val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight else 0.dp
 

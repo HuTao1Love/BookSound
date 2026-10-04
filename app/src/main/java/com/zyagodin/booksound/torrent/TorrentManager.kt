@@ -540,7 +540,7 @@ class TorrentManager(
                 // For the debug log: why downloads find no peers (listen sockets, trackers, DHT).
                 if (now - lastDiagnostics > DIAGNOSTICS_INTERVAL_MS) {
                     lastDiagnostics = now
-                    runCatching { Log.i(TAG, engine.diagnostics()) }.onFailure { Log.w(TAG, "Diagnostics failed", it) }
+                    runCatching { engine.diagnostics().forEach { Log.i(TAG, it) } }.onFailure { Log.w(TAG, "Diagnostics failed", it) }
                 }
             } else if (idleSince == 0L) {
                 idleSince = now
