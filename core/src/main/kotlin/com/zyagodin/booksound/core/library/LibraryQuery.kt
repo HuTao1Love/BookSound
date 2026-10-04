@@ -38,8 +38,13 @@ object LibrarySearch {
 
     fun apply(entries: List<LibraryEntry>, query: LibraryQuery): List<LibraryEntry> {
         val tokens = normalize(query.text).split(' ').filter { it.isNotEmpty() }
+        // A series with any book matching the progress filter shows up whole, e.g. "In progress"
+        // while listening to book 2 still lists books 1 and 3.
+        val matchingSeries = entries.filter { matchesFilter(it, query.filter) }
+            .mapNotNullTo(HashSet()) { e -> e.book.metadata.series?.let { normalize(it) } }
         val filtered = entries.filter { entry ->
-            matchesFilter(entry, query.filter) && (tokens.isEmpty() || matches(entry, tokens))
+            val inMatchingSeries = entry.book.metadata.series?.let { normalize(it) in matchingSeries } ?: false
+            (inMatchingSeries || matchesFilter(entry, query.filter)) && (tokens.isEmpty() || matches(entry, tokens))
         }
         val comparator = comparator(query.sort).let { if (query.descending) it.reversed() else it }
         return filtered.sortedWith(comparator.then(compareBy(NaturalOrder) { it.book.metadata.title }))

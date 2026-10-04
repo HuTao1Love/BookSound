@@ -116,4 +116,23 @@ class SyncAndSearchTest {
         assertEquals(listOf("B"), LibrarySearch.apply(all, LibraryQuery(filter = ProgressFilter.IN_PROGRESS)).map { it.book.metadata.title })
         assertEquals(listOf("C"), LibrarySearch.apply(all, LibraryQuery(filter = ProgressFilter.FINISHED)).map { it.book.metadata.title })
     }
+
+    @Test
+    fun `progress filter keeps the whole series of a matching book`() {
+        val all = listOf(
+            entry("Lone", "Amy", 1, null),
+            entry("Saga 1", "Amy", 2, 100, finished = true, series = "Saga", index = "1"),
+            entry("Saga 2", "Amy", 3, 200, position = 10, series = "saga", index = "2"),
+            entry("Saga 3", "Amy", 4, null, series = "Saga", index = "3"),
+            entry("Other 1", "Amy", 5, null, series = "Other", index = "1"),
+        )
+        fun titles(filter: ProgressFilter, text: String = "") =
+            LibrarySearch.apply(all, LibraryQuery(text = text, sort = SortField.TITLE, filter = filter)).map { it.book.metadata.title }
+        assertEquals(listOf("Saga 1", "Saga 2", "Saga 3"), titles(ProgressFilter.IN_PROGRESS))
+        assertEquals(listOf("Saga 1", "Saga 2", "Saga 3"), titles(ProgressFilter.FINISHED))
+        // Standalone books are still filtered one by one.
+        assertEquals(listOf("Lone", "Other 1", "Saga 1", "Saga 2", "Saga 3"), titles(ProgressFilter.NOT_STARTED))
+        // The search text still narrows the series down.
+        assertEquals(listOf("Saga 3"), titles(ProgressFilter.IN_PROGRESS, "3"))
+    }
 }
