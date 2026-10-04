@@ -131,15 +131,7 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(vm) {
-        vm.removed.collect { event ->
-            snackbar.showSnackbar(
-                when {
-                    event.fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, event.title)
-                    event.fileDeleted -> context.getString(R.string.removed_with_file, event.title)
-                    else -> context.getString(R.string.removed_kept_file, event.title)
-                },
-            )
-        }
+        vm.removed.collect { snackbar.showSnackbar(it.message(context)) }
     }
 
     val items = (state as? SeriesState.Loaded)?.section?.items.orEmpty()

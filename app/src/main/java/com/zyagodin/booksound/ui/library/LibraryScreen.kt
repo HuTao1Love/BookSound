@@ -158,11 +158,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                     else context.getString(R.string.scan_result, r.added, r.missing)
                     ScanResult.PermissionLost, ScanResult.NoLibraryFolder -> context.getString(R.string.scan_permission_lost)
                 }
-                is LibraryEvent.Removed -> when {
-                    event.fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, event.title)
-                    event.fileDeleted -> context.getString(R.string.removed_with_file, event.title)
-                    else -> context.getString(R.string.removed_kept_file, event.title)
-                }
+                is LibraryEvent.Removed -> event.message(context)
             }
             if (message != null) snackbar.showSnackbar(message)
         }
@@ -423,7 +419,7 @@ private fun LibraryHeader(
                     text = it
                     onSearch(it)
                 },
-                placeholder = { Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyLarge) },
+                placeholder = { Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (text.isNotEmpty()) {

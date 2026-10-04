@@ -59,7 +59,8 @@ Library ──► Book details ──► Player ──► Chapters / Speed / Sle
 ## Adaptive layout (Galaxy Z Fold)
 
 * Width < 600 dp (cover screen): single pane, full-screen player.
-* Width ≥ 600 dp (inner screen): library + book details side by side (list-detail); two-pane
+* Width ≥ 600 dp (inner screen): library + book details side by side (list-detail; on two panes
+  the library takes about half the width, 360–520 dp, and the mini player docks under it); two-pane
   player (cover + controls │ chapter list, or cover │ controls without chapters); two-column import editor; series cards in 2 columns
   on wide windows.
 * Tabletop posture (half folded): player shows the cover above the hinge, controls below.

@@ -1,8 +1,10 @@
 package com.zyagodin.booksound.ui.library
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
+import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.LibraryQuery
 import com.zyagodin.booksound.core.library.LibrarySearch
 import com.zyagodin.booksound.core.library.ProgressFilter
@@ -46,7 +48,13 @@ data class SeriesSection(val series: String?, val items: List<LibraryItem>, val 
 
 sealed interface LibraryEvent {
     data class ScanFinished(val result: ScanResult) : LibraryEvent
-    data class Removed(val title: String, val fileDeleted: Boolean, val fileDeleteFailed: Boolean) : LibraryEvent
+    data class Removed(val title: String, val fileDeleted: Boolean, val fileDeleteFailed: Boolean) : LibraryEvent {
+        fun message(context: Context): String = when {
+            fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, title)
+            fileDeleted -> context.getString(R.string.removed_with_file, title)
+            else -> context.getString(R.string.removed_kept_file, title)
+        }
+    }
 }
 
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {

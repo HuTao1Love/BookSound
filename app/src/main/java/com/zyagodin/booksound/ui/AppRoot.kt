@@ -8,9 +8,12 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
@@ -25,6 +28,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -140,7 +145,12 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val backStack = rememberNavBackStack(LibraryKey)
     var addTorrent by remember { mutableStateOf<AddTorrentRequest?>(null) }
     val navigator = remember(backStack) { AppNavigator(backStack) { addTorrent = AddTorrentRequest(it) } }
-    val listDetail = rememberListDetailSceneStrategy<NavKey>()
+    // On a wide window the library and the book split the screen roughly in half (the Fold's inner
+    // screen folds right there); the default 360 dp list pane is too narrow for the library.
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val listPaneWidth = (windowWidth / 2).coerceIn(360.dp, 520.dp)
+    val directive = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2()).copy(defaultPanePreferredWidth = listPaneWidth)
+    val listDetail = rememberListDetailSceneStrategy<NavKey>(directive = directive)
     val playerState by container.player.state.collectAsStateWithLifecycle()
     val nowPlaying by container.nowPlaying.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -174,6 +184,8 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val top = backStack.lastOrNull()
     val showMiniPlayer = nowPlaying != null && playerState.hasBook &&
         (top == LibraryKey || top is SeriesKey || top is BookKey || top == ImportsKey || top == SettingsKey)
+    // Two panes side by side: the bar docks under the list pane instead of straddling both.
+    val besideDetail = directive.maxHorizontalPartitions > 1 && (top == LibraryKey || top is SeriesKey || top is BookKey)
     // Screens add the navigation bar inset themselves; the docked bar sits right on top of it.
     val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight else 0.dp
 
@@ -243,7 +255,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
             visible = showMiniPlayer,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = if (besideDetail) Modifier.align(Alignment.BottomStart).width(listPaneWidth) else Modifier.align(Alignment.BottomCenter),
         ) {
             nowPlaying?.let { book ->
                 MiniPlayer(
