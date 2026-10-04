@@ -570,7 +570,7 @@ class TorrentManager(
                 return null
             }
             try {
-                engine.add(torrent.readBytes(), File(r.dataDir), store.resumeFile(r.downloadKey), wantedFlags(books))
+                engine.add(torrent.readBytes(), File(r.dataDir), store.resumeFile(r.downloadKey), wantedFlags(books), r.magnetUri)
                 pendingAdds[r.downloadKey] = now
             } catch (t: Throwable) {
                 Log.e(TAG, "Could not start ${r.name}", t)
