@@ -49,6 +49,10 @@ data class AppSettings(
     val encoderBitrateKbps: Int = 64,
     val downmixToMono: Boolean = false,
     val autoCoverSearch: Boolean = true,
+    /** Books converted at the same time. */
+    val parallelImports: Int = DEFAULT_PARALLEL_IMPORTS,
+    /** Codecs encoding at the same time across all imports (parts of a book or several books); 0 = automatic. */
+    val parallelCodecs: Int = 0,
     val librarySort: SortField = SortField.RECENT,
     val libraryDescending: Boolean = true,
     val libraryFilter: ProgressFilter = ProgressFilter.ALL,
@@ -64,6 +68,8 @@ data class AppSettings(
 ) {
     fun voicePresetFor(bookId: String?): VoicePreset = bookId?.let { bookVoicePresets[it] } ?: voicePreset
 }
+
+const val DEFAULT_PARALLEL_IMPORTS = 2
 
 private const val TEMPLATE_SEPARATOR = "\n"
 
@@ -97,6 +103,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val bitrate = intPreferencesKey("encoder_bitrate")
         val mono = booleanPreferencesKey("downmix_mono")
         val autoCover = booleanPreferencesKey("auto_cover_search")
+        val parallelImports = intPreferencesKey("parallel_imports")
+        val parallelCodecs = intPreferencesKey("parallel_codecs")
         val sort = stringPreferencesKey("library_sort")
         val descending = booleanPreferencesKey("library_descending")
         val filter = stringPreferencesKey("library_filter")
@@ -127,6 +135,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             encoderBitrateKbps = p[Keys.bitrate] ?: 64,
             downmixToMono = p[Keys.mono] ?: false,
             autoCoverSearch = p[Keys.autoCover] ?: true,
+            parallelImports = p[Keys.parallelImports] ?: DEFAULT_PARALLEL_IMPORTS,
+            parallelCodecs = p[Keys.parallelCodecs] ?: 0,
             librarySort = enumOrDefault(p[Keys.sort], SortField.RECENT),
             libraryDescending = p[Keys.descending] ?: true,
             libraryFilter = enumOrDefault(p[Keys.filter], ProgressFilter.ALL),
@@ -165,6 +175,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     suspend fun setEncoderBitrate(kbps: Int) = edit { it[Keys.bitrate] = kbps }
     suspend fun setDownmixToMono(enabled: Boolean) = edit { it[Keys.mono] = enabled }
     suspend fun setAutoCoverSearch(enabled: Boolean) = edit { it[Keys.autoCover] = enabled }
+    suspend fun setParallelImports(books: Int) = edit { it[Keys.parallelImports] = books }
+    suspend fun setParallelCodecs(codecs: Int) = edit { it[Keys.parallelCodecs] = codecs }
     suspend fun setLibrarySort(sort: SortField, descending: Boolean) = edit {
         it[Keys.sort] = sort.name
         it[Keys.descending] = descending

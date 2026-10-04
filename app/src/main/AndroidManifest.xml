@@ -79,6 +79,12 @@
             android:exported="false"
             android:foregroundServiceType="mediaProcessing|dataSync" />
 
+        <!-- Converts audio in its own process, which is restarted when the phone's codecs break. -->
+        <service
+            android:name=".importer.ConverterService"
+            android:exported="false"
+            android:process=":converter" />
+
         <!-- Keeps torrent downloads running with the app closed (Android 14+). -->
         <service
             android:name=".torrent.TorrentTransferJob"

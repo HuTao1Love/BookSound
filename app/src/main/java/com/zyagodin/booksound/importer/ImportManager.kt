@@ -3,7 +3,6 @@ package com.zyagodin.booksound.importer
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.storage.DocumentStore
 import kotlinx.coroutines.CancellationException
@@ -15,14 +14,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Queue of imports, processed in the application scope, up to [PARALLEL_IMPORTS] books at a time
- * ([ImportPipeline] shares the codecs between them and writes into the library one book at a
- * time). The UI and the [ImportService] observe [jobs]; the service only keeps the process in the
+ * Queue of imports, processed in the application scope, up to [parallelImports] books at a time (a
+ * setting; [ImportPipeline] shares the codecs between them and writes into the library one book at
+ * a time). The UI and the [ImportService] observe [jobs]; the service only keeps the process in the
  * foreground.
  */
 class ImportManager(
@@ -31,6 +29,8 @@ class ImportManager(
     private val pipeline: ImportPipeline,
     private val documents: DocumentStore,
     private val covers: CoverStore,
+    /** Books converted at the same time; changes apply to the books started next. */
+    parallelImports: StateFlow<Int>,
     /** Called after a book's file was rewritten so an active player can reopen it. */
     private val onBookFileChanged: (bookId: String) -> Unit,
 ) {
@@ -39,7 +39,7 @@ class ImportManager(
 
     private val queue = Channel<String>(Channel.UNLIMITED)
     private val running = ConcurrentHashMap<String, Job>()
-    private val slots = Semaphore(PARALLEL_IMPORTS)
+    private val slots = AdjustableGate(parallelImports)
 
     init {
         scope.launch {
@@ -169,9 +169,16 @@ class ImportManager(
         _jobs.update { list -> list.map { if (it.id == id) change(it) else it } }
     }
 
+    /**
+     * A plain start, not startForegroundService(): that one obliges the service to enter the
+     * foreground within seconds or the app crashes, which it can't when Android refuses (the
+     * daily foreground time is used up). Imports start while the app is visible, where a plain
+     * start is allowed; in the background (torrents finishing) the start is refused, and the
+     * torrent download job keeps the process alive instead.
+     */
     private fun startService() {
         try {
-            ContextCompat.startForegroundService(context, Intent(context, ImportService::class.java))
+            context.startService(Intent(context, ImportService::class.java))
         } catch (e: IllegalStateException) {
             // Background start not allowed; the job still runs while the app process lives.
             Log.w(TAG, "Could not start import service", e)
@@ -180,8 +187,5 @@ class ImportManager(
 
     companion object {
         private const val TAG = "ImportManager"
-
-        /** Books processed at the same time; the codec budget in [ImportPipeline] limits encoding further. */
-        private const val PARALLEL_IMPORTS = 3
     }
 }

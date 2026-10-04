@@ -37,12 +37,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -75,7 +74,9 @@ class ImportPipeline(
     private val covers: CoverStore,
     private val settings: SettingsRepository,
     private val journal: ImportJournal,
-    private val transcoder: AudioTranscoder,
+    private val transcoder: Transcoder,
+    /** Codecs encoding at the same time across all imports (a setting, see [codecLimit]). */
+    private val codecLimit: StateFlow<Int>,
 ) {
     fun interface Progress {
         fun report(stage: ImportStage, fraction: Float?)
@@ -300,23 +301,18 @@ class ImportPipeline(
                 report.report(ImportStage.CONVERTING, it)
             }
         }
-        var attempt = 1
-        while (true) {
-            try {
-                encode()
-                return
-            } catch (e: ExportException) {
-                // Codecs fail next to other encodes on some phones, and now and then even alone (the
-                // phone's media service drops every codec at once): the file is not at fault, so
-                // try again alone with fresh codecs before giving up.
-                if (e.errorCode !in CODEC_ERRORS || attempt >= CODEC_ATTEMPTS) throw e
-                Log.w(TAG, "Codec failed (attempt $attempt), transcoding alone again", e)
-                parallelUnreliable = true
-                output.delete()
-                report.report(ImportStage.CONVERTING, 0f)
-                delay(CODEC_RETRY_DELAY_MS * attempt)
-                attempt++
-            }
+        val alone = parallelUnreliable
+        try {
+            encode()
+        } catch (e: ExportException) {
+            // Codecs fail next to other encodes on some phones: try once more alone. (A codec that
+            // broke for good was already retried in a fresh process by the transcoder.)
+            if (alone || e.errorCode !in CODEC_ERRORS) throw e
+            Log.w(TAG, "Codec failed next to other encodes, transcoding alone", e)
+            parallelUnreliable = true
+            output.delete()
+            report.report(ImportStage.CONVERTING, 0f)
+            encode()
         }
     }
 
@@ -330,7 +326,7 @@ class ImportPipeline(
     private var parallelUnreliable = false
 
     /** Codecs in use across every import running side by side (parts of one book or several books). */
-    private val codecs = Semaphore(CODEC_BUDGET)
+    private val codecs = AdjustableGate(codecLimit)
 
     /** After codec trouble, one codec at a time across all imports; see [withCodec]. */
     private val soloCodec = Mutex()
@@ -357,19 +353,19 @@ class ImportPipeline(
             codecs.release()
         }
         // Alone means alone: wait until codecs started before the trouble was noticed are done too.
-        // Only the holder of soloCodec collects permits, so collecting them can't deadlock.
         return soloCodec.withLock {
-            var held = 0
+            codecs.acquireAll()
             try {
-                repeat(CODEC_BUDGET) { codecs.acquire(); held++ }
                 block()
             } finally {
-                repeat(held) { codecs.release() }
+                codecs.releaseAll()
             }
         }
     }
 
-    private fun encodesInParallel(request: ImportRequest) = request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1
+    /** Parts are encoded side by side only when more than one codec may run at once. */
+    private fun encodesInParallel(request: ImportRequest) =
+        request.strategy == ConversionStrategy.TRANSCODE && request.parts.size > 1 && codecLimit.value > 1
 
     /**
      * Encodes the parts to AAC side by side (AAC encoding runs on one CPU core per file, so a
@@ -578,8 +574,21 @@ class ImportPipeline(
             ImportFailure.SourceUnavailable(fileName ?: fallbackName ?: "", t)
         ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
             ImportFailure.UnsupportedFormat(fileName, t.errorCodeName)
+        // A codec error reaching here survived conversions in fresh processes (see RemoteTranscoder):
+        // for a decoder that points at the file, for an encoder at the phone's codecs.
         ExportException.ERROR_CODE_DECODING_FAILED -> ImportFailure.CorruptedInput(fileName, t.errorCodeName)
-        else -> ImportFailure.ConversionFailed(listOfNotNull(fileName, t.errorCodeName, underlyingCause(t)).joinToString(": "), t)
+        else -> if (isCodecFailure(t)) {
+            ImportFailure.CodecFailure(listOfNotNull(t.errorCodeName, underlyingCause(t)).joinToString(": "), t)
+        } else {
+            ImportFailure.ConversionFailed(listOfNotNull(fileName, t.errorCodeName, underlyingCause(t)).joinToString(": "), t)
+        }
+    }
+
+    /** The phone's codecs or the conversion process failed, not the file. */
+    private fun isCodecFailure(t: ExportException): Boolean = when (val cause = t.cause) {
+        is ConverterDiedException -> true
+        is RemoteConversionError -> cause.codecFailed && t.errorCode in CODEC_ERRORS
+        else -> false
     }
 
     /**
@@ -589,6 +598,11 @@ class ImportPipeline(
     private fun underlyingCause(t: ExportException): String? {
         var root: Throwable = t.cause ?: return null
         while (true) root = root.cause?.takeIf { it !== root } ?: break
+        if (root is RemoteConversionError) {
+            // Already "Class: message" for each cause, from the conversion process.
+            val codec = if (root.codecFailed) " [${root.codecDiagnostic}, code ${root.codecErrorCode}]" else ""
+            return (root.message.orEmpty().substringAfterLast(" ← ") + codec).take(240)
+        }
         val codec = (root as? MediaCodec.CodecException)?.let { " [${it.diagnosticInfo}, code ${it.errorCode}]" }.orEmpty()
         return (root.javaClass.simpleName + (root.message?.let { " — $it" } ?: "") + codec).take(240)
     }
@@ -631,10 +645,14 @@ class ImportPipeline(
         private const val SAFETY_MARGIN = 32L * 1024 * 1024
 
         /**
-         * Encodes at the same time across all imports: half the CPU cores (AAC encoding uses one
-         * core each), at least 2, at most 4 (codec instances and memory are limited).
+         * Encodes at the same time across all imports when set to automatic: half the CPU cores
+         * (AAC encoding uses one core each), at least 2, at most 4 (codec instances and memory are
+         * limited).
          */
-        private val CODEC_BUDGET = maxOf(2, Runtime.getRuntime().availableProcessors() / 2).coerceAtMost(4)
+        val AUTO_CODECS = maxOf(2, Runtime.getRuntime().availableProcessors() / 2).coerceAtMost(4)
+
+        /** The codec limit for the "parallel codecs" setting (0 = automatic). */
+        fun codecLimit(setting: Int): Int = if (setting <= 0) AUTO_CODECS else setting
 
         /** Codec errors that may come from running several codecs at once rather than from the file. */
         private val CODEC_ERRORS = setOf(
@@ -644,10 +662,6 @@ class ImportPipeline(
             // The phone's media service dropping every codec at once shows up on the decoder too.
             ExportException.ERROR_CODE_DECODING_FAILED,
         )
-
-        /** Encodes of one book in one pass, counting the first, while codecs keep failing. */
-        private const val CODEC_ATTEMPTS = 3
-        private const val CODEC_RETRY_DELAY_MS = 3_000L
 
         /** Share of the conversion progress spent encoding; the rest is joining. */
         private const val ENCODE_SHARE = 0.95

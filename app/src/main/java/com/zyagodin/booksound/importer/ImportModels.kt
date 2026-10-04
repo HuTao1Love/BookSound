@@ -97,6 +97,9 @@ sealed class ImportFailure(message: String? = null, cause: Throwable? = null) : 
     class UnsupportedFormat(val fileName: String?, val detail: String?) : ImportFailure("Unsupported: $fileName $detail")
     class CorruptedInput(val fileName: String?, val detail: String?) : ImportFailure("Corrupted: $fileName $detail")
     class ConversionFailed(val detail: String?, cause: Throwable? = null) : ImportFailure("Conversion failed: $detail", cause)
+
+    /** The phone's codecs kept failing, even in fresh conversion processes; the file is likely fine. */
+    class CodecFailure(val detail: String?, cause: Throwable? = null) : ImportFailure("Codec failed: $detail", cause)
     class LibraryUnavailable : ImportFailure("Library folder unavailable")
     class WriteFailed(val detail: String?, cause: Throwable? = null) : ImportFailure("Write failed: $detail", cause)
     class VerificationFailed(val detail: String?) : ImportFailure("Verification failed: $detail")
