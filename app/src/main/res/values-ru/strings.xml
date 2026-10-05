@@ -481,6 +481,11 @@
     <string name="settings_shake_hint">Встряхните телефон, пока идёт таймер, чтобы запустить его заново</string>
     <string name="settings_sleep_repeat">Сохранять таймер сна</string>
     <string name="settings_sleep_repeat_hint">Сработавший таймер включится снова, как только вы продолжите слушать</string>
+    <string name="settings_sleep_auto_night">Таймер сна ночью</string>
+    <string name="settings_sleep_auto_night_hint">Включается сам, когда вы слушаете ночью, и выключается утром</string>
+    <string name="settings_sleep_night_start">Начало ночи</string>
+    <string name="settings_sleep_night_end">Конец ночи</string>
+    <string name="sleep_auto_hint">Включён автоматически на ночь. Если выключить, до утра сам не включится.</string>
 
     <!-- Умный откат -->
     <string name="settings_smart_rewind_amount">Отматывать на</string>

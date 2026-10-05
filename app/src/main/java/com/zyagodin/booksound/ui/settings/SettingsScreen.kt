@@ -42,15 +42,20 @@ import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +68,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +111,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val settings: StateFlow<AppSettings> = container.settings.state
@@ -141,6 +151,9 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setSleepFade(v: Boolean) = viewModelScope.launch { s.setSleepFadeOut(v) }
     fun setShake(v: Boolean) = viewModelScope.launch { s.setShakeToReset(v) }
     fun setSleepRepeat(v: Boolean) = viewModelScope.launch { s.setSleepRepeat(v) }
+    fun setSleepAutoNight(v: Boolean) = viewModelScope.launch { s.setSleepAutoNight(v) }
+    fun setSleepNightStart(v: Int) = viewModelScope.launch { s.setSleepNightStart(v) }
+    fun setSleepNightEnd(v: Int) = viewModelScope.launch { s.setSleepNightEnd(v) }
     fun setBitrate(v: Int) = viewModelScope.launch { s.setEncoderBitrate(v) }
     fun setMono(v: Boolean) = viewModelScope.launch { s.setDownmixToMono(v) }
     fun setAutoCover(v: Boolean) = viewModelScope.launch { s.setAutoCoverSearch(v) }
@@ -148,7 +161,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setParallelCodecs(v: Int) = viewModelScope.launch { s.setParallelCodecs(v) }
 }
 
-private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS }
+private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS, NIGHT_START, NIGHT_END }
 
 @Composable
 fun SettingsScreen(navigator: AppNavigator) {
@@ -219,6 +232,11 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Toggle(Icons.AutoMirrored.Rounded.VolumeDown, stringResource(R.string.settings_sleep_fade), stringResource(R.string.settings_sleep_fade_hint), settings.sleepFadeOut, vm::setSleepFade)
                             Toggle(Icons.Rounded.Vibration, stringResource(R.string.settings_shake), stringResource(R.string.settings_shake_hint), settings.shakeToReset, vm::setShake)
                             Toggle(Icons.Rounded.Repeat, stringResource(R.string.settings_sleep_repeat), stringResource(R.string.settings_sleep_repeat_hint), settings.sleepRepeat, vm::setSleepRepeat)
+                            Toggle(Icons.Rounded.NightsStay, stringResource(R.string.settings_sleep_auto_night), stringResource(R.string.settings_sleep_auto_night_hint), settings.sleepAutoNight, vm::setSleepAutoNight)
+                            if (settings.sleepAutoNight) {
+                                Item(Icons.Rounded.Schedule, stringResource(R.string.settings_sleep_night_start), timeLabel(settings.sleepNightStartMinute), onClick = { choice = ChoiceKind.NIGHT_START })
+                                Item(Icons.Rounded.WbSunny, stringResource(R.string.settings_sleep_night_end), timeLabel(settings.sleepNightEndMinute), onClick = { choice = ChoiceKind.NIGHT_END })
+                            }
                         }
                         Group(stringResource(R.string.settings_group_import)) {
                             Item(Icons.Rounded.GraphicEq, stringResource(R.string.settings_quality), bitrateLabel(settings.encoderBitrateKbps), onClick = { choice = ChoiceKind.BITRATE })
@@ -295,8 +313,17 @@ fun SettingsScreen(navigator: AppNavigator) {
         ChoiceKind.BITRATE -> OptionsSheet(stringResource(R.string.settings_quality), listOf(48, 64, 96, 128), settings.encoderBitrateKbps, { bitrateLabel(it) }, { vm.setBitrate(it); choice = null }) { choice = null }
         ChoiceKind.PARALLEL_BOOKS -> OptionsSheet(stringResource(R.string.settings_parallel_books), listOf(1, 2, 3), settings.parallelImports, { parallelBooksLabel(it) }, { vm.setParallelImports(it); choice = null }) { choice = null }
         ChoiceKind.PARALLEL_CODECS -> OptionsSheet(stringResource(R.string.settings_parallel_codecs), listOf(0, 1, 2, 3, 4), settings.parallelCodecs, { parallelCodecsLabel(it) }, { vm.setParallelCodecs(it); choice = null }) { choice = null }
+        ChoiceKind.NIGHT_START -> TimeSheet(stringResource(R.string.settings_sleep_night_start), settings.sleepNightStartMinute, { vm.setSleepNightStart(it); choice = null }) { choice = null }
+        ChoiceKind.NIGHT_END -> TimeSheet(stringResource(R.string.settings_sleep_night_end), settings.sleepNightEndMinute, { vm.setSleepNightEnd(it); choice = null }) { choice = null }
         null -> Unit
     }
+}
+
+/** [minuteOfDay] as a clock time, in the 12/24-hour format the phone uses. */
+@Composable
+private fun timeLabel(minuteOfDay: Int): String {
+    val pattern = if (android.text.format.DateFormat.is24HourFormat(LocalContext.current)) "H:mm" else "h:mm a"
+    return LocalTime.of(minuteOfDay / 60, minuteOfDay % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
 }
 
 @Composable
@@ -358,6 +385,26 @@ private fun Toggle(icon: ImageVector, title: String, subtitle: String, checked: 
             }
             Spacer(Modifier.width(Spacing.md))
             Switch(checked = checked, onCheckedChange = onChange)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeSheet(title: String, minuteOfDay: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
+    val state = rememberTimePickerState(
+        initialHour = minuteOfDay / 60,
+        initialMinute = minuteOfDay % 60,
+        is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current),
+    )
+    AppBottomSheet(onDismiss = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm))
+            Spacer(Modifier.size(Spacing.md))
+            TimePicker(state)
+            FilledTonalButton(onClick = { onSelect(state.hour * 60 + state.minute) }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_done))
+            }
         }
     }
 }
