@@ -25,6 +25,30 @@ object ConversionPlanner {
         return if (parts.all { it.stream!!.isCompatibleWith(first) }) ConversionStrategy.CONCAT_COPY else ConversionStrategy.TRANSCODE
     }
 
+    /**
+     * The AAC bitrate to encode a book at: the [settingKbps], but not above what the source files
+     * carry (their duration-weighted average, rounded to 8 kbps, as a 96 kbps MP3 measures a hair
+     * over 96). More bits than the source has only make the file bigger: what its encoder threw
+     * away doesn't come back.
+     */
+    fun outputBitrateKbps(settingKbps: Int, sources: List<ImportSourceFile>): Int {
+        var bits = 0.0
+        var durationMs = 0L
+        for (file in sources) {
+            val duration = file.parsed.durationMs?.takeIf { it > 0 } ?: continue
+            val bitrate = file.parsed.stream?.bitrate?.takeIf { it > 0 }?.toDouble()
+                ?: (file.sizeBytes * 8 * 1000.0 / duration).takeIf { file.sizeBytes > 0 }
+                ?: continue
+            bits += bitrate * duration
+            durationMs += duration
+        }
+        if (durationMs == 0L) return settingKbps
+        val sourceKbps = (Math.round(bits / durationMs / 1000 / 8) * 8).toInt()
+        return minOf(settingKbps, sourceKbps.coerceAtLeast(MIN_BITRATE_KBPS))
+    }
+
+    private const val MIN_BITRATE_KBPS = 16
+
     /** Expected size of the final file, used for free-space checks before any work starts. */
     fun estimateOutputBytes(strategy: ConversionStrategy, inputBytes: Long, durationMs: Long, bitrateKbps: Int, coverBytes: Int): Long {
         val audio = when (strategy) {
