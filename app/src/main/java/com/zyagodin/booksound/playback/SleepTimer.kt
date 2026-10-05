@@ -2,6 +2,7 @@ package com.zyagodin.booksound.playback
 
 import android.content.Context
 import androidx.media3.common.Player
+import com.zyagodin.booksound.data.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,8 +31,11 @@ sealed interface SleepTimerState {
  *
  * Shake to reset: while the timer runs and the book plays, shaking the phone starts the countdown
  * over (in "end of chapter" mode: plays one more chapter) and undoes the fade-out.
+ *
+ * Repeat ([com.zyagodin.booksound.data.settings.AppSettings.sleepRepeat]): a timer that ran out is
+ * remembered and starts again as soon as the book plays again, until the user turns it off.
  */
-class SleepTimer(context: Context, private val scope: CoroutineScope) {
+class SleepTimer(context: Context, private val scope: CoroutineScope, private val settings: SettingsRepository) {
     private val _state = MutableStateFlow<SleepTimerState>(SleepTimerState.Off)
     val state: StateFlow<SleepTimerState> = _state
 
@@ -41,15 +45,29 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
     private var ticker: Job? = null
     private val shake = ShakeDetector(context) { onShake() }
 
+    /** Minutes of the last countdown started, to repeat it without the "+5 min" extensions. */
+    private var countdownMinutes = 0
+
+    /** A repeated "end of chapter" timer should skip the chapter it already stopped at. */
+    private var skipEndedChapter = false
+
+    private val repeatOnPlay = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) repeatIfRemembered()
+        }
+    }
+
     fun attach(player: AudiobookPlayer, fadeOut: () -> Boolean, shakeToReset: () -> Boolean) {
         this.player = player
         this.fadeOut = fadeOut
         this.shakeToReset = shakeToReset
+        player.addListener(repeatOnPlay)
         if (_state.value != SleepTimerState.Off) startTicker()
     }
 
     fun detach(player: AudiobookPlayer) {
         if (this.player === player) {
+            player.removeListener(repeatOnPlay)
             this.player = null
             ticker?.cancel()
             _state.value = SleepTimerState.Off
@@ -59,12 +77,15 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
 
     fun start(minutes: Int) {
         val total = minutes * 60_000L
+        countdownMinutes = minutes
+        skipEndedChapter = false
         _state.value = SleepTimerState.Countdown(total, total)
         restoreVolume()
         startTicker()
     }
 
     fun startEndOfChapter() {
+        skipEndedChapter = false
         _state.value = SleepTimerState.EndOfChapter(null, player?.currentChapterIndex() ?: -1)
         restoreVolume()
         startTicker()
@@ -78,12 +99,49 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
         restoreVolume()
     }
 
+    /** Turned off by the user: also forgets the timer to repeat. */
     fun cancel() {
+        stop()
+        remember(null)
+    }
+
+    /** The book played to its end: the timer stops, but with repeat on it starts again with the next book. */
+    fun bookEnded() {
+        if (_state.value != SleepTimerState.Off && settings.state.value.sleepRepeat) remember(repeatValue())
+        stop()
+    }
+
+    private fun stop() {
         ticker?.cancel()
         ticker = null
         _state.value = SleepTimerState.Off
+        skipEndedChapter = false
         shake.stop()
         restoreVolume()
+    }
+
+    private fun repeatValue(): Int = when (_state.value) {
+        is SleepTimerState.EndOfChapter -> REPEAT_END_OF_CHAPTER
+        else -> countdownMinutes
+    }
+
+    private fun remember(timer: Int?) {
+        // On the main thread, so quick successive changes are written in order.
+        scope.launch(Dispatchers.Main) { settings.setSleepRepeatTimer(timer) }
+    }
+
+    private fun repeatIfRemembered() {
+        if (_state.value != SleepTimerState.Off) return
+        val s = settings.state.value
+        if (!s.sleepRepeat) return
+        when (val timer = s.sleepRepeatTimer) {
+            null -> return
+            REPEAT_END_OF_CHAPTER -> {
+                startEndOfChapter()
+                skipEndedChapter = true
+            }
+            else -> start(timer)
+        }
     }
 
     private fun onShake() {
@@ -129,7 +187,21 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
                     }
                     is SleepTimerState.EndOfChapter -> {
                         val current = p.currentChapterIndex()
-                        val target = maxOf(current, s.chapterIndex)
+                        var target = maxOf(current, s.chapterIndex)
+                        if (skipEndedChapter && p.isPlaying) {
+                            // Repeated after stopping at a chapter end: playback resumes at (or,
+                            // with smart rewind, just before) that end, so stop after the next one.
+                            skipEndedChapter = false
+                            val end = p.chapters.getOrNull(target)?.endMs ?: p.duration.takeIf { p.duration > 0 }
+                            if (end != null && end - p.currentPosition < REPEAT_SKIP_MS) {
+                                if (target + 1 >= p.chapters.size) {
+                                    // Nothing left to stop after: the book plays out.
+                                    stop()
+                                    return@launch
+                                }
+                                target++
+                            }
+                        }
                         val chapter = p.chapters.getOrNull(target)
                         val speed = p.playbackParameters.speed.coerceAtLeast(0.1f)
                         val remaining = chapter?.let { ((it.endMs - p.currentPosition) / speed).toLong() }
@@ -154,6 +226,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun finish(p: Player) {
+        remember(if (settings.state.value.sleepRepeat) repeatValue() else null)
         p.pause()
         p.volume = 1f
         _state.value = SleepTimerState.Off
@@ -167,5 +240,11 @@ class SleepTimer(context: Context, private val scope: CoroutineScope) {
     companion object {
         private const val TICK_MS = 500L
         private const val FADE_MS = 15_000L
+
+        /** Stored as the timer to repeat for "end of chapter" (otherwise minutes). */
+        private const val REPEAT_END_OF_CHAPTER = 0
+
+        /** A chapter with less than this left counts as the one the timer already stopped at. */
+        private const val REPEAT_SKIP_MS = 60_000L
     }
 }
