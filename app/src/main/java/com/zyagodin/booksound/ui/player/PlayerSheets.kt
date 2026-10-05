@@ -156,6 +156,14 @@ fun SleepSheet(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                             )
                             Text(stringResource(R.string.sleep_paused_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            if (state is SleepTimerState.Countdown && state.auto) {
+                                Text(
+                                    stringResource(R.string.sleep_auto_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                             if (shakeToReset) {
                                 Text(
                                     stringResource(if (state is SleepTimerState.EndOfChapter) R.string.sleep_shake_hint_chapter else R.string.sleep_shake_hint),
