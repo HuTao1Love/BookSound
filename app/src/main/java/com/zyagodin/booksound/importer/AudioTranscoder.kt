@@ -20,6 +20,7 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.FrameworkMuxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +89,11 @@ class AudioTranscoder(private val context: Context) : Transcoder {
                     val transformer = Transformer.Builder(context)
                         .setAudioMimeType(MimeTypes.AUDIO_AAC)
                         .setEncoderFactory(encoderFactory)
+                        // The platform muxer (MediaMuxer) keeps its sample tables in native memory.
+                        // Media3's own Mp4Muxer, the default (DefaultMuxer wraps it too), keeps
+                        // objects per AAC frame on the Java heap and runs out of memory at ~50 h of
+                        // audio (a whole series in one book).
+                        .setMuxerFactory(FrameworkMuxer.Factory())
                         .setLooper(Looper.getMainLooper())
                         .addListener(object : Transformer.Listener {
                             override fun onCompleted(composition: Composition, exportResult: ExportResult) {

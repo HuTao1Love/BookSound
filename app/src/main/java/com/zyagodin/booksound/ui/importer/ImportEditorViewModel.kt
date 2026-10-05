@@ -167,6 +167,10 @@ class ImportEditorViewModel(
         val strategy = strategyFor(ready, form)
         val duration = form.parts.sumOf { it.durationMs }
         val inputBytes = form.parts.sumOf { p -> ready.files.firstOrNull { it.id == p.sourceId }?.sizeBytes ?: 0L }
+        val bitrate = ConversionPlanner.outputBitrateKbps(
+            settings.encoderBitrateKbps,
+            form.parts.mapNotNull { p -> ready.files.firstOrNull { it.id == p.sourceId } },
+        )
         return EditorUi(
             analysis = analysis,
             form = form,
@@ -175,10 +179,10 @@ class ImportEditorViewModel(
             isEdit = session?.isEdit == true,
             destination = LibraryLayout.pathFor(metadata, ready.draft.sourceName).relativePath,
             strategy = strategy,
-            estimatedBytes = ConversionPlanner.estimateOutputBytes(strategy, inputBytes, duration, settings.encoderBitrateKbps, cover?.picture?.bytes?.size ?: 0),
+            estimatedBytes = ConversionPlanner.estimateOutputBytes(strategy, inputBytes, duration, bitrate, cover?.picture?.bytes?.size ?: 0),
             totalDurationMs = duration,
             chapterCount = ChapterPlanner.plan(form.parts).size,
-            bitrateKbps = settings.encoderBitrateKbps,
+            bitrateKbps = bitrate,
             seriesIndexInvalid = !SeriesIndex.isValid(form.seriesIndex),
             downloadingCover = isDownloading,
             busy = isBusy,
