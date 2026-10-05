@@ -138,13 +138,22 @@ class AppContainer(app: Application) {
 
     val sync = SyncCoordinator(appScope, RoomSyncLocalStore(database, settings), device = { library.device() })
 
-    /** Details of the book currently loaded in the player, for the mini player and player screen. */
+    /**
+     * Details of the book currently loaded in the player, for the mini player and player screen.
+     * Without the saved listening state (position, speed, finished): it is saved every few seconds
+     * while playing and would redraw both for nothing. The live position is in [PlayerConnection.state].
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     val nowPlaying: StateFlow<BookDetails?> = player.state
         .map { it.bookId }
         .distinctUntilChanged()
         .flatMapLatest { id -> if (id == null) flowOf(null) else library.observeDetails(id) }
+        .map { it?.withoutListeningState() }
+        .distinctUntilChanged()
         .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    private fun BookDetails.withoutListeningState() =
+        copy(item = item.copy(entry = item.entry.copy(positionMs = 0, finished = false, lastPlayedAt = null)), speed = null)
 
     /** After a book's file was rewritten, reload it in the player at the same position. */
     private fun reopenIfPlaying(bookId: String) {

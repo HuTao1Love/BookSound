@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -61,8 +64,12 @@ fun BookCover(
             .clip(shape)
             .border(1.dp, edge, shape),
     ) {
-        CoverPlaceholder(title, author, Modifier.fillMaxSize())
-        if (coverPath != null) {
+        // The generated placeholder only stands in for a missing cover: shown while the image
+        // loads, it flashed a bright title card every time a screen with the cover opened.
+        var failed by remember(coverPath) { mutableStateOf(false) }
+        if (coverPath == null || failed) {
+            CoverPlaceholder(title, author, Modifier.fillMaxSize())
+        } else {
             val context = LocalContext.current
             val request = remember(coverPath) {
                 ImageRequest.Builder(context).data(File(coverPath)).crossfade(true).build()
@@ -71,7 +78,8 @@ fun BookCover(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                onError = { failed = true },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh),
             )
         }
     }
