@@ -133,6 +133,7 @@ class ImportPlanner(
         }
         val strategy = strategyFor(input.parts, input.files)
         val inputBytes = parts.sumOf { it.sizeBytes.coerceAtLeast(0) }
+        val bitrate = ConversionPlanner.outputBitrateKbps(current.encoderBitrateKbps, input.parts.mapNotNull { input.files[it.sourceId] })
         return PlanOutcome.Ready(
             ImportRequest(
                 jobId = UUID.randomUUID().toString(),
@@ -142,7 +143,7 @@ class ImportPlanner(
                 chapters = ChapterPlanner.plan(input.parts) { context.getString(R.string.chapter_number, it) },
                 cover = input.cover,
                 strategy = strategy,
-                bitrateKbps = current.encoderBitrateKbps,
+                bitrateKbps = bitrate,
                 downmixToMono = current.downmixToMono,
                 conflictPolicy = policy,
                 replacesBookId = replacesBookId,
@@ -150,7 +151,7 @@ class ImportPlanner(
                 sourceName = input.sourceName,
                 heldPermissions = input.heldPermissions,
                 estimatedOutputBytes = ConversionPlanner.estimateOutputBytes(
-                    strategy, inputBytes, parts.sumOf { it.durationMs }, current.encoderBitrateKbps, input.cover?.bytes?.size ?: 0,
+                    strategy, inputBytes, parts.sumOf { it.durationMs }, bitrate, input.cover?.bytes?.size ?: 0,
                 ),
                 torrentId = input.torrentId,
                 strictValidation = input.strictValidation,

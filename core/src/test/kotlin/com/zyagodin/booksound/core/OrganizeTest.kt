@@ -1,10 +1,12 @@
 package com.zyagodin.booksound.core
 
 import com.zyagodin.booksound.core.metadata.AudioContainer
+import com.zyagodin.booksound.core.metadata.AudioStreamInfo
 import com.zyagodin.booksound.core.metadata.AudioTags
 import com.zyagodin.booksound.core.metadata.ParsedAudioFile
 import com.zyagodin.booksound.core.model.ChapterMark
 import com.zyagodin.booksound.core.organize.ChapterPlanner
+import com.zyagodin.booksound.core.organize.ConversionPlanner
 import com.zyagodin.booksound.core.organize.DraftPart
 import com.zyagodin.booksound.core.organize.ImportDraftBuilder
 import com.zyagodin.booksound.core.organize.ImportSourceFile
@@ -87,5 +89,26 @@ class OrganizeTest {
         assertEquals(listOf(0L, 4_000L, 10_000L), chapters.map { it.startMs })
         assertEquals(listOf(4_000L, 10_000L, 15_000L), chapters.map { it.endMs })
         assertEquals(listOf(0, 1, 2), chapters.map { it.index })
+    }
+
+    @Test
+    fun `output bitrate never exceeds what the source carries`() {
+        fun mp3(kbps: Int?, durationMs: Long, sizeBytes: Long = 0) = ImportSourceFile(
+            id = "f$kbps$durationMs", displayName = "x.mp3", relativeDir = emptyList(), sizeBytes = sizeBytes,
+            parsed = ParsedAudioFile(
+                AudioContainer.MP3, AudioStreamInfo("mp3", 44100, 2, kbps?.let { it * 1000 }), durationMs, AudioTags(), emptyList(), null,
+            ),
+        )
+        val hour = 3_600_000L
+        // A 96 kbps book stays at 96 when 128 is chosen; the setting still wins when it is lower.
+        assertEquals(96, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(96, hour), mp3(96, hour))))
+        assertEquals(64, ConversionPlanner.outputBitrateKbps(64, listOf(mp3(96, hour))))
+        // Weighted by duration and rounded up to 8 kbps: (128 * 1 + 64 * 3) / 4 = 80.
+        assertEquals(80, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(128, hour), mp3(64, 3 * hour))))
+        assertEquals(40, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(33, hour))))
+        // Without a stream bitrate, the file size tells: 36 MB an hour is 80 kbps.
+        assertEquals(80, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(null, hour, sizeBytes = 36_000_000))))
+        // Nothing known: the setting.
+        assertEquals(128, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(null, hour))))
     }
 }
