@@ -49,6 +49,11 @@ data class AppSettings(
      * none ran out or the user turned it off. Kept on disk so it survives the app being killed overnight.
      */
     val sleepRepeatTimer: Int? = null,
+    /** The sleep timer starts by itself when the book plays at night and turns off when the night ends. */
+    val sleepAutoNight: Boolean = false,
+    /** Night hours for [sleepAutoNight], minutes since midnight; the night may span midnight. */
+    val sleepNightStartMinute: Int = 22 * 60,
+    val sleepNightEndMinute: Int = 7 * 60,
     /** Voice equalizer for books without their own choice. */
     val voicePreset: VoicePreset = VoicePreset.OFF,
     /** Voice equalizer chosen for a particular book (the narrator's voice), by book id. */
@@ -107,6 +112,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val shake = booleanPreferencesKey("shake_to_reset")
         val sleepRepeat = booleanPreferencesKey("sleep_repeat")
         val sleepRepeatTimer = intPreferencesKey("sleep_repeat_timer")
+        val sleepAutoNight = booleanPreferencesKey("sleep_auto_night")
+        val sleepNightStart = intPreferencesKey("sleep_night_start")
+        val sleepNightEnd = intPreferencesKey("sleep_night_end")
         val voicePreset = stringPreferencesKey("voice_preset")
         val bookVoicePresets = stringPreferencesKey("book_voice_presets")
         val bitrate = intPreferencesKey("encoder_bitrate")
@@ -141,6 +149,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             shakeToReset = p[Keys.shake] ?: true,
             sleepRepeat = p[Keys.sleepRepeat] ?: false,
             sleepRepeatTimer = p[Keys.sleepRepeatTimer],
+            sleepAutoNight = p[Keys.sleepAutoNight] ?: false,
+            sleepNightStartMinute = p[Keys.sleepNightStart] ?: (22 * 60),
+            sleepNightEndMinute = p[Keys.sleepNightEnd] ?: (7 * 60),
             voicePreset = enumOrDefault(p[Keys.voicePreset], VoicePreset.OFF),
             bookVoicePresets = decodePresets(p[Keys.bookVoicePresets]),
             encoderBitrateKbps = p[Keys.bitrate] ?: 64,
@@ -180,6 +191,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         if (!enabled) it.remove(Keys.sleepRepeatTimer)
     }
     suspend fun setSleepRepeatTimer(timer: Int?) = edit { if (timer == null) it.remove(Keys.sleepRepeatTimer) else it[Keys.sleepRepeatTimer] = timer }
+    suspend fun setSleepAutoNight(enabled: Boolean) = edit { it[Keys.sleepAutoNight] = enabled }
+    suspend fun setSleepNightStart(minuteOfDay: Int) = edit { it[Keys.sleepNightStart] = minuteOfDay }
+    suspend fun setSleepNightEnd(minuteOfDay: Int) = edit { it[Keys.sleepNightEnd] = minuteOfDay }
     suspend fun setVoicePreset(preset: VoicePreset) = edit { it[Keys.voicePreset] = preset.name }
 
     /** Remembers [preset] for [bookId]; null goes back to the default preset. */
