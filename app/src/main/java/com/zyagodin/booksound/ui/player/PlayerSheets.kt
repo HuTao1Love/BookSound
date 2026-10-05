@@ -37,8 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.audio.VoicePreset
@@ -118,7 +121,7 @@ private val SleepOptions = listOf(5, 10, 15, 30, 45, 60, 90)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SleepSheet(
-    state: SleepTimerState,
+    state: () -> SleepTimerState,
     hasChapters: Boolean,
     shakeToReset: Boolean,
     onStart: (Int) -> Unit,
@@ -128,6 +131,8 @@ fun SleepSheet(
     onDismiss: () -> Unit,
 ) {
     AppBottomSheet(onDismiss = onDismiss) {
+        // Read here, inside the sheet: the countdown redraws the sheet, not the player behind it.
+        val state = state()
         Column(Modifier.padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(stringResource(R.string.sleep_title), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(Spacing.lg))
@@ -284,25 +289,42 @@ private fun voicePresetDescription(preset: VoicePreset): String = stringResource
     },
 )
 
+/**
+ * A fast fling that runs into the top of the list stops there. The sheet used to get the rest of
+ * its speed and jumped down (or closed). Dragging the sheet down by the list still works: then the
+ * list consumed nothing and the sheet settles as usual.
+ */
+private val KeepFlingInList = object : NestedScrollConnection {
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        if (consumed.y != 0f) available else Velocity.Zero
+}
+
 @Composable
 fun ChaptersSheet(
     chapters: List<Chapter>,
     currentIndex: Int,
     isPlaying: Boolean,
-    position: Long,
+    position: () -> Long,
     onSelect: (Chapter) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AppBottomSheet(onDismiss = onDismiss, skipPartiallyExpanded = false) {
+    // Opens fully: half open, the bottom half of the list was off screen, and with it the current
+    // chapter near the end of a book.
+    AppBottomSheet(onDismiss = onDismiss) {
         Text(
             stringResource(R.string.chapters_title),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
         )
         val listState = rememberLazyListState(initialFirstVisibleItemIndex = (currentIndex - 2).coerceAtLeast(0))
-        LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm)) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+            modifier = Modifier.nestedScroll(KeepFlingInList),
+        ) {
             itemsIndexed(chapters, key = { _, c -> c.index }) { i, chapter ->
-                val progress = if (i == currentIndex && chapter.durationMs > 0) ((position - chapter.startMs).toFloat() / chapter.durationMs).coerceIn(0f, 1f) else null
+                // Only the current chapter reads the position, so only its row follows it.
+                val progress = if (i == currentIndex && chapter.durationMs > 0) ((position() - chapter.startMs).toFloat() / chapter.durationMs).coerceIn(0f, 1f) else null
                 ChapterRow(
                     chapter = chapter,
                     number = i + 1,

@@ -2,10 +2,16 @@ package com.zyagodin.booksound.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
@@ -20,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -37,6 +44,7 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.metadata
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -76,6 +84,24 @@ import kotlinx.coroutines.launch
 
 /** The "Add torrent" dialog is open; [initial] is a link or file handed over by another app. */
 private class AddTorrentRequest(val initial: TorrentSource?)
+
+/**
+ * The player slides up over the screen below (it is opened by swiping the mini player up) and
+ * slides back down when closed by the button, a swipe down or the back gesture. The screen below
+ * stays put: the default cross-fade made both screens half transparent and the one below vanished
+ * abruptly halfway through.
+ */
+private val PlayerTransitions = metadata {
+    put(NavDisplay.TransitionKey) {
+        slideInVertically(tween(350, easing = LinearOutSlowInEasing)) { it } togetherWith ExitTransition.KeepUntilTransitionsFinished
+    }
+    put(NavDisplay.PopTransitionKey) {
+        EnterTransition.None togetherWith slideOutVertically(tween(300, easing = FastOutLinearInEasing)) { it }
+    }
+    put(NavDisplay.PredictivePopTransitionKey) { _: Int ->
+        EnterTransition.None togetherWith slideOutVertically(tween(300, easing = FastOutLinearInEasing)) { it }
+    }
+}
 
 /** Extra bottom padding screens must leave for the floating mini player. */
 val LocalBottomOverlayPadding = compositionLocalOf { 0.dp }
@@ -153,7 +179,10 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val listPaneWidth = (windowWidth / 2).coerceIn(360.dp, 520.dp)
     val directive = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2()).copy(defaultPanePreferredWidth = listPaneWidth)
     val listDetail = rememberListDetailSceneStrategy<NavKey>(directive = directive)
-    val playerState by container.player.state.collectAsStateWithLifecycle()
+    // The position changes four times a second while playing: only the mini player reads it, the
+    // navigation follows whether a book is loaded.
+    val playerState = container.player.state.collectAsStateWithLifecycle()
+    val hasBook by remember { derivedStateOf { playerState.value.hasBook } }
     val nowPlaying by container.nowPlaying.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -184,7 +213,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     }
 
     val top = backStack.lastOrNull()
-    val showMiniPlayer = nowPlaying != null && playerState.hasBook &&
+    val showMiniPlayer = nowPlaying != null && hasBook &&
         (top == LibraryKey || top is SeriesKey || top is BookKey || top == ImportsKey || top == SettingsKey)
     // Two panes side by side: the bar docks under the list pane instead of straddling both.
     val listPaneShown = top == LibraryKey || top is SeriesKey ||
@@ -213,7 +242,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     entry<BookKey>(metadata = ListDetailSceneStrategy.detailPane()) { key ->
                         BookDetailScreen(key.bookId, navigator)
                     }
-                    entry<PlayerKey> { PlayerScreen(navigator) }
+                    entry<PlayerKey>(metadata = PlayerTransitions) { PlayerScreen(navigator) }
                     entry<ImportEditorKey> { key -> ImportEditorScreen(key.sessionId, navigator) }
                     entry<CoverPickerKey> { key -> CoverPickerScreen(key.sessionId, navigator) }
                     entry<ImportsKey> { ImportsScreen(navigator) }
@@ -264,7 +293,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
             nowPlaying?.let { book ->
                 MiniPlayer(
                     book = book,
-                    state = playerState,
+                    state = { playerState.value },
                     onOpen = navigator::openPlayer,
                     onTogglePlay = container.player::togglePlayPause,
                     onSkipBack = container.player::skipBack,

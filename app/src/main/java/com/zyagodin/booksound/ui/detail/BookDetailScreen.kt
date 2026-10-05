@@ -46,6 +46,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -140,7 +143,8 @@ fun DetailPlaceholder() {
 fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     val vm = appViewModel(key = "detail-$bookId") { BookDetailViewModel(it, bookId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    val player by vm.player.collectAsStateWithLifecycle()
+    val playerState = vm.player.collectAsStateWithLifecycle()
+    val live = remember(bookId, playerState) { LivePlayback(bookId, playerState) }
     var showRemove by rememberSaveable { mutableStateOf(false) }
 
     when (val s = state) {
@@ -151,32 +155,34 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
         }
         is DetailState.Loaded -> {
             val details = s.details
-            val isCurrent = player.bookId == bookId
-            val actions = DetailActions(
-                onBack = navigator::back,
-                onPlay = {
-                    vm.play()
-                    navigator.openPlayer()
-                },
-                onPause = vm::pause,
-                onChapter = { chapter ->
-                    vm.playChapter(chapter)
-                    navigator.openPlayer()
-                },
-                onEdit = { navigator.openImportEditor(vm.startEdit()) },
-                onToggleFinished = { vm.setFinished(!details.item.entry.finished) },
-                onRemove = { showRemove = true },
-                onRescan = vm::rescan,
-            )
+            val finished = details.item.entry.finished
+            val actions = remember(vm, navigator, finished) {
+                DetailActions(
+                    onBack = navigator::back,
+                    onPlay = {
+                        vm.play()
+                        navigator.openPlayer()
+                    },
+                    onPause = vm::pause,
+                    onChapter = { chapter ->
+                        vm.playChapter(chapter)
+                        navigator.openPlayer()
+                    },
+                    onEdit = { navigator.openImportEditor(vm.startEdit()) },
+                    onToggleFinished = { vm.setFinished(!finished) },
+                    onRemove = { showRemove = true },
+                    onRescan = vm::rescan,
+                )
+            }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 CoverBackdrop(
                     details.item.coverPath, details.item.metadata.title,
                     Modifier.fillMaxWidth().height(if (maxWidth >= 680.dp) maxHeight else 620.dp),
                 )
                 if (maxWidth >= 680.dp) {
-                    TwoColumnDetail(details, player, isCurrent, actions)
+                    TwoColumnDetail(details, live, actions)
                 } else {
-                    SingleColumnDetail(details, player, isCurrent, actions)
+                    SingleColumnDetail(details, live, actions)
                 }
             }
             if (showRemove) {
@@ -194,6 +200,32 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     }
 }
 
+/**
+ * The player as this screen sees it. The position changes four times a second while playing, so it
+ * is read only where it is shown; the rest follows derived values that change far less often.
+ */
+@Stable
+private class LivePlayback(private val bookId: String, private val state: State<PlayerUiState>) {
+    val isCurrent by derivedStateOf { state.value.bookId == bookId }
+    val playWhenReady by derivedStateOf { isCurrent && state.value.playWhenReady }
+    val isPlaying by derivedStateOf { isCurrent && state.value.isPlaying }
+
+    /** The listening position: live while this book is in the player, else the saved one. */
+    fun position(details: BookDetails): Long = state.value.takeIf { it.bookId == bookId }?.positionMs ?: details.item.entry.positionMs
+}
+
+/** Index of the chapter at the listening position (-1 before the book was started); changes only between chapters. */
+@Composable
+private fun rememberCurrentChapter(details: BookDetails, live: LivePlayback): Int {
+    val index by remember(details, live) {
+        derivedStateOf {
+            val position = live.position(details)
+            details.chapters.indexOfLast { it.startMs <= position }.takeIf { position > 0 || live.isCurrent } ?: -1
+        }
+    }
+    return index
+}
+
 private class DetailActions(
     val onBack: () -> Unit,
     val onPlay: () -> Unit,
@@ -206,7 +238,8 @@ private class DetailActions(
 )
 
 @Composable
-private fun SingleColumnDetail(details: BookDetails, player: PlayerUiState, isCurrent: Boolean, actions: DetailActions) {
+private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions) {
+    val currentChapter = rememberCurrentChapter(details, live)
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
         contentPadding = PaddingValues(bottom = bottom + Spacing.xl),
@@ -224,18 +257,19 @@ private fun SingleColumnDetail(details: BookDetails, player: PlayerUiState, isCu
                 Spacer(Modifier.height(Spacing.xl))
                 TitleBlock(details, centered = true)
                 Spacer(Modifier.height(Spacing.xl))
-                PlayBlock(details, player, isCurrent, actions)
+                PlayBlock(details, live, actions)
                 Spacer(Modifier.height(Spacing.lg))
                 StatsRow(details)
             }
         }
         infoItems(details, actions)
-        chapterItems(details, player, isCurrent, actions)
+        chapterItems(details, currentChapter, live, actions)
     }
 }
 
 @Composable
-private fun TwoColumnDetail(details: BookDetails, player: PlayerUiState, isCurrent: Boolean, actions: DetailActions) {
+private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions) {
+    val currentChapter = rememberCurrentChapter(details, live)
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Column(Modifier.fillMaxSize()) {
         DetailTopBar(details, actions)
@@ -248,14 +282,14 @@ private fun TwoColumnDetail(details: BookDetails, player: PlayerUiState, isCurre
                     elevation = 16.dp,
                 )
                 Spacer(Modifier.height(Spacing.xl))
-                PlayBlock(details, player, isCurrent, actions)
+                PlayBlock(details, live, actions)
                 Spacer(Modifier.height(Spacing.lg))
                 StatsRow(details)
             }
             LazyColumn(Modifier.weight(0.58f), contentPadding = PaddingValues(bottom = bottom + Spacing.xl)) {
                 item { TitleBlock(details, centered = false) }
                 infoItems(details, actions, horizontalPadding = 0.dp)
-                chapterItems(details, player, isCurrent, actions, horizontalPadding = 0.dp)
+                chapterItems(details, currentChapter, live, actions, horizontalPadding = 0.dp)
             }
         }
     }
@@ -316,12 +350,12 @@ private fun TitleBlock(details: BookDetails, centered: Boolean) {
 }
 
 @Composable
-private fun PlayBlock(details: BookDetails, player: PlayerUiState, isCurrent: Boolean, actions: DetailActions) {
+private fun PlayBlock(details: BookDetails, live: LivePlayback, actions: DetailActions) {
     val context = LocalContext.current
     val entry = details.item.entry
-    val position = if (isCurrent) player.positionMs else entry.positionMs
+    val position = live.position(details)
     val duration = entry.book.durationMs
-    val playingNow = isCurrent && player.playWhenReady
+    val playingNow = live.playWhenReady
     val label = when {
         playingNow -> stringResource(R.string.action_pause)
         entry.finished -> stringResource(R.string.action_listen_again)
@@ -429,8 +463,8 @@ private fun LazyListScope.infoItems(details: BookDetails, actions: DetailActions
 
 private fun LazyListScope.chapterItems(
     details: BookDetails,
-    player: PlayerUiState,
-    isCurrent: Boolean,
+    currentIndex: Int,
+    live: LivePlayback,
     actions: DetailActions,
     horizontalPadding: androidx.compose.ui.unit.Dp = Spacing.screen,
 ) {
@@ -441,14 +475,12 @@ private fun LazyListScope.chapterItems(
             Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.xl),
         )
     }
-    val position = if (isCurrent) player.positionMs else details.item.entry.positionMs
-    val currentIndex = details.chapters.indexOfLast { it.startMs <= position }.takeIf { position > 0 || isCurrent } ?: -1
     itemsIndexed(details.chapters, key = { _, c -> "ch-${c.index}" }) { i, chapter ->
         ChapterRow(
             chapter = chapter,
             number = i + 1,
             isCurrent = i == currentIndex,
-            isPlaying = i == currentIndex && isCurrent && player.isPlaying,
+            isPlaying = i == currentIndex && live.isPlaying,
             onClick = { actions.onChapter(chapter) },
             enabled = !details.item.isMissing,
             modifier = Modifier.padding(horizontal = horizontalPadding - Spacing.sm),
