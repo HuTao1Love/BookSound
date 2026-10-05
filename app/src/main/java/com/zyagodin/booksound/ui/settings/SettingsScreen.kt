@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
@@ -139,6 +140,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setSleepMinutes(v: Int) = viewModelScope.launch { s.setSleepTimerMinutes(v) }
     fun setSleepFade(v: Boolean) = viewModelScope.launch { s.setSleepFadeOut(v) }
     fun setShake(v: Boolean) = viewModelScope.launch { s.setShakeToReset(v) }
+    fun setSleepRepeat(v: Boolean) = viewModelScope.launch { s.setSleepRepeat(v) }
     fun setBitrate(v: Int) = viewModelScope.launch { s.setEncoderBitrate(v) }
     fun setMono(v: Boolean) = viewModelScope.launch { s.setDownmixToMono(v) }
     fun setAutoCover(v: Boolean) = viewModelScope.launch { s.setAutoCoverSearch(v) }
@@ -216,6 +218,7 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Item(Icons.Rounded.Bedtime, stringResource(R.string.settings_sleep_default), stringResource(R.string.minutes_short, settings.sleepTimerMinutes), onClick = { choice = ChoiceKind.SLEEP })
                             Toggle(Icons.AutoMirrored.Rounded.VolumeDown, stringResource(R.string.settings_sleep_fade), stringResource(R.string.settings_sleep_fade_hint), settings.sleepFadeOut, vm::setSleepFade)
                             Toggle(Icons.Rounded.Vibration, stringResource(R.string.settings_shake), stringResource(R.string.settings_shake_hint), settings.shakeToReset, vm::setShake)
+                            Toggle(Icons.Rounded.Repeat, stringResource(R.string.settings_sleep_repeat), stringResource(R.string.settings_sleep_repeat_hint), settings.sleepRepeat, vm::setSleepRepeat)
                         }
                         Group(stringResource(R.string.settings_group_import)) {
                             Item(Icons.Rounded.GraphicEq, stringResource(R.string.settings_quality), bitrateLabel(settings.encoderBitrateKbps), onClick = { choice = ChoiceKind.BITRATE })

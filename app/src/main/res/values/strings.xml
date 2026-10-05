@@ -471,6 +471,8 @@
     <string name="sleep_shake_hint_chapter">Shake the phone to listen to one more chapter.</string>
     <string name="settings_shake">Shake to reset</string>
     <string name="settings_shake_hint">Shake the phone while the timer runs to start it over</string>
+    <string name="settings_sleep_repeat">Keep sleep timer</string>
+    <string name="settings_sleep_repeat_hint">When the timer runs out, it starts again as soon as you resume the book</string>
 
     <!-- Smart rewind -->
     <string name="settings_smart_rewind_amount">Rewind by</string>

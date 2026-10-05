@@ -42,6 +42,13 @@ data class AppSettings(
     val sleepFadeOut: Boolean = true,
     /** Shaking the phone while the sleep timer runs starts it over. */
     val shakeToReset: Boolean = true,
+    /** A sleep timer that ran out starts again as soon as the book plays again. */
+    val sleepRepeat: Boolean = false,
+    /**
+     * The timer to start again (see [sleepRepeat]): minutes, or 0 for "end of chapter"; null when
+     * none ran out or the user turned it off. Kept on disk so it survives the app being killed overnight.
+     */
+    val sleepRepeatTimer: Int? = null,
     /** Voice equalizer for books without their own choice. */
     val voicePreset: VoicePreset = VoicePreset.OFF,
     /** Voice equalizer chosen for a particular book (the narrator's voice), by book id. */
@@ -98,6 +105,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val sleepMinutes = intPreferencesKey("sleep_minutes")
         val sleepFade = booleanPreferencesKey("sleep_fade")
         val shake = booleanPreferencesKey("shake_to_reset")
+        val sleepRepeat = booleanPreferencesKey("sleep_repeat")
+        val sleepRepeatTimer = intPreferencesKey("sleep_repeat_timer")
         val voicePreset = stringPreferencesKey("voice_preset")
         val bookVoicePresets = stringPreferencesKey("book_voice_presets")
         val bitrate = intPreferencesKey("encoder_bitrate")
@@ -130,6 +139,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             sleepTimerMinutes = p[Keys.sleepMinutes] ?: 30,
             sleepFadeOut = p[Keys.sleepFade] ?: true,
             shakeToReset = p[Keys.shake] ?: true,
+            sleepRepeat = p[Keys.sleepRepeat] ?: false,
+            sleepRepeatTimer = p[Keys.sleepRepeatTimer],
             voicePreset = enumOrDefault(p[Keys.voicePreset], VoicePreset.OFF),
             bookVoicePresets = decodePresets(p[Keys.bookVoicePresets]),
             encoderBitrateKbps = p[Keys.bitrate] ?: 64,
@@ -164,6 +175,11 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     suspend fun setSleepTimerMinutes(minutes: Int) = edit { it[Keys.sleepMinutes] = minutes }
     suspend fun setSleepFadeOut(enabled: Boolean) = edit { it[Keys.sleepFade] = enabled }
     suspend fun setShakeToReset(enabled: Boolean) = edit { it[Keys.shake] = enabled }
+    suspend fun setSleepRepeat(enabled: Boolean) = edit {
+        it[Keys.sleepRepeat] = enabled
+        if (!enabled) it.remove(Keys.sleepRepeatTimer)
+    }
+    suspend fun setSleepRepeatTimer(timer: Int?) = edit { if (timer == null) it.remove(Keys.sleepRepeatTimer) else it[Keys.sleepRepeatTimer] = timer }
     suspend fun setVoicePreset(preset: VoicePreset) = edit { it[Keys.voicePreset] = preset.name }
 
     /** Remembers [preset] for [bookId]; null goes back to the default preset. */
