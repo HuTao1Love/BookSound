@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -55,15 +56,19 @@ val MiniPlayerHeight = 62.dp
 @Composable
 fun MiniPlayer(
     book: BookDetails,
-    state: PlayerUiState,
+    state: () -> PlayerUiState,
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onSkipBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val position = state.positionMs
-    val chapter = book.chapters.lastOrNull { it.startMs <= position }
-    val duration = book.item.entry.book.durationMs.takeIf { it > 0 } ?: state.durationMs
+    // The position changes four times a second while playing: only the progress line reads it,
+    // the rest of the bar follows the chapter and play/pause.
+    val chapter by remember(book.chapters, state) {
+        derivedStateOf { book.chapters.lastOrNull { it.startMs <= state().positionMs } }
+    }
+    val playing by remember(state) { derivedStateOf { state().playWhenReady } }
+    val bookDuration = book.item.entry.book.durationMs
 
     // Swipe up: the bar follows the finger a little; far or fast enough opens the player.
     val density = LocalDensity.current
@@ -92,12 +97,11 @@ fun MiniPlayer(
             ),
     ) {
         Column(Modifier.navigationBarsPadding()) {
-            BookProgressBar(
-                if (duration > 0) position.toFloat() / duration else 0f,
-                Modifier.padding(horizontal = 20.dp),
-                height = 2.dp,
-                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-            )
+            PositionLine {
+                val s = state()
+                val duration = bookDuration.takeIf { it > 0 } ?: s.durationMs
+                if (duration > 0) s.positionMs.toFloat() / duration else 0f
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -126,7 +130,6 @@ fun MiniPlayer(
                     Icon(Icons.Rounded.Replay10, contentDescription = stringResource(R.string.action_rewind), modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(Spacing.xs))
-                val playing = state.playWhenReady
                 GradientCircleButton(onClick = onTogglePlay, size = 40.dp) {
                     Icon(
                         if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
@@ -137,4 +140,15 @@ fun MiniPlayer(
             }
         }
     }
+}
+
+/** The book's progress line; [progress] is read here so the position redraws only this line. */
+@Composable
+private fun PositionLine(progress: () -> Float) {
+    BookProgressBar(
+        progress(),
+        Modifier.padding(horizontal = 20.dp),
+        height = 2.dp,
+        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+    )
 }
