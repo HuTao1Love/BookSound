@@ -270,7 +270,7 @@ class PlaybackService : MediaSessionService() {
             if (playbackState == Player.STATE_IDLE) readyBookId = null
             if (playbackState == Player.STATE_ENDED) {
                 savePosition(finished = true)
-                container.sleepTimer.cancel()
+                container.sleepTimer.bookEnded()
             }
         }
 

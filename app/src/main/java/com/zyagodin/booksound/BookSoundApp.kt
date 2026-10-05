@@ -92,7 +92,7 @@ class AppContainer(app: Application) {
     val documents = DocumentStore(app)
     val covers = CoverStore(app)
     val library = LibraryRepository(database, documents, covers, settings)
-    val sleepTimer = SleepTimer(app, appScope)
+    val sleepTimer = SleepTimer(app, appScope, settings)
     val player = PlayerConnection(app, appScope) { settings.state.value.lastBookId }
     val coverSearch = CoverSearchRepository(http, BuildConfig.GOOGLE_BOOKS_API_KEY)
     val importSessions = ImportSessionStore()
