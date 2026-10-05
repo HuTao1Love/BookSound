@@ -27,8 +27,9 @@ object ConversionPlanner {
 
     /**
      * The AAC bitrate to encode a book at: the [settingKbps], but not above what the source files
-     * carry (their duration-weighted average, rounded up to 8 kbps). More bits than the source has
-     * only make the file bigger: what its encoder threw away doesn't come back.
+     * carry (their duration-weighted average, rounded to 8 kbps, as a 96 kbps MP3 measures a hair
+     * over 96). More bits than the source has only make the file bigger: what its encoder threw
+     * away doesn't come back.
      */
     fun outputBitrateKbps(settingKbps: Int, sources: List<ImportSourceFile>): Int {
         var bits = 0.0
@@ -42,7 +43,7 @@ object ConversionPlanner {
             durationMs += duration
         }
         if (durationMs == 0L) return settingKbps
-        val sourceKbps = (Math.ceil(bits / durationMs / 1000 / 8) * 8).toInt()
+        val sourceKbps = (Math.round(bits / durationMs / 1000 / 8) * 8).toInt()
         return minOf(settingKbps, sourceKbps.coerceAtLeast(MIN_BITRATE_KBPS))
     }
 

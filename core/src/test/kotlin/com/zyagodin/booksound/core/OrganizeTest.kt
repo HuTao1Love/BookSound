@@ -103,9 +103,11 @@ class OrganizeTest {
         // A 96 kbps book stays at 96 when 128 is chosen; the setting still wins when it is lower.
         assertEquals(96, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(96, hour), mp3(96, hour))))
         assertEquals(64, ConversionPlanner.outputBitrateKbps(64, listOf(mp3(96, hour))))
-        // Weighted by duration and rounded up to 8 kbps: (128 * 1 + 64 * 3) / 4 = 80.
+        // Weighted by duration and rounded to 8 kbps: (128 * 1 + 64 * 3) / 4 = 80.
         assertEquals(80, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(128, hour), mp3(64, 3 * hour))))
-        assertEquals(40, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(33, hour))))
+        assertEquals(32, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(33, hour))))
+        // A 96 kbps MP3 measured from its size and duration comes out a little over 96.
+        assertEquals(96, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(null, hour, sizeBytes = 43_250_000))))
         // Without a stream bitrate, the file size tells: 36 MB an hour is 80 kbps.
         assertEquals(80, ConversionPlanner.outputBitrateKbps(128, listOf(mp3(null, hour, sizeBytes = 36_000_000))))
         // Nothing known: the setting.
