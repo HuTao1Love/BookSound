@@ -17,6 +17,7 @@ import com.zyagodin.booksound.core.io.sha256
 import com.zyagodin.booksound.core.metadata.AudioProbe
 import com.zyagodin.booksound.core.metadata.CorruptedFileException
 import com.zyagodin.booksound.core.metadata.UnsupportedFormatException
+import com.zyagodin.booksound.core.metadata.mp4.Mp4Concat
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagSpec
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagWriter
 import com.zyagodin.booksound.core.model.Chapter
@@ -58,6 +59,8 @@ import kotlin.math.abs
  *
  * 1. PREPARING  – library and sources are accessible, enough temporary space.
  * 2. CONVERTING – (MP3 / multi-part) Media3 Transformer → temporary AAC file in app storage.
+ *                 AAC files of one format (the book's own, or parts encoded side by side) are
+ *                 joined without a temporary copy: [Mp4Concat] reads them as one file.
  * 3. WRITING    – metadata, chapters and cover are written while streaming the audio into a
  *                 hidden `.booksound-partial-<job>.m4b` file inside the target library folder.
  * 4. VERIFYING  – the written file is parsed back and hashed; anything unexpected aborts.
@@ -118,12 +121,15 @@ class ImportPipeline(
                 ConversionStrategy.REMUX_SINGLE -> openSource(request.parts.single().uri, request.parts.single().displayName)
                 ConversionStrategy.CONCAT_COPY, ConversionStrategy.TRANSCODE -> {
                     reservedTemp = reserveTemporarySpace(workDir, treeUri, request)
-                    val audio = File(workDir, "audio.m4a")
-                    convert(request, audio, report)
-                    val src = FileChannelSource(FileInputStream(audio).channel)
-                    val actualDuration = runCatching { AudioProbe.probe(src, audio.name).durationMs }.getOrNull()
-                    if (request.strictValidation) checkDecodedDuration(actualDuration, request.totalDurationMs)
-                    if (actualDuration != null) chapters = alignChapters(chapters, actualDuration, request.totalDurationMs)
+                    val src = convert(request, workDir, report)
+                    try {
+                        val actualDuration = runCatching { AudioProbe.probe(src, "audio.m4a").durationMs }.getOrNull()
+                        if (request.strictValidation) checkDecodedDuration(actualDuration, request.totalDurationMs)
+                        if (actualDuration != null) chapters = alignChapters(chapters, actualDuration, request.totalDurationMs)
+                    } catch (t: Throwable) {
+                        src.close()
+                        throw t
+                    }
                     src
                 }
             }
@@ -254,14 +260,16 @@ class ImportPipeline(
         }
     }
 
-    private suspend fun convert(request: ImportRequest, output: File, report: Progress) {
+    /** Converts the parts into one AAC/MP4 audio file in [workDir] (or reads them as one); returns it. */
+    private suspend fun convert(request: ImportRequest, workDir: File, report: Progress): RandomAccessSource {
         val uris = request.parts.map { it.uri }
+        val output = File(workDir, "audio.m4a")
         report.report(ImportStage.CONVERTING, 0f)
         if (encodesInParallel(request) && !parallelUnreliable) {
             try {
-                transcodeInParallel(request, output, report)
+                val joined = transcodeInParallel(request, output, report)
                 report.report(ImportStage.CONVERTING, 1f)
-                return
+                return joined
             } catch (e: JoinFailed) {
                 // Joining the encoded parts failed: encode everything in one pass instead.
                 Log.i(TAG, "Joining encoded parts failed, transcoding in one pass", e.cause)
@@ -277,13 +285,18 @@ class ImportPipeline(
             }
         }
         if (request.strategy == ConversionStrategy.CONCAT_COPY) {
+            // One AAC format throughout: the files are read as one, and written to the library as is.
+            join(openAll(request.parts.map { { openSource(it.uri, it.displayName) } }))?.let {
+                report.report(ImportStage.CONVERTING, 1f)
+                return it
+            }
             // Stream copy uses no codec, so it doesn't wait for one.
             try {
                 transcoder.run(uris, output, request.bitrateKbps, request.downmixToMono, transmux = true) {
                     report.report(ImportStage.CONVERTING, it)
                 }
                 report.report(ImportStage.CONVERTING, 1f)
-                return
+                return openFile(output)
             } catch (e: ExportException) {
                 // Stream copy can fail on unusual inputs; re-encoding is slower but robust.
                 Log.i(TAG, "Concatenation without re-encoding failed, transcoding instead", e)
@@ -293,6 +306,35 @@ class ImportPipeline(
         }
         transcodeInOnePass(request, uris, output, report)
         report.report(ImportStage.CONVERTING, 1f)
+        return openFile(output)
+    }
+
+    private fun openFile(file: File): RandomAccessSource = FileChannelSource(FileInputStream(file).channel)
+
+    /** Opens every source, or none: those already open are closed when one fails. */
+    private fun openAll(openers: List<() -> RandomAccessSource>): List<RandomAccessSource> {
+        val opened = ArrayList<RandomAccessSource>(openers.size)
+        try {
+            openers.mapTo(opened) { it() }
+        } catch (t: Throwable) {
+            opened.forEach { runCatching { it.close() } }
+            throw t
+        }
+        return opened
+    }
+
+    /**
+     * [parts] read as one file (see [Mp4Concat]), or null when they can't be joined as they are;
+     * then they are closed.
+     */
+    private fun join(parts: List<RandomAccessSource>): RandomAccessSource? = try {
+        Mp4Concat.join(parts)
+    } catch (e: UnsupportedFormatException) {
+        Log.i(TAG, "Parts can't be joined as they are", e)
+        null
+    } catch (e: CorruptedFileException) {
+        Log.i(TAG, "Parts can't be joined as they are", e)
+        null
     }
 
     private suspend fun transcodeInOnePass(request: ImportRequest, uris: List<Uri>, output: File, report: Progress) {
@@ -370,9 +412,9 @@ class ImportPipeline(
     /**
      * Encodes the parts to AAC side by side (AAC encoding runs on one CPU core per file, so a
      * single sequential pass leaves most of the phone idle), in one common format, then joins
-     * them without re-encoding.
+     * them without re-encoding: read as one file, or, failing that, copied into [output].
      */
-    private suspend fun transcodeInParallel(request: ImportRequest, output: File, report: Progress) {
+    private suspend fun transcodeInParallel(request: ImportRequest, output: File, report: Progress): RandomAccessSource {
         val parts = request.parts
         val workDir = output.parentFile!!
         // The most common input rate, so that most parts need no resampling.
@@ -391,6 +433,8 @@ class ImportPipeline(
             files.forEach(File::delete)
             throw t
         }
+        // The part files stay in the work folder until the import ends, which deletes it.
+        join(openAll(files.map { { openFile(it) } }))?.let { return it }
         try {
             transcoder.run(files.map(Uri::fromFile), output, request.bitrateKbps, downmixToMono = false, transmux = true) { p ->
                 report.report(ImportStage.CONVERTING, (ENCODE_SHARE + (1 - ENCODE_SHARE) * p).toFloat())
@@ -400,6 +444,7 @@ class ImportPipeline(
         } finally {
             files.forEach(File::delete)
         }
+        return openFile(output)
     }
 
     private suspend fun encodeParts(
