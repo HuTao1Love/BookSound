@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -161,7 +163,16 @@ private fun Carousel(
     padding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(modifier, contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+    val state = rememberLazyListState()
+    // Sorted by "recent", the book just played moves to the front. The row keeps its position by
+    // the first visible book, so the moved one ended up off screen to the left: a row that was at
+    // the start stays at the start.
+    val firstId = items.firstOrNull()?.id
+    remember(firstId) {
+        if (state.firstVisibleItemIndex == 0) state.requestScrollToItem(0)
+        firstId
+    }
+    LazyRow(modifier, state = state, contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
         items(items, key = { it.id }) { item ->
             CarouselCard(item, numbered, coverSize, { onOpen(item) }, { onLongClick(item) })
         }

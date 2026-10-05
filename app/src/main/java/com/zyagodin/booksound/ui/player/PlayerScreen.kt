@@ -50,6 +50,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -100,18 +101,33 @@ import kotlinx.coroutines.launch
 
 enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE }
 
-/** Derived, display-ready playback values. */
-private class NowPlaying(val details: BookDetails, val state: PlayerUiState, previewMs: Long?, val voicePreset: VoicePreset) {
-    val position: Long = previewMs ?: state.positionMs
+/**
+ * Derived, display-ready playback values. The position changes four times a second while playing,
+ * so it is not a value here: [position] is read only by the parts that show it (seek bar, times,
+ * the current chapter's progress), and everything else is redrawn only when a new chapter starts,
+ * playback pauses, the speed changes and so on.
+ *
+ * @param state the player without its position ([PlayerUiState.positionMs] is not kept current).
+ * @param chapterIndex the chapter playing, not the one under the finger while seeking: the seek
+ *   bar's scale is that chapter. Following the preview, dragging to the end made the next chapter
+ *   the scale, the same finger position then meant its end, and so on until the end of the book.
+ * @param position the live position, or the one under the finger while seeking.
+ */
+private class NowPlaying(
+    val details: BookDetails,
+    val state: PlayerUiState,
+    val chapterIndex: Int,
+    val voicePreset: VoicePreset,
+    val position: () -> Long,
+) {
     val duration: Long = details.item.entry.book.durationMs.takeIf { it > 0 } ?: state.durationMs
     val chapters: List<Chapter> = details.chapters
-    val chapterIndex: Int = if (chapters.isEmpty()) -1 else chapters.indexOfLast { it.startMs <= position }.coerceAtLeast(0)
     val chapter: Chapter? = chapters.getOrNull(chapterIndex)
     private val useChapterScale = chapters.size > 1 && chapter != null
     val rangeStart: Long = if (useChapterScale) chapter!!.startMs else 0L
     val rangeEnd: Long = (if (useChapterScale) chapter!!.endMs else duration).coerceAtLeast(rangeStart + 1)
-    val fraction: Float = ((position - rangeStart).toFloat() / (rangeEnd - rangeStart)).coerceIn(0f, 1f)
-    val bookLeftMs: Long = ((duration - position) / state.speed.coerceAtLeast(0.1f)).toLong().coerceAtLeast(0)
+    fun fraction(position: Long): Float = ((position - rangeStart).toFloat() / (rangeEnd - rangeStart)).coerceIn(0f, 1f)
+    fun bookLeftMs(position: Long): Long = ((duration - position) / state.speed.coerceAtLeast(0.1f)).toLong().coerceAtLeast(0)
     fun positionFor(fraction: Float): Long = rangeStart + ((rangeEnd - rangeStart) * fraction).toLong()
 }
 
@@ -135,9 +151,13 @@ private class PlayerCallbacks(
 @Composable
 fun PlayerScreen(navigator: AppNavigator) {
     val vm = appViewModel { PlayerViewModel(it) }
-    val player by vm.player.collectAsStateWithLifecycle()
+    val playerState = vm.player.collectAsStateWithLifecycle()
+    // Everything but the position; see NowPlaying.
+    val player by remember { derivedStateOf { playerState.value.copy(positionMs = 0) } }
     val book by vm.book.collectAsStateWithLifecycle()
-    val sleep by vm.sleep.collectAsStateWithLifecycle()
+    // Counts down twice a second: read only by the sleep chip and sheet.
+    val sleepState = vm.sleep.collectAsStateWithLifecycle()
+    val sleep = { sleepState.value }
     val settings by vm.settings.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     var sheet by rememberSaveable { mutableStateOf<PlayerSheet?>(null) }
@@ -165,7 +185,13 @@ fun PlayerScreen(navigator: AppNavigator) {
         return
     }
 
-    val now = NowPlaying(details, player, previewMs, settings.voicePresetFor(details.item.id))
+    val chapterIndex by remember(details.chapters) {
+        derivedStateOf {
+            val position = playerState.value.positionMs
+            if (details.chapters.isEmpty()) -1 else details.chapters.indexOfLast { it.startMs <= position }.coerceAtLeast(0)
+        }
+    }
+    val now = NowPlaying(details, player, chapterIndex, settings.voicePresetFor(details.item.id)) { previewMs ?: playerState.value.positionMs }
     val callbacks = PlayerCallbacks(
         onClose = navigator::back,
         onTogglePlay = vm::togglePlay,
@@ -245,7 +271,7 @@ fun PlayerScreen(navigator: AppNavigator) {
             chapters = details.chapters,
             currentIndex = now.chapterIndex,
             isPlaying = player.isPlaying,
-            position = player.positionMs,
+            position = { playerState.value.positionMs },
             onSelect = { chapter -> vm.seekTo(chapter.startMs); sheet = null },
             onDismiss = { sheet = null },
         )
@@ -256,7 +282,7 @@ fun PlayerScreen(navigator: AppNavigator) {
 // ------------------------------------------------------------------ layouts
 
 @Composable
-private fun CompactPlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks) {
+private fun CompactPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks) {
     Column(
         Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = Spacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -283,7 +309,7 @@ private fun CompactPlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<In
 }
 
 @Composable
-private fun TwoPanePlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks, window: WindowLayout) {
+private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks, window: WindowLayout) {
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = Spacing.xl)) {
         PlayerTopBar(now, cb)
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.xxl)) {
@@ -343,7 +369,7 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<In
 
 /** Half-folded Fold on a table: cover above the hinge, controls below it. */
 @Composable
-private fun TabletopPlayer(now: NowPlaying, sleep: SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks, hingeTopPx: Float, hingeBottomPx: Float) {
+private fun TabletopPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: Pair<Int, Int>, cb: PlayerCallbacks, hingeTopPx: Float, hingeBottomPx: Float) {
     val density = LocalDensity.current
     val topHeight: Dp = with(density) { hingeTopPx.toDp() }
     val hingeHeight: Dp = with(density) { (hingeBottomPx - hingeTopPx).toDp() }
@@ -453,23 +479,24 @@ private fun TitleBlock(now: NowPlaying, centered: Boolean) {
 private fun SeekSection(now: NowPlaying, cb: PlayerCallbacks) {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth()) {
+        val position = now.position()
         SeekBar(
-            fraction = now.fraction,
+            fraction = now.fraction(position),
             onSeek = { f -> cb.onSeek(now.positionFor(f)) },
             onPreview = { f -> cb.onPreview(f?.let { now.positionFor(it) }) },
             description = stringResource(R.string.seek_description),
             enabled = now.state.problem == null,
         )
         Row(Modifier.fillMaxWidth()) {
-            Text(formatClock(now.position - now.rangeStart), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatClock(position - now.rangeStart), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.weight(1f))
             Text(
-                stringResource(R.string.time_left_in_book, formatDuration(context, now.bookLeftMs)),
+                stringResource(R.string.time_left_in_book, formatDuration(context, now.bookLeftMs(position))),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.weight(1f))
-            Text("-" + formatClock(now.rangeEnd - now.position), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("-" + formatClock(now.rangeEnd - position), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -534,25 +561,28 @@ private fun SkipIcon(seconds: Int, forward: Boolean, contentDescription: String)
 }
 
 @Composable
-private fun ActionChips(now: NowPlaying, sleep: SleepTimerState, cb: PlayerCallbacks, showChapters: Boolean) {
-    val sleepActive = sleep != SleepTimerState.Off
-    val sleepLabel = when (sleep) {
-        SleepTimerState.Off -> stringResource(R.string.sleep_off)
-        is SleepTimerState.Countdown -> formatClock(sleep.remainingMs)
-        is SleepTimerState.EndOfChapter -> stringResource(if (now.chapters.size > 1) R.string.sleep_end_of_chapter_short else R.string.sleep_end_of_book_short)
-    }
+private fun ActionChips(now: NowPlaying, sleep: () -> SleepTimerState, cb: PlayerCallbacks, showChapters: Boolean) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally)) {
         PlayerChip(Icons.Rounded.Speed, formatSpeed(now.state.speed), stringResource(R.string.speed_title)) { cb.onSheet(PlayerSheet.SPEED) }
-        PlayerChip(
-            Icons.Rounded.Bedtime, sleepLabel, stringResource(R.string.sleep_title),
-            active = sleepActive,
-        ) { cb.onSheet(PlayerSheet.SLEEP) }
+        SleepChip(sleep, hasChapters = now.chapters.size > 1) { cb.onSheet(PlayerSheet.SLEEP) }
         if (showChapters && now.chapters.size > 1) {
             PlayerChip(Icons.AutoMirrored.Rounded.FormatListBulleted, stringResource(R.string.chapters_title), stringResource(R.string.chapters_title)) {
                 cb.onSheet(PlayerSheet.CHAPTERS)
             }
         }
     }
+}
+
+/** The sleep timer's chip; [sleep] is read here, so the countdown redraws only this chip. */
+@Composable
+private fun SleepChip(sleep: () -> SleepTimerState, hasChapters: Boolean, onClick: () -> Unit) {
+    val state = sleep()
+    val label = when (state) {
+        SleepTimerState.Off -> stringResource(R.string.sleep_off)
+        is SleepTimerState.Countdown -> formatClock(state.remainingMs)
+        is SleepTimerState.EndOfChapter -> stringResource(if (hasChapters) R.string.sleep_end_of_chapter_short else R.string.sleep_end_of_book_short)
+    }
+    PlayerChip(Icons.Rounded.Bedtime, label, stringResource(R.string.sleep_title), active = state != SleepTimerState.Off, onClick = onClick)
 }
 
 @Composable
@@ -587,7 +617,7 @@ private fun InlineChapters(now: NowPlaying, cb: PlayerCallbacks, modifier: Modif
                     isCurrent = i == now.chapterIndex,
                     isPlaying = i == now.chapterIndex && now.state.isPlaying,
                     onClick = { cb.onSeek(chapter.startMs) },
-                    progress = if (i == now.chapterIndex) now.fraction else null,
+                    progress = if (i == now.chapterIndex) now.fraction(now.position()) else null,
                 )
             }
         }
