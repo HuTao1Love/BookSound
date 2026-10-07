@@ -22,6 +22,7 @@ import com.zyagodin.booksound.core.sync.PlaybackRecord
 import com.zyagodin.booksound.playback.AudiobookPlayer
 import com.zyagodin.booksound.watch.R
 import com.zyagodin.booksound.watch.WatchApp
+import com.zyagodin.booksound.watch.surfaces.NowPlaying
 import com.zyagodin.booksound.watch.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +111,7 @@ class WatchPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         savePosition()
+        container.surfaces.nowPlaying.value = null
         scope.cancel()
         session?.run {
             release()
@@ -165,6 +167,11 @@ class WatchPlaybackService : MediaSessionService() {
     }
 
     private inner class PlayerEvents : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            container.surfaces.nowPlaying.value =
+                player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }?.let { NowPlaying(it, player.playWhenReady) }
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) startPeriodicSave() else {
                 periodicSave?.cancel()
@@ -245,6 +252,12 @@ class WatchPlaybackService : MediaSessionService() {
         }
         player.chapters = book.chapters
         container.settings.lastBookId = bookId
+        if (state?.finished == true && explicitStart == null) {
+            // Listening again from the start, as on the phone: the book is no longer finished.
+            container.scope.launch {
+                container.library.savePosition(bookId, 0L, state.speed, finished = false)?.let { container.positions.publish(it) }
+            }
+        }
         return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(listOf(item), 0, start))
     }
 

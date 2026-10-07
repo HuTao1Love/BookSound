@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.MaterialTheme
@@ -16,6 +19,8 @@ import com.zyagodin.booksound.watch.WatchApp
 
 class MainActivity : ComponentActivity() {
     private val container get() = (application as WatchApp).container
+    /** Set by the tile or the complication: show the player once the screens are up. */
+    private val openPlayer = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +33,13 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 AppScaffold {
                     val nav = rememberSwipeDismissableNavController()
+                    val showPlayer by openPlayer
+                    LaunchedEffect(showPlayer) {
+                        if (showPlayer) {
+                            nav.navigate(ROUTE_PLAYER) { launchSingleTop = true }
+                            openPlayer.value = false
+                        }
+                    }
                     SwipeDismissableNavHost(navController = nav, startDestination = ROUTE_LIBRARY) {
                         composable(ROUTE_LIBRARY) {
                             LibraryScreen(
@@ -62,6 +74,12 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == ACTION_INSTALL_UPDATE) container.updates.install()
+        val play = intent?.getStringExtra(EXTRA_PLAY_BOOK)
+        play?.let { container.player.play(it) }
+        // Without a book in the player there is nothing to show there: the library opens instead.
+        if (intent?.getBooleanExtra(EXTRA_OPEN_PLAYER, false) == true && (play != null || container.surfaces.nowPlaying.value != null)) {
+            openPlayer.value = true
+        }
     }
 
     override fun onStart() {
@@ -79,6 +97,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** From the "update ready" notification: open the installer. */
         const val ACTION_INSTALL_UPDATE = "com.zyagodin.booksound.watch.INSTALL_UPDATE"
+        /** From the tile and the complication: show the player. */
+        const val EXTRA_OPEN_PLAYER = "open_player"
+        /** From the tile: start playing this book. */
+        const val EXTRA_PLAY_BOOK = "play_book"
         private const val ROUTE_LIBRARY = "library"
         const val ROUTE_PLAYER = "player"
         const val ROUTE_CHAPTERS = "chapters"
