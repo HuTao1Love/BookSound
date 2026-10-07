@@ -252,6 +252,12 @@ class WatchPlaybackService : MediaSessionService() {
         }
         player.chapters = book.chapters
         container.settings.lastBookId = bookId
+        if (state?.finished == true && explicitStart == null) {
+            // Listening again from the start, as on the phone: the book is no longer finished.
+            container.scope.launch {
+                container.library.savePosition(bookId, 0L, state.speed, finished = false)?.let { container.positions.publish(it) }
+            }
+        }
         return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(listOf(item), 0, start))
     }
 
