@@ -1,5 +1,6 @@
 package com.zyagodin.booksound.ui.detail
 
+import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -109,12 +111,18 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailState.Loading)
 
     val player: StateFlow<PlayerUiState> = container.player.state
+    val watchConnected: StateFlow<Boolean> = container.watchSender.watchConnected
+
+    init {
+        container.watchSender.refreshWatch()
+    }
 
     fun play() = container.player.play(bookId)
     fun pause() = container.player.pause()
     fun playChapter(chapter: Chapter) = container.player.play(bookId, chapter.startMs)
     fun setFinished(finished: Boolean) = viewModelScope.launch { container.library.setFinished(bookId, finished) }
     fun rescan() = viewModelScope.launch { container.scanner.scan() }
+    fun sendToWatch(title: String) = container.watchSender.send(bookId, title)
 
     fun remove(deleteFile: Boolean) = viewModelScope.launch {
         if (container.player.state.value.bookId == bookId) container.player.stop()
@@ -144,6 +152,8 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     val vm = appViewModel(key = "detail-$bookId") { BookDetailViewModel(it, bookId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val playerState = vm.player.collectAsStateWithLifecycle()
+    val watchConnected by vm.watchConnected.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val live = remember(bookId, playerState) { LivePlayback(bookId, playerState) }
     var showRemove by rememberSaveable { mutableStateOf(false) }
 
@@ -156,7 +166,8 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
         is DetailState.Loaded -> {
             val details = s.details
             val finished = details.item.entry.finished
-            val actions = remember(vm, navigator, finished) {
+            val title = details.item.metadata.title
+            val actions = remember(vm, navigator, finished, watchConnected, title) {
                 DetailActions(
                     onBack = navigator::back,
                     onPlay = {
@@ -172,6 +183,12 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                     onToggleFinished = { vm.setFinished(!finished) },
                     onRemove = { showRemove = true },
                     onRescan = vm::rescan,
+                    onSendToWatch = if (watchConnected) {
+                        {
+                            vm.sendToWatch(title)
+                            Toast.makeText(context, R.string.watch_send_started, Toast.LENGTH_SHORT).show()
+                        }
+                    } else null,
                 )
             }
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -235,6 +252,8 @@ private class DetailActions(
     val onToggleFinished: () -> Unit,
     val onRemove: () -> Unit,
     val onRescan: () -> Unit,
+    /** Null when no watch with BookSound is connected. */
+    val onSendToWatch: (() -> Unit)?,
 )
 
 @Composable
@@ -318,6 +337,14 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
                     leadingIcon = { Icon(if (details.item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle, null) },
                     onClick = { menu = false; actions.onToggleFinished() },
                 )
+                actions.onSendToWatch?.let { send ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_send_to_watch)) },
+                        leadingIcon = { Icon(Icons.Rounded.Watch, null) },
+                        enabled = !details.item.isMissing,
+                        onClick = { menu = false; send() },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_remove_from_library), color = MaterialTheme.colorScheme.error) },
                     leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },

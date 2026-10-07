@@ -525,4 +525,47 @@
     <string name="settings_debug_log">Отладочный лог</string>
     <string name="settings_debug_log_hint">Отправить лог приложения, чтобы сообщить о проблеме (в нём есть названия книг и файлов)</string>
     <string name="debug_log_failed">Не удалось собрать лог.</string>
+
+    <!-- Часы -->
+    <string name="action_send_to_watch">Отправить на часы</string>
+    <string name="watch_send_started">Отправляю на часы. Держите их рядом.</string>
+    <string name="notification_channel_watch">Отправка на часы</string>
+    <string name="notification_channel_watch_result">Результаты отправки на часы</string>
+    <string name="watch_sending_title">Отправка на часы</string>
+    <string name="watch_stage_connecting">подключение</string>
+    <string name="watch_stage_saving">сохранение на часах</string>
+    <string name="watch_sent_title">Отправлено на часы</string>
+    <string name="watch_failed_title">Не удалось отправить на часы</string>
+    <plurals name="watch_more_queued">
+        <item quantity="one">ещё %1$d в очереди</item>
+        <item quantity="few">ещё %1$d в очереди</item>
+        <item quantity="many">ещё %1$d в очереди</item>
+        <item quantity="other">ещё %1$d в очереди</item>
+    </plurals>
+
+    <!-- Обновления -->
+    <string name="update_check">Проверить обновления</string>
+    <string name="update_title">Обновления</string>
+    <string name="update_checking">Проверяю GitHub…</string>
+    <string name="update_check_hint">Приложения для телефона и часов, из релизов на GitHub</string>
+    <string name="update_latest">У вас последняя версия, %1$s.</string>
+    <string name="update_phone_line">Телефон: %1$s → %2$s</string>
+    <string name="update_phone_current">Телефон: %1$s</string>
+    <string name="update_watch_line">Часы: %1$s → %2$s</string>
+    <string name="update_watch_current">Часы: %1$s</string>
+    <string name="update_no_watch">Часы: не найдены. Откройте BookSound на часах хотя бы раз, когда телефон рядом.</string>
+    <string name="update_install">Обновить</string>
+    <string name="update_later">Позже</string>
+    <string name="update_close">Закрыть</string>
+    <string name="update_step_downloading_watch">Скачиваю приложение для часов…</string>
+    <string name="update_step_sending_watch">Отправляю на часы…</string>
+    <string name="update_step_downloading_phone">Скачиваю обновление…</string>
+    <string name="update_done_watch">На часах откройте BookSound и нажмите «Установить обновление».</string>
+    <string name="update_done_phone">Подтвердите установку на телефоне.</string>
+    <string name="update_failed_network">Не удалось связаться с GitHub. Проверьте подключение.</string>
+    <string name="update_failed_no_release">На GitHub пока нет релизов.</string>
+    <string name="update_failed_watch_unreachable">Часы не на связи. Держите их рядом и попробуйте снова.</string>
+    <string name="update_failed_watch_space">На часах не хватает места.</string>
+    <string name="update_failed_watch">Часы не смогли сохранить обновление.</string>
+    <string name="update_failed_install">Не удалось начать установку.</string>
 </resources>

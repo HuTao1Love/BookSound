@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">BookSound</string>
+    <string name="now_playing">Now playing</string>
+    <string name="library_empty">Send a book from the phone: open it in BookSound, ⋮ → Send to watch.</string>
+    <string name="receiving">Receiving · %1$d%%</string>
+    <string name="book_progress">%1$d%% · %2$s left</string>
+    <string name="book_finished">Finished</string>
+    <string name="speaker">Watch speaker</string>
+    <string name="speaker_hint">Off: plays in Bluetooth headphones</string>
+    <string name="free_space">%1$s free</string>
+    <string name="chapters">Chapters</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="skip_back">Back 15 s</string>
+    <string name="skip_forward">Forward 30 s</string>
+    <string name="speed">%1$s×</string>
+    <string name="waiting_headphones">Connect headphones</string>
+    <string name="playback_error">Can\'t play this book</string>
+    <string name="listen">Listen</string>
+    <string name="delete_from_watch">Delete from watch</string>
+    <string name="update_install">Install update</string>
+    <string name="update_channel">App updates</string>
+    <string name="update_ready">BookSound %1$s is ready</string>
+    <string name="update_tap_to_install">Tap to install</string>
+</resources>

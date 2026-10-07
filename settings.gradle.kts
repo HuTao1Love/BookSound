@@ -25,3 +25,5 @@ dependencyResolutionManagement {
 rootProject.name = "BookSound"
 include(":app")
 include(":core")
+include(":shared")
+include(":wear")

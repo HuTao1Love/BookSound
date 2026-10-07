@@ -97,6 +97,26 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Sends books to the watch app while the phone app is in the background. -->
+        <service
+            android:name=".wear.WatchTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Listening positions published by the watch app. -->
+        <service
+            android:name=".wear.PhoneWearListenerService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/booksound/position/"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
         <!-- Shares the debug log (Settings → Debug log) with other apps. -->
         <provider
             android:name="androidx.core.content.FileProvider"
