@@ -31,7 +31,8 @@ interface BookDao {
     )
     fun observeBook(id: String): Flow<BookWithState?>
 
-    @Query("SELECT * FROM books WHERE deleted = 1 ORDER BY updated_at DESC")
+    /** Removed books whose file was kept; a tombstone whose file is gone stays only for sync. */
+    @Query("SELECT * FROM books WHERE deleted = 1 AND missing_since IS NULL ORDER BY updated_at DESC")
     fun observeRemoved(): Flow<List<BookEntity>>
 
     @Query("SELECT * FROM books WHERE id = :id")
