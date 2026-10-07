@@ -60,8 +60,9 @@ class WatchSurfaces(
             bookId = book.id,
             title = book.metadata.title,
             subtitle = chapter?.title?.takeIf { it.isNotBlank() } ?: book.metadata.author,
-            percent = (book.progress * 100).roundToInt(),
-            finished = book.finished,
+            // A finished book played again keeps its flag until it ends: show how far it is instead.
+            percent = if (loaded && book.durationMs > 0) (book.positionMs * 100 / book.durationMs).toInt().coerceIn(0, 100) else (book.progress * 100).roundToInt(),
+            finished = book.finished && !loaded,
             loaded = loaded,
             playing = loaded && playing?.playing == true,
         )
