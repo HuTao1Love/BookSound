@@ -6,10 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -90,26 +88,33 @@ fun PlayerScreen(container: WatchContainer, onOpenChapters: () -> Unit) {
                 .focusable(),
         ) {
             CircularProgressIndicator(progress = { progress.value }, modifier = Modifier.fillMaxSize().padding(2.dp), strokeWidth = 4.dp)
+            // Equal weights above and below keep the controls in the middle of the round screen,
+            // however long the title is.
             Column(
-                Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 28.dp),
+                Modifier.fillMaxSize().padding(horizontal = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    chapter?.title?.takeIf { it.isNotBlank() } ?: book?.metadata?.author.orEmpty(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    book?.metadata?.title.orEmpty(),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(top = 24.dp, bottom = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom,
+                ) {
+                    Text(
+                        chapter?.title?.takeIf { it.isNotBlank() } ?: book?.metadata?.author.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        book?.metadata?.title.orEmpty(),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     IconButton(onClick = container.player::skipBack) {
                         Icon(Icons.Rounded.FastRewind, stringResource(R.string.skip_back))
@@ -130,25 +135,29 @@ fun PlayerScreen(container: WatchContainer, onOpenChapters: () -> Unit) {
                         Icon(Icons.Rounded.FastForward, stringResource(R.string.skip_forward))
                     }
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    when {
-                        state.hasError -> stringResource(R.string.playback_error)
-                        state.waitingForHeadphones -> stringResource(R.string.waiting_headphones)
-                        else -> "${formatClock(position)} / ${formatClock(duration)}"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (state.hasError || state.waitingForHeadphones) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = {
-                        val next = SPEEDS.firstOrNull { it > state.speed + 0.01f } ?: SPEEDS.first()
-                        container.player.setSpeed(next)
-                    }) {
-                        Text(stringResource(R.string.speed, formatSpeed(state.speed)), style = MaterialTheme.typography.labelMedium)
-                    }
-                    IconButton(onClick = onOpenChapters, enabled = !book?.chapters.isNullOrEmpty()) {
-                        Icon(Icons.AutoMirrored.Rounded.List, stringResource(R.string.chapters))
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        when {
+                            state.hasError -> stringResource(R.string.playback_error)
+                            state.waitingForHeadphones -> stringResource(R.string.waiting_headphones)
+                            else -> "${formatClock(position)} / ${formatClock(duration)}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (state.hasError || state.waitingForHeadphones) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            val next = SPEEDS.firstOrNull { it > state.speed + 0.01f } ?: SPEEDS.first()
+                            container.player.setSpeed(next)
+                        }) {
+                            Text(stringResource(R.string.speed, formatSpeed(state.speed)), style = MaterialTheme.typography.labelMedium)
+                        }
+                        IconButton(onClick = onOpenChapters, enabled = !book?.chapters.isNullOrEmpty()) {
+                            Icon(Icons.AutoMirrored.Rounded.List, stringResource(R.string.chapters))
+                        }
                     }
                 }
             }
