@@ -1,0 +1,4 @@
+<resources>
+    <string name="update_install_failed">Couldn\'t install the update: %1$s</string>
+    <string name="update_install_conflict">it is signed with another key (a debug build?)</string>
+</resources>

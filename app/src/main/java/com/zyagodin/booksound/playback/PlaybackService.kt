@@ -31,6 +31,7 @@ import com.google.common.util.concurrent.SettableFuture
 import com.zyagodin.booksound.BookSoundApp
 import com.zyagodin.booksound.MainActivity
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.data.db.PlaybackStateEntity
 import com.zyagodin.booksound.data.library.metadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,12 +39,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.math.abs
 
 /**
  * Hosts the player and its MediaSession. Runs as a foreground service while playing so playback
@@ -51,6 +58,7 @@ import java.io.File
  * (notification, lock screen, Bluetooth/headset buttons, Android Auto/Wear via the session).
  */
 @OptIn(UnstableApi::class)
+@kotlin.OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackService : MediaSessionService() {
 
     private val container by lazy { (application as BookSoundApp).container }
@@ -60,6 +68,11 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private var periodicSave: Job? = null
     private var currentBookId: String? = null
+        set(value) {
+            field = value
+            currentBook.value = value
+        }
+    private val currentBook = MutableStateFlow<String?>(null)
     /** Speed to apply once the player switches to the given book. */
     private val pendingSpeed = mutableMapOf<String, Float>()
     private var applyingBookSettings = false
@@ -121,6 +134,14 @@ class PlaybackService : MediaSessionService() {
         // The voice equalizer preset can change from the player sheet or settings at any time.
         scope.launch {
             settings.state.map { it.voicePresetFor(currentBookId) }.distinctUntilChanged().collect { applyVoicePreset() }
+        }
+
+        // A position from the watch arrives in the database; a paused player follows it.
+        scope.launch {
+            currentBook
+                .flatMapLatest { id -> id?.let { container.library.observePlayback(it) } ?: flowOf(null) }
+                .filterNotNull()
+                .collect { followOtherDevice(it) }
         }
 
         // Keep notification buttons in sync with the configured skip intervals.
@@ -211,6 +232,26 @@ class PlaybackService : MediaSessionService() {
 
     // ---------------------------------------------------------------- persistence
 
+    /**
+     * The book loaded here was listened to on another device (the watch): continue from there.
+     * Only while paused and loaded, otherwise the next save would simply win.
+     */
+    private suspend fun followOtherDevice(state: PlaybackStateEntity) {
+        if (state.updatedBy == container.library.device().value) return
+        if (player.isPlaying || readyBookId != state.bookId || player.currentMediaItem?.mediaId != state.bookId) return
+        if (abs(player.currentPosition - state.positionMs) < FOLLOW_THRESHOLD_MS && player.playbackParameters.speed == state.speed) return
+        // Not saved back: it's the other device's position, not something done here.
+        applyingBookSettings = true
+        try {
+            player.seekTo(state.positionMs)
+            player.playbackParameters = PlaybackParameters(state.speed)
+        } finally {
+            applyingBookSettings = false
+        }
+        // Smart rewind counts from when the book was last heard there.
+        player.restorePause(state.lastPlayedAt ?: 0L)
+    }
+
     /** Saves the position of the item currently in the player (never a stale/other book id). */
     private fun savePosition(finished: Boolean? = null) {
         val bookId = player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
@@ -220,8 +261,11 @@ class PlaybackService : MediaSessionService() {
         if (bookId != readyBookId && finished == null) return
         val position = player.currentPosition
         val speed = player.playbackParameters.speed
+        // Paused, seeked or finished: worth telling the watch. Saves while playing are too frequent.
+        val publish = !player.isPlaying
         container.appScope.launch(Dispatchers.IO) {
             container.library.savePosition(bookId, position, speed, finished)
+            if (publish) container.sync.requestSync()
         }
     }
 
@@ -419,6 +463,7 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val EXTRA_BOOK_ID = "book_id"
         private const val SAVE_INTERVAL_MS = 10_000L
+        private const val FOLLOW_THRESHOLD_MS = 2_000L
         private val HANDLED_KEYS = setOf(
             KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD,
