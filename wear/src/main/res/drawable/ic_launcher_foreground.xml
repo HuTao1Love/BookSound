@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: open book whose pages turn into a sound wave. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="27"
+        android:translateY="27">
+        <path
+            android:fillColor="#FFF2F2F5"
+            android:pathData="M27,14.5C23.2,12 18.5,10.6 13.5,10.6c-2.6,0 -5,0.35 -7.2,1.05v30.2c2.2,-0.7 4.6,-1.05 7.2,-1.05c5,0 9.7,1.4 13.5,3.9c3.8,-2.5 8.5,-3.9 13.5,-3.9c2.6,0 5,0.35 7.2,1.05V11.65c-2.2,-0.7 -4.6,-1.05 -7.2,-1.05C35.5,10.6 30.8,12 27,14.5z" />
+        <path
+            android:fillColor="#FFFF8A3D"
+            android:pathData="M25.2,17.3v22.6c-3.4,-1.6 -7.3,-2.4 -11.7,-2.4c-1.5,0 -2.9,0.1 -4.2,0.3V14.3c1.3,-0.2 2.7,-0.3 4.2,-0.3C17.9,14 21.8,15.1 25.2,17.3z" />
+        <path
+            android:fillColor="#FFFF8A3D"
+            android:pathData="M30.5,22.5h2.6v11h-2.6zM35.5,19.5h2.6v17h-2.6zM40.5,24h2.6v8h-2.6z" />
+    </group>
+</vector>

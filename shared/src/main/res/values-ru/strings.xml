@@ -1,0 +1,4 @@
+<resources>
+    <string name="update_install_failed">Не удалось установить обновление: %1$s</string>
+    <string name="update_install_conflict">оно подписано другим ключом (отладочная сборка?)</string>
+</resources>

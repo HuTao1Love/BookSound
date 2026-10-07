@@ -27,6 +27,10 @@ import com.zyagodin.booksound.torrent.TorrentEngine
 import com.zyagodin.booksound.torrent.TorrentManager
 import com.zyagodin.booksound.torrent.TorrentKeepAlive
 import com.zyagodin.booksound.torrent.TorrentStore
+import com.zyagodin.booksound.update.UpdateManager
+import com.zyagodin.booksound.wear.PlaybackOnlyStore
+import com.zyagodin.booksound.wear.WatchSender
+import com.zyagodin.booksound.wear.WatchSyncBackend
 import android.util.Log
 import com.zyagodin.booksound.data.library.BookDetails
 import kotlinx.coroutines.CoroutineScope
@@ -61,6 +65,8 @@ class BookSoundApp : Application(), ImageLoaderFactory {
             // Then continue torrent downloads and conversions exactly where they stopped.
             container.torrents.start()
         }
+        // Positions saved on the watch while the app wasn't running.
+        container.sync.requestSync()
         container.appScope.launch {
             container.torrents.needsForeground.collect { needed -> if (needed) TorrentKeepAlive.start(this@BookSoundApp) }
         }
@@ -136,7 +142,19 @@ class AppContainer(app: Application) {
         covers = covers,
     ).also { manager -> importSessions.torrentSessionStarter = manager::loadSession }
 
-    val sync = SyncCoordinator(appScope, RoomSyncLocalStore(database, settings), device = { library.device() })
+    /** Listening positions are shared with the watch app; see [WatchSyncBackend]. */
+    val sync = SyncCoordinator(
+        appScope,
+        PlaybackOnlyStore(RoomSyncLocalStore(database, settings)),
+        device = { library.device() },
+        backend = WatchSyncBackend(app),
+    )
+
+    /** Sends books to the watch app. */
+    val watchSender = WatchSender(app, appScope, library)
+
+    /** Updates the phone and watch apps from GitHub releases. */
+    val updates = UpdateManager(app, appScope, http)
 
     /**
      * Details of the book currently loaded in the player, for the mini player and player screen.

@@ -98,7 +98,10 @@ class RoomSyncLocalStore(
             for (remote in changes.playback) {
                 val local = db.playback().get(remote.bookId.value)
                 if (db.books().get(remote.bookId.value) == null) continue
-                val winner = if (local == null) remote else resolver.resolve(local.toRecord(), remote, base = null).winner
+                val localRecord = local?.toRecord()
+                val winner = if (localRecord == null) remote else resolver.resolve(localRecord, remote, base = null).winner
+                // The same remote record arrives on every pull: keep the row untouched when it wins nothing.
+                if (winner == localRecord) continue
                 db.playback().upsert(
                     PlaybackStateEntity(
                         bookId = winner.bookId.value,
@@ -109,7 +112,8 @@ class RoomSyncLocalStore(
                         revision = maxOf(winner.stamp.revision, local?.revision ?: 0),
                         updatedAt = winner.stamp.updatedAt,
                         updatedBy = winner.stamp.updatedBy.value,
-                        dirty = winner !== remote,
+                        // A merge of both sides (e.g. "finished" kept from here) goes back to the other device.
+                        dirty = winner != remote,
                     ),
                 )
             }

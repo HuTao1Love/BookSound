@@ -80,6 +80,8 @@ class LibraryRepository(
 
     suspend fun playbackState(bookId: String): PlaybackStateEntity? = playback.get(bookId)
 
+    fun observePlayback(bookId: String): Flow<PlaybackStateEntity?> = playback.observe(bookId)
+
     /** Persists the listening position. Called frequently by the player; cheap and idempotent. */
     suspend fun savePosition(bookId: String, positionMs: Long, speed: Float, finished: Boolean? = null, played: Boolean = true) {
         val now = System.currentTimeMillis()

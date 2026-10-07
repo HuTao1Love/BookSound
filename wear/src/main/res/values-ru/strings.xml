@@ -1,0 +1,24 @@
+<resources>
+    <string name="now_playing">Сейчас играет</string>
+    <string name="library_empty">Отправьте книгу с телефона: откройте её в BookSound, ⋮ → Отправить на часы.</string>
+    <string name="receiving">Получение · %1$d%%</string>
+    <string name="book_progress">%1$d%% · ещё %2$s</string>
+    <string name="book_finished">Прослушана</string>
+    <string name="speaker">Динамик часов</string>
+    <string name="speaker_hint">Выкл.: звук в Bluetooth-наушниках</string>
+    <string name="free_space">Свободно %1$s</string>
+    <string name="chapters">Главы</string>
+    <string name="play">Играть</string>
+    <string name="pause">Пауза</string>
+    <string name="skip_back">Назад 15 с</string>
+    <string name="skip_forward">Вперёд 30 с</string>
+    <string name="speed">%1$s×</string>
+    <string name="waiting_headphones">Подключите наушники</string>
+    <string name="playback_error">Не удаётся воспроизвести</string>
+    <string name="listen">Слушать</string>
+    <string name="delete_from_watch">Удалить с часов</string>
+    <string name="update_install">Установить обновление</string>
+    <string name="update_channel">Обновления приложения</string>
+    <string name="update_ready">BookSound %1$s готов</string>
+    <string name="update_tap_to_install">Нажмите, чтобы установить</string>
+</resources>

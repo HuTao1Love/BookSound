@@ -517,4 +517,45 @@
     <string name="settings_debug_log">Debug log</string>
     <string name="settings_debug_log_hint">Share the app\'s log to report a problem (contains book and file names)</string>
     <string name="debug_log_failed">Couldn\'t collect the log.</string>
+
+    <!-- Watch -->
+    <string name="action_send_to_watch">Send to watch</string>
+    <string name="watch_send_started">Sending to the watch. Keep it nearby.</string>
+    <string name="notification_channel_watch">Sending to the watch</string>
+    <string name="notification_channel_watch_result">Watch transfer results</string>
+    <string name="watch_sending_title">Sending to the watch</string>
+    <string name="watch_stage_connecting">connecting</string>
+    <string name="watch_stage_saving">saving on the watch</string>
+    <string name="watch_sent_title">Sent to the watch</string>
+    <string name="watch_failed_title">Couldn\'t send to the watch</string>
+    <plurals name="watch_more_queued">
+        <item quantity="one">%1$d more queued</item>
+        <item quantity="other">%1$d more queued</item>
+    </plurals>
+
+    <!-- Updates -->
+    <string name="update_check">Check for updates</string>
+    <string name="update_title">Updates</string>
+    <string name="update_checking">Checking GitHub…</string>
+    <string name="update_check_hint">Phone and watch apps, from GitHub releases</string>
+    <string name="update_latest">You have the latest version, %1$s.</string>
+    <string name="update_phone_line">Phone: %1$s → %2$s</string>
+    <string name="update_phone_current">Phone: %1$s</string>
+    <string name="update_watch_line">Watch: %1$s → %2$s</string>
+    <string name="update_watch_current">Watch: %1$s</string>
+    <string name="update_no_watch">Watch: not found. Open BookSound on the watch once, with the phone nearby.</string>
+    <string name="update_install">Update</string>
+    <string name="update_later">Later</string>
+    <string name="update_close">Close</string>
+    <string name="update_step_downloading_watch">Downloading the watch app…</string>
+    <string name="update_step_sending_watch">Sending it to the watch…</string>
+    <string name="update_step_downloading_phone">Downloading the update…</string>
+    <string name="update_done_watch">On the watch, open BookSound and tap Install update.</string>
+    <string name="update_done_phone">Confirm the installation on the phone.</string>
+    <string name="update_failed_network">Couldn\'t reach GitHub. Check the connection.</string>
+    <string name="update_failed_no_release">There are no releases on GitHub yet.</string>
+    <string name="update_failed_watch_unreachable">The watch isn\'t connected. Keep it nearby and try again.</string>
+    <string name="update_failed_watch_space">Not enough space on the watch.</string>
+    <string name="update_failed_watch">The watch couldn\'t save the update.</string>
+    <string name="update_failed_install">Couldn\'t start the installation.</string>
 </resources>
