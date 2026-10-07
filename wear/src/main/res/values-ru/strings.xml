@@ -21,4 +21,7 @@
     <string name="update_channel">Обновления приложения</string>
     <string name="update_ready">BookSound %1$s готов</string>
     <string name="update_tap_to_install">Нажмите, чтобы установить</string>
+    <string name="open">Открыть</string>
+    <string name="tile_no_books">На часах пока нет книг</string>
+    <string name="complication_label">Прогресс книги</string>
 </resources>

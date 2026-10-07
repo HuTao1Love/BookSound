@@ -22,4 +22,8 @@
     <string name="update_channel">App updates</string>
     <string name="update_ready">BookSound %1$s is ready</string>
     <string name="update_tap_to_install">Tap to install</string>
+    <string name="open">Open</string>
+    <string name="tile_no_books">No books on the watch yet</string>
+    <string name="tile_percent">%1$d%%</string>
+    <string name="complication_label">Book progress</string>
 </resources>
