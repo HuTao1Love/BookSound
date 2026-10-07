@@ -172,14 +172,17 @@ class LibraryScanner(
 
         var missing = 0
         for (book in known) {
-            if (book.deleted || book.id in seen) continue
+            if (book.id in seen) continue
+            // A removed book whose file is already gone: only the folder walk above can find it again.
+            if (book.deleted && book.missingSince != null) continue
             if (documents.exists(Uri.parse(book.fileUri))) {
                 // File exists outside the scanned tree (e.g. folder changed); keep it available.
                 if (book.missingSince != null) library.setMissing(book.id, null)
                 continue
             }
+            // A removed book loses its file too: it drops out of "Removed books", as nothing is left to restore.
             if (book.missingSince == null) library.setMissing(book.id, now)
-            missing++
+            if (!book.deleted) missing++
         }
         return ScanResult.Done(added, relinked, missing, failed)
     }
