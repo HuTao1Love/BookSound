@@ -50,6 +50,10 @@ import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.WbSunny
@@ -88,6 +92,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.BuildConfigInfo
+import com.zyagodin.booksound.update.UpdateState
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.importer.ImportPipeline
 import com.zyagodin.booksound.core.audio.VoicePreset
@@ -159,6 +164,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setAutoCover(v: Boolean) = viewModelScope.launch { s.setAutoCoverSearch(v) }
     fun setParallelImports(v: Int) = viewModelScope.launch { s.setParallelImports(v) }
     fun setParallelCodecs(v: Int) = viewModelScope.launch { s.setParallelCodecs(v) }
+
+    val update: StateFlow<UpdateState> = container.updates.state
+    fun checkUpdates() = container.updates.check()
+    fun installUpdate(checked: UpdateState.Checked) = container.updates.update(checked)
+    fun dismissUpdate() = container.updates.dismiss()
 }
 
 private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS, NIGHT_START, NIGHT_END }
@@ -169,6 +179,7 @@ fun SettingsScreen(navigator: AppNavigator) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val removed by vm.removedCount.collectAsStateWithLifecycle()
     val scanning by vm.scanning.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -283,6 +294,12 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Item(Icons.Rounded.CloudSync, stringResource(R.string.settings_sync), stringResource(R.string.settings_sync_hint), onClick = null)
                             Item(Icons.Rounded.Info, stringResource(R.string.app_name), stringResource(R.string.settings_version, BuildConfigInfo.versionName(context)), onClick = null)
                             Item(
+                                Icons.Rounded.SystemUpdate,
+                                stringResource(R.string.update_check),
+                                stringResource(if (update == UpdateState.Checking) R.string.update_checking else R.string.update_check_hint),
+                                onClick = vm::checkUpdates,
+                            )
+                            Item(
                                 Icons.Rounded.BugReport,
                                 stringResource(R.string.settings_debug_log),
                                 stringResource(R.string.settings_debug_log_hint),
@@ -300,6 +317,10 @@ fun SettingsScreen(navigator: AppNavigator) {
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = bottom))
+    }
+
+    if (update != UpdateState.Idle && update != UpdateState.Checking) {
+        UpdateDialog(update, onUpdate = vm::installUpdate, onDismiss = vm::dismissUpdate)
     }
 
     when (choice) {
@@ -348,6 +369,78 @@ private fun bitrateLabel(kbps: Int): String = stringResource(
         else -> R.string.quality_128
     },
 )
+
+@Composable
+private fun UpdateDialog(state: UpdateState, onUpdate: (UpdateState.Checked) -> Unit, onDismiss: () -> Unit) {
+    val offersUpdate = state is UpdateState.Checked && !state.upToDate
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.SystemUpdate, null) },
+        title = { Text(stringResource(R.string.update_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                when (state) {
+                    is UpdateState.Checked -> {
+                        val latest = state.release.version.toString()
+                        if (state.upToDate) Text(stringResource(R.string.update_latest, latest))
+                        Text(
+                            if (state.phoneUpdate) stringResource(R.string.update_phone_line, state.phoneVersion, latest)
+                            else stringResource(R.string.update_phone_current, state.phoneVersion),
+                        )
+                        Text(
+                            when {
+                                state.watchVersion == null -> stringResource(R.string.update_no_watch)
+                                state.watchUpdate -> stringResource(R.string.update_watch_line, state.watchVersion, latest)
+                                else -> stringResource(R.string.update_watch_current, state.watchVersion)
+                            },
+                        )
+                    }
+                    is UpdateState.Working -> {
+                        Text(
+                            stringResource(
+                                when (state.step) {
+                                    UpdateState.Step.DOWNLOADING_WATCH -> R.string.update_step_downloading_watch
+                                    UpdateState.Step.SENDING_WATCH -> R.string.update_step_sending_watch
+                                    UpdateState.Step.DOWNLOADING_PHONE -> R.string.update_step_downloading_phone
+                                },
+                            ),
+                        )
+                        val progress = state.progress
+                        if (progress != null) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                        else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    is UpdateState.Done -> {
+                        if (state.watchSent) Text(stringResource(R.string.update_done_watch))
+                        if (state.phoneInstalling) Text(stringResource(R.string.update_done_phone))
+                    }
+                    is UpdateState.Failed -> Text(
+                        stringResource(
+                            when (state.reason) {
+                                UpdateState.Reason.NETWORK -> R.string.update_failed_network
+                                UpdateState.Reason.NO_RELEASE -> R.string.update_failed_no_release
+                                UpdateState.Reason.WATCH_UNREACHABLE -> R.string.update_failed_watch_unreachable
+                                UpdateState.Reason.WATCH_NO_SPACE -> R.string.update_failed_watch_space
+                                UpdateState.Reason.WATCH_FAILED -> R.string.update_failed_watch
+                                UpdateState.Reason.INSTALL -> R.string.update_failed_install
+                            },
+                        ),
+                    )
+                    UpdateState.Idle, UpdateState.Checking -> Unit
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                offersUpdate -> TextButton(onClick = { onUpdate(state as UpdateState.Checked) }) { Text(stringResource(R.string.update_install)) }
+                // While downloading the dialog can be hidden; the work goes on.
+                else -> TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_close)) }
+            }
+        },
+        dismissButton = {
+            if (offersUpdate) TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_later)) }
+        },
+    )
+}
 
 @Composable
 private fun Group(title: String, content: @Composable ColumnScope.() -> Unit) {

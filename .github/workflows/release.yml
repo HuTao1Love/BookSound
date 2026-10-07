@@ -1,7 +1,8 @@
 # Builds a signed release APK and publishes it on GitHub.
 #
 # - Every push to main (each merged pull request) becomes a release tagged
-#   <appVersion from gradle.properties>.<run number>, e.g. 0.1.57, with the APK attached.
+#   <appVersion from gradle.properties>.<run number>, e.g. 0.1.57, with the APKs attached: the
+#   phone app and the Wear OS watch app (installed on the watch with adb).
 # - A release published by hand (Releases → Draft a new release) gets the APK attached.
 # - Run by hand from the Actions tab: the APK is kept as a workflow artifact.
 #
@@ -84,25 +85,26 @@ jobs:
         # - No lintVitalRelease: it ran next to R8 on the runner's 4 cores and slowed it down.
         run: |
           chmod +x gradlew
-          ./gradlew :core:test :app:assembleRelease \
+          ./gradlew :core:test :app:assembleRelease :wear:assembleRelease \
             -x lintVitalRelease \
             "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8" \
             -PversionName="$VERSION_NAME" \
             -PversionCode="${{ github.run_number }}"
           cp app/build/outputs/apk/release/app-release.apk "BookSound-$VERSION_NAME.apk"
+          cp wear/build/outputs/apk/release/wear-release.apk "BookSound-Watch-$VERSION_NAME.apk"
 
       - name: Attach the APK to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "BookSound-$VERSION_NAME.apk" --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" --clobber
 
       - name: Publish a release for the push to main
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$VERSION_NAME" "BookSound-$VERSION_NAME.apk" \
+          gh release create "$VERSION_NAME" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" \
             --target "${{ github.sha }}" \
             --title "BookSound $VERSION_NAME" \
             --generate-notes

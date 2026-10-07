@@ -84,6 +84,7 @@ ksp {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":shared"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
