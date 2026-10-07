@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Lets the phone app find watches that have BookSound installed. -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@array/android_wear_capabilities">
+<resources>
     <string-array name="android_wear_capabilities" translatable="false">
         <item>booksound_watch</item>
     </string-array>
