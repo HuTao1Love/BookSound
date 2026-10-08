@@ -129,6 +129,22 @@ fun LibraryScreen(navigator: AppNavigator) {
     var showImportSheet by rememberSaveable { mutableStateOf(false) }
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // Search hides behind a button in the top bar; it stays open while it holds text.
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var searchText by rememberSaveable { mutableStateOf(state.query) }
+    val gridState = rememberLazyGridState()
+
+    // A name tapped on another screen (an author on a book's page): show the books it finds,
+    // whatever the progress filter.
+    LaunchedEffect(navigator.pendingSearch) {
+        val text = navigator.pendingSearch ?: return@LaunchedEffect
+        searchText = text
+        searching = true
+        vm.setQuery(text)
+        if (state.filter != ProgressFilter.ALL) vm.setFilter(ProgressFilter.ALL)
+        gridState.scrollToItem(0)
+        navigator.pendingSearch = null
+    }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     fun ensureNotificationPermission() {
@@ -180,7 +196,6 @@ fun LibraryScreen(navigator: AppNavigator) {
             onRefresh = vm::refresh,
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            val gridState = rememberLazyGridState()
             LazyVerticalGrid(
                 // Series cards, two side by side on wide windows.
                 columns = GridCells.Adaptive(520.dp),
@@ -196,6 +211,10 @@ fun LibraryScreen(navigator: AppNavigator) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
                     LibraryHeader(
                         state = state,
+                        searching = searching,
+                        onSearchingChange = { searching = it },
+                        text = searchText,
+                        onTextChange = { searchText = it },
                         onSearch = vm::setQuery,
                         onFilter = vm::setFilter,
                         onSort = vm::setSort,
@@ -321,6 +340,10 @@ fun LibraryScreen(navigator: AppNavigator) {
 @Composable
 private fun LibraryHeader(
     state: LibraryUiState,
+    searching: Boolean,
+    onSearchingChange: (Boolean) -> Unit,
+    text: String,
+    onTextChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onFilter: (ProgressFilter) -> Unit,
     onSort: (SortField) -> Unit,
@@ -328,15 +351,12 @@ private fun LibraryHeader(
     onDownloads: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
-    // Search hides behind a button in the top bar; it stays open while it holds text.
-    var searching by rememberSaveable { mutableStateOf(false) }
-    var text by rememberSaveable { mutableStateOf(state.query) }
     val searchShown = searching || text.isNotEmpty()
     val focusRequester = remember { FocusRequester() }
     fun closeSearch() {
-        text = ""
+        onTextChange("")
         onSearch("")
-        searching = false
+        onSearchingChange(false)
         focus.clearFocus()
     }
     Column(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = Spacing.lg)) {
@@ -352,7 +372,7 @@ private fun LibraryHeader(
                 }
             }
             if (state.totalCount > 0) {
-                IconButton(onClick = { if (searchShown) closeSearch() else searching = true }) {
+                IconButton(onClick = { if (searchShown) closeSearch() else onSearchingChange(true) }) {
                     Icon(
                         if (searchShown) Icons.Rounded.SearchOff else Icons.Rounded.Search,
                         contentDescription = stringResource(R.string.library_search_hint),
@@ -370,7 +390,7 @@ private fun LibraryHeader(
             TextField(
                 value = text,
                 onValueChange = {
-                    text = it
+                    onTextChange(it)
                     onSearch(it)
                 },
                 placeholder = { Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },

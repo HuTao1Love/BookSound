@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,7 +111,12 @@ val LocalBottomOverlayPadding = compositionLocalOf { 0.dp }
 class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
     private val showAddTorrent: (TorrentSource?) -> Unit = {},
+    /** The library and a book are shown side by side. */
+    private val twoPane: () -> Boolean = { false },
 ) {
+    /** Text to search the library for, asked for from another screen; the library takes it. */
+    var pendingSearch by mutableStateOf<String?>(null)
+
     fun openBook(bookId: String) {
         // In list-detail mode, selecting another book replaces the open detail instead of stacking.
         if (backStack.lastOrNull() is BookKey) backStack[backStack.lastIndex] = BookKey(bookId) else backStack.add(BookKey(bookId))
@@ -120,6 +126,15 @@ class AppNavigator(
         // In list-detail mode the library stays visible next to a book: the series replaces that book.
         if (backStack.lastOrNull() is BookKey) backStack.removeLastOrNull()
         if ((backStack.lastOrNull() as? SeriesKey)?.series != series) backStack.add(SeriesKey(series))
+    }
+
+    /** Searches the library, e.g. for an author tapped on a book's page. */
+    fun searchLibrary(text: String) {
+        // Side by side the library is next to the book: the book stays open.
+        val book = (backStack.lastOrNull() as? BookKey)?.takeIf { twoPane() }
+        backToLibrary()
+        if (book != null) backStack.add(book)
+        pendingSearch = text
     }
 
     fun openPlayer() {
@@ -172,12 +187,15 @@ fun AppRoot(container: AppContainer, intents: Flow<String>) {
 private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val backStack = rememberNavBackStack(LibraryKey)
     var addTorrent by remember { mutableStateOf<AddTorrentRequest?>(null) }
-    val navigator = remember(backStack) { AppNavigator(backStack) { addTorrent = AddTorrentRequest(it) } }
     // On a wide window the library and the book split the screen roughly in half (the Fold's inner
     // screen folds right there); the default 360 dp list pane is too narrow for the library.
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
     val listPaneWidth = (windowWidth / 2).coerceIn(360.dp, 520.dp)
     val directive = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2()).copy(defaultPanePreferredWidth = listPaneWidth)
+    val twoPane = rememberUpdatedState(directive.maxHorizontalPartitions > 1)
+    val navigator = remember(backStack) {
+        AppNavigator(backStack, showAddTorrent = { addTorrent = AddTorrentRequest(it) }, twoPane = { twoPane.value })
+    }
     val listDetail = rememberListDetailSceneStrategy<NavKey>(directive = directive)
     // The position changes four times a second while playing: only the mini player reads it, the
     // navigation follows whether a book is loaded.
