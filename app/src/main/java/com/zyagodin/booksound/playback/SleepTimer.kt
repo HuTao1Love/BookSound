@@ -1,6 +1,7 @@
 package com.zyagodin.booksound.playback
 
 import android.content.Context
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.media3.common.Player
 import com.zyagodin.booksound.data.settings.SettingsRepository
@@ -35,7 +36,8 @@ sealed interface SleepTimerState {
  * process); the service attaches the player it controls.
  *
  * Shake to reset: while the timer runs and the book plays, shaking the phone starts the countdown
- * over (in "end of chapter" mode: plays one more chapter) and undoes the fade-out.
+ * over (in "end of chapter" mode: plays one more chapter) and undoes the fade-out. For a little
+ * while after the timer has paused the book, a shake plays it on with the same timer.
  *
  * Repeat ([com.zyagodin.booksound.data.settings.AppSettings.sleepRepeat]): a timer that ran out is
  * remembered and starts again as soon as the book plays again, until the user turns it off.
@@ -55,6 +57,15 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
     private var ticker: Job? = null
     private val shake = ShakeDetector(context) { onShake() }
 
+    /** The timer that just paused the book, while a shake can still bring it back. */
+    private var resumable: SleepTimerState? = null
+    private var resumeWindow: Job? = null
+
+    /** The player lets the CPU sleep once paused; the accelerometer needs it awake to be heard. */
+    private val resumeWakeLock = context.getSystemService(PowerManager::class.java)
+        ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BookSound:shakeToResume")
+        ?.apply { setReferenceCounted(false) }
+
     /** Minutes of the last countdown started, to repeat it without the "+5 min" extensions. */
     private var countdownMinutes = 0
 
@@ -73,6 +84,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
     private val repeatOnPlay = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
+                closeResumeWindow()
                 repeatIfRemembered()
                 watchNight()
             } else {
@@ -97,6 +109,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
             ticker?.cancel()
             nightWatch?.cancel()
             _state.value = SleepTimerState.Off
+            closeResumeWindow()
             shake.stop()
         }
     }
@@ -107,6 +120,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
         val total = minutes * 60_000L
         countdownMinutes = minutes
         skipEndedChapter = false
+        closeResumeWindow()
         _state.value = SleepTimerState.Countdown(total, total, auto)
         restoreVolume()
         startTicker()
@@ -114,6 +128,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
 
     fun startEndOfChapter() {
         skipEndedChapter = false
+        closeResumeWindow()
         _state.value = SleepTimerState.EndOfChapter(null, player?.currentChapterIndex() ?: -1)
         restoreVolume()
         startTicker()
@@ -147,6 +162,7 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
         ticker = null
         _state.value = SleepTimerState.Off
         skipEndedChapter = false
+        closeResumeWindow()
         shake.stop()
         restoreVolume()
     }
@@ -199,7 +215,10 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
     private fun onShake() {
         val p = player ?: return
         when (val s = _state.value) {
-            SleepTimerState.Off -> return
+            SleepTimerState.Off -> {
+                resumeAfterShake(p)
+                return
+            }
             is SleepTimerState.Countdown -> _state.value = s.copy(remainingMs = s.totalMs)
             is SleepTimerState.EndOfChapter -> {
                 val next = s.chapterIndex + 1
@@ -294,10 +313,54 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
     private fun finish(p: Player) {
         // The night timer starts again on play anyway, and must not be repeated into the day.
         if (!isAuto()) remember(if (settings.state.value.sleepRepeat) repeatValue() else null)
+        val ended = _state.value
         p.pause()
         p.volume = 1f
         _state.value = SleepTimerState.Off
-        shake.stop()
+        if (shakeToReset()) openResumeWindow(ended) else shake.stop()
+    }
+
+    /** Keeps listening for a shake a little longer: the listener may notice the silence and want more. */
+    private fun openResumeWindow(ended: SleepTimerState) {
+        closeResumeWindow()
+        resumable = ended
+        resumeWakeLock?.acquire(RESUME_WINDOW_MS)
+        shake.start()
+        resumeWindow = scope.launch(Dispatchers.Main) {
+            delay(RESUME_WINDOW_MS)
+            closeResumeWindow()
+        }
+    }
+
+    private fun closeResumeWindow() {
+        if (resumable == null) return
+        resumable = null
+        resumeWindow?.cancel()
+        resumeWindow = null
+        runCatching { if (resumeWakeLock?.isHeld == true) resumeWakeLock.release() }
+        // While a timer runs, its ticker decides whether to listen.
+        if (_state.value == SleepTimerState.Off) shake.stop()
+    }
+
+    /** Shaken soon after the timer paused the book: the same timer starts again and the book plays on. */
+    private fun resumeAfterShake(p: AudiobookPlayer) {
+        val ended = resumable ?: return
+        closeResumeWindow()
+        when (ended) {
+            SleepTimerState.Off -> return
+            is SleepTimerState.Countdown -> {
+                skipEndedChapter = false
+                _state.value = SleepTimerState.Countdown(ended.totalMs, ended.totalMs, ended.auto)
+            }
+            is SleepTimerState.EndOfChapter -> {
+                _state.value = SleepTimerState.EndOfChapter(null, ended.chapterIndex)
+                // Playback resumes at the end of the chapter it stopped at: stop after the next one.
+                skipEndedChapter = true
+            }
+        }
+        startTicker()
+        p.play()
+        shake.confirm()
     }
 
     private fun restoreVolume() {
@@ -308,6 +371,9 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
         private const val TICK_MS = 500L
         private const val FADE_MS = 15_000L
         private const val NIGHT_CHECK_MS = 30_000L
+
+        /** How long after the timer paused the book a shake still plays it on. */
+        private const val RESUME_WINDOW_MS = 2 * 60_000L
 
         /** Stored as the timer to repeat for "end of chapter" (otherwise minutes). */
         private const val REPEAT_END_OF_CHAPTER = 0

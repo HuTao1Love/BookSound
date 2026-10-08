@@ -478,7 +478,7 @@
     <string name="sleep_shake_hint">Встряхните телефон, чтобы запустить таймер заново.</string>
     <string name="sleep_shake_hint_chapter">Встряхните телефон, чтобы дослушать ещё одну главу.</string>
     <string name="settings_shake">Встряхнуть для сброса</string>
-    <string name="settings_shake_hint">Встряхните телефон, пока идёт таймер, чтобы запустить его заново</string>
+    <string name="settings_shake_hint">Встряхните телефон, пока идёт таймер, чтобы запустить его заново, или вскоре после паузы, чтобы слушать дальше</string>
     <string name="settings_sleep_repeat">Сохранять таймер сна</string>
     <string name="settings_sleep_repeat_hint">Сработавший таймер включится снова, как только вы продолжите слушать</string>
     <string name="settings_sleep_auto_night">Таймер сна ночью</string>
