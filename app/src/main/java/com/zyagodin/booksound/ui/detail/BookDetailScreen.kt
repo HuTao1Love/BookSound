@@ -81,6 +81,7 @@ import com.zyagodin.booksound.ui.components.CircleIconButton
 import com.zyagodin.booksound.ui.components.CoverBackdrop
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
+import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.QuietButton
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
@@ -183,6 +184,8 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                     onToggleFinished = { vm.setFinished(!finished) },
                     onRemove = { showRemove = true },
                     onRescan = vm::rescan,
+                    onOpenSeries = navigator::openSeries,
+                    onSearch = navigator::searchLibrary,
                     onSendToWatch = if (watchConnected) {
                         {
                             vm.sendToWatch(title)
@@ -252,6 +255,9 @@ private class DetailActions(
     val onToggleFinished: () -> Unit,
     val onRemove: () -> Unit,
     val onRescan: () -> Unit,
+    val onOpenSeries: (String) -> Unit,
+    /** Searches the library for a name, e.g. the author's. */
+    val onSearch: (String) -> Unit,
     /** Null when no watch with BookSound is connected. */
     val onSendToWatch: (() -> Unit)?,
 )
@@ -274,7 +280,7 @@ private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions
                     elevation = 14.dp,
                 )
                 Spacer(Modifier.height(Spacing.xl))
-                TitleBlock(details, centered = true)
+                TitleBlock(details, actions, centered = true)
                 Spacer(Modifier.height(Spacing.xl))
                 PlayBlock(details, live, actions)
                 Spacer(Modifier.height(Spacing.lg))
@@ -306,7 +312,7 @@ private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: D
                 StatsRow(details)
             }
             LazyColumn(Modifier.weight(0.58f), contentPadding = PaddingValues(bottom = bottom + Spacing.xl)) {
-                item { TitleBlock(details, centered = false) }
+                item { TitleBlock(details, actions, centered = false) }
                 infoItems(details, actions, horizontalPadding = 0.dp)
                 chapterItems(details, currentChapter, live, actions, horizontalPadding = 0.dp)
             }
@@ -356,22 +362,30 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
 }
 
 @Composable
-private fun TitleBlock(details: BookDetails, centered: Boolean) {
+private fun TitleBlock(details: BookDetails, actions: DetailActions, centered: Boolean) {
     val meta = details.item.metadata
     val align = if (centered) TextAlign.Center else TextAlign.Start
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+        // The series opens its books; the author and the narrator search the library.
         seriesLabel(meta.series, meta.seriesIndex)?.let {
-            Tag(it)
+            Tag(it, onClick = { meta.series?.let(actions.onOpenSeries) })
             Spacer(Modifier.height(Spacing.sm))
         }
         Text(meta.title, style = MaterialTheme.typography.headlineMedium, textAlign = align)
         meta.author?.let {
             Spacer(Modifier.height(Spacing.xs))
-            Text(it, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, textAlign = align)
+            NameLinksText(it, actions.onSearch, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, textAlign = align)
         }
         meta.narrator?.let {
             Spacer(Modifier.height(2.dp))
-            Text(stringResource(R.string.narrated_by, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = align)
+            NameLinksText(
+                stringResource(R.string.narrated_by, it), actions.onSearch,
+                names = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                linkColor = MaterialTheme.colorScheme.onSurface,
+                textAlign = align,
+            )
         }
     }
 }

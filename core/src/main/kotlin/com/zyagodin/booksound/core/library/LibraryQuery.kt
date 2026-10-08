@@ -109,6 +109,30 @@ object LibrarySearch {
             .firstOrNull { it.series != null }
     }
 
+    private val nameSeparator = Regex("""\s*(?:[,;&/]|\s(?:and|и)\s)\s*""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Where each person is in a list of names such as "Ильф и Петров" or "A, B & C", so each one
+     * can be searched for on its own (a co-author also wrote other books).
+     */
+    fun nameRanges(names: String): List<IntRange> {
+        val ranges = mutableListOf<IntRange>()
+        fun add(start: Int, end: Int) {
+            var s = start
+            var e = end
+            while (s < e && names[s].isWhitespace()) s++
+            while (e > s && names[e - 1].isWhitespace()) e--
+            if (s < e) ranges += s until e
+        }
+        var start = 0
+        for (separator in nameSeparator.findAll(names)) {
+            add(start, separator.range.first)
+            start = separator.range.last + 1
+        }
+        add(start, names.length)
+        return ranges
+    }
+
     /** Lower-case, accent-insensitive form used for matching ("Ёжик" matches "ежик", "Café" matches "cafe"). */
     fun normalize(text: String): String {
         val decomposed = Normalizer.normalize(text.lowercase(Locale.ROOT).replace('ё', 'е').replace('й', 'и'), Normalizer.Form.NFD)

@@ -54,6 +54,7 @@ import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.BookListRow
+import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.CircleIconButton
 import com.zyagodin.booksound.ui.components.CoverBackdrop
@@ -165,6 +166,7 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                                 vm.play(item)
                                 navigator.openPlayer()
                             },
+                            onSearch = navigator::searchLibrary,
                             modifier = Modifier.padding(horizontal = Spacing.lg).widthIn(max = 720.dp),
                         )
                     }
@@ -241,7 +243,13 @@ private fun SeriesTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
 /** Emblem, name, authors, totals and overall progress, with a button that continues the series. */
 @Composable
-private fun SeriesHeader(section: SeriesSection, upNext: LibraryItem?, onPlay: (LibraryItem) -> Unit, modifier: Modifier = Modifier) {
+private fun SeriesHeader(
+    section: SeriesSection,
+    upNext: LibraryItem?,
+    onPlay: (LibraryItem) -> Unit,
+    onSearch: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val group = section.group
     Column(modifier.fillMaxWidth().padding(bottom = Spacing.lg), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -249,14 +257,19 @@ private fun SeriesHeader(section: SeriesSection, upNext: LibraryItem?, onPlay: (
         Spacer(Modifier.height(Spacing.xl))
         Text(section.series.orEmpty(), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(Spacing.xs))
-        Text(
+        // The authors search the library, e.g. for their books outside this series.
+        val authors = group.authors.take(2).joinToString(", ")
+        NameLinksText(
             listOfNotNull(
-                group.authors.take(2).joinToString(", ").takeIf { it.isNotEmpty() },
+                authors.takeIf { it.isNotEmpty() },
                 pluralStringResource(R.plurals.book_count, section.items.size, section.items.size),
                 formatDuration(context, group.totalDurationMs),
             ).joinToString(" · "),
+            onSearch,
+            names = authors,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            linkColor = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )
         if (group.finishedCount > 0) {
