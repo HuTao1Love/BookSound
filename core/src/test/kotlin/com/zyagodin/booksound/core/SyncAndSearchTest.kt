@@ -135,4 +135,17 @@ class SyncAndSearchTest {
         // The search text still narrows the series down.
         assertEquals(listOf("Saga 3"), titles(ProgressFilter.IN_PROGRESS, "3"))
     }
+
+    @Test
+    fun `a list of names splits into single people`() {
+        fun names(text: String) = LibrarySearch.nameRanges(text).map { text.substring(it) }
+        assertEquals(listOf("Стивен Кинг"), names("Стивен Кинг"))
+        assertEquals(listOf("Ильф", "Петров"), names("Ильф и Петров"))
+        assertEquals(listOf("A. B. Smith", "C. Jones", "D. Lee"), names(" A. B. Smith, C. Jones & D. Lee "))
+        assertEquals(listOf("Terry Pratchett", "Neil Gaiman"), names("Terry Pratchett and Neil Gaiman"))
+        assertEquals(listOf("Иван Андреевич", "Сандра Бэнд"), names("Иван Андреевич; Сандра Бэнд"))
+        // Words merely containing "и"/"and" are kept whole.
+        assertEquals(listOf("Андрей Ливадный"), names("Андрей Ливадный"))
+        assertEquals(emptyList<String>(), names(" , "))
+    }
 }

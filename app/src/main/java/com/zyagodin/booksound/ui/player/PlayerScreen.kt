@@ -80,6 +80,7 @@ import com.zyagodin.booksound.playback.PlaybackProblem
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.playback.SleepTimerState
 import com.zyagodin.booksound.ui.AppNavigator
+import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.CircleIconButton
 import com.zyagodin.booksound.ui.components.CoverBackdrop
@@ -146,6 +147,8 @@ private class PlayerCallbacks(
     val onOpenBook: () -> Unit,
     val onEdit: () -> Unit,
     val onStop: () -> Unit,
+    /** Closes the player and searches the library for a name, e.g. the author's. */
+    val onSearch: (String) -> Unit,
 )
 
 @Composable
@@ -213,6 +216,7 @@ fun PlayerScreen(navigator: AppNavigator) {
             vm.stop()
             navigator.back()
         },
+        onSearch = navigator::searchLibrary,
     )
     val skip = settings.skipBackSeconds to settings.skipForwardSeconds
 
@@ -296,7 +300,7 @@ private fun CompactPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                 elevation = 24.dp,
             )
         }
-        TitleBlock(now, centered = true)
+        TitleBlock(now, cb, centered = true)
         Spacer(Modifier.height(Spacing.lg))
         ProblemBanner(now.state.problem, cb)
         SeekSection(now, cb)
@@ -324,7 +328,7 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                             elevation = 24.dp,
                         )
                     }
-                    TitleBlock(now, centered = true)
+                    TitleBlock(now, cb, centered = true)
                     Spacer(Modifier.height(Spacing.lg))
                     ProblemBanner(now.state.problem, cb)
                     SeekSection(now, cb)
@@ -353,7 +357,7 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                 }
                 Column(Modifier.weight(1f).fillMaxSize()) {
                     Spacer(Modifier.weight(1f))
-                    TitleBlock(now, centered = false)
+                    TitleBlock(now, cb, centered = false)
                     Spacer(Modifier.height(Spacing.lg))
                     ProblemBanner(now.state.problem, cb)
                     SeekSection(now, cb)
@@ -386,7 +390,7 @@ private fun TabletopPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: 
             )
             Spacer(Modifier.width(Spacing.xl))
             Column(Modifier.weight(1f)) {
-                TitleBlock(now, centered = false)
+                TitleBlock(now, cb, centered = false)
             }
             VoiceButton(now, cb)
             IconButton(onClick = cb.onClose) {
@@ -453,7 +457,7 @@ private fun VoiceButton(now: NowPlaying, cb: PlayerCallbacks) {
 }
 
 @Composable
-private fun TitleBlock(now: NowPlaying, centered: Boolean) {
+private fun TitleBlock(now: NowPlaying, cb: PlayerCallbacks, centered: Boolean) {
     val meta = now.details.item.metadata
     val align = if (centered) TextAlign.Center else TextAlign.Start
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
@@ -470,7 +474,7 @@ private fun TitleBlock(now: NowPlaying, centered: Boolean) {
         }
         Text(meta.title, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = align)
         meta.author?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = align)
+            NameLinksText(it, cb.onSearch, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, textAlign = align)
         }
     }
 }
