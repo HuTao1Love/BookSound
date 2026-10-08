@@ -206,10 +206,16 @@ fun CircleIconButton(
     }
 }
 
-/** Small rounded label, e.g. "Series · #3" or "Finished". */
+/** Small rounded label, e.g. "Series · #3" or "Finished"; tappable when [onClick] is set. */
 @Composable
-fun Tag(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.secondaryContainer, contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer) {
-    Surface(shape = MaterialTheme.shapes.extraSmall, color = color, contentColor = contentColor, modifier = modifier) {
+fun Tag(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.secondaryContainer,
+    contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
+    onClick: (() -> Unit)? = null,
+) {
+    val content = @Composable {
         Text(
             text,
             style = MaterialTheme.typography.labelSmall,
@@ -217,6 +223,11 @@ fun Tag(text: String, modifier: Modifier = Modifier, color: Color = MaterialThem
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
         )
+    }
+    if (onClick != null) {
+        Surface(onClick = onClick, shape = MaterialTheme.shapes.extraSmall, color = color, contentColor = contentColor, modifier = modifier, content = content)
+    } else {
+        Surface(shape = MaterialTheme.shapes.extraSmall, color = color, contentColor = contentColor, modifier = modifier, content = content)
     }
 }
 
