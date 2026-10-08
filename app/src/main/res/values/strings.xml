@@ -470,7 +470,7 @@
     <string name="sleep_shake_hint">Shake the phone to start the timer over.</string>
     <string name="sleep_shake_hint_chapter">Shake the phone to listen to one more chapter.</string>
     <string name="settings_shake">Shake to reset</string>
-    <string name="settings_shake_hint">Shake the phone while the timer runs to start it over</string>
+    <string name="settings_shake_hint">Shake the phone while the timer runs to start it over, or soon after it pauses the book to keep listening</string>
     <string name="settings_sleep_repeat">Keep sleep timer</string>
     <string name="settings_sleep_repeat_hint">When the timer runs out, it starts again as soon as you resume the book</string>
     <string name="settings_sleep_auto_night">Sleep timer at night</string>
