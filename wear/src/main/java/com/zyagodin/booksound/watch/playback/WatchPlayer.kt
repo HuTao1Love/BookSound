@@ -94,6 +94,7 @@ class WatchPlayer(private val context: Context) {
         if (c.playWhenReady) c.pause() else c.play()
     }
 
+    fun pause() = withController { it.pause() }
     fun skipBack() = withController { it.seekBack() }
     fun skipForward() = withController { it.seekForward() }
     fun seekTo(positionMs: Long) = withController { it.seekTo(positionMs.coerceAtLeast(0)) }

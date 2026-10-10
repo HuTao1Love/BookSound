@@ -568,4 +568,27 @@
     <string name="update_failed_watch_space">На часах не хватает места.</string>
     <string name="update_failed_watch">Часы не смогли сохранить обновление.</string>
     <string name="update_failed_install">Не удалось начать установку.</string>
+    <!-- Вывод звука и трансляция (плеер) -->
+    <string name="output_listening_on">Звук идёт на</string>
+    <string name="output_choose">Выбрать, где слушать</string>
+    <string name="output_this_phone">Этот телефон</string>
+    <string name="output_bluetooth">Bluetooth</string>
+    <string name="output_headphones">Наушники</string>
+    <string name="output_other">Колонка</string>
+    <string name="cast_title">Трансляция</string>
+    <string name="cast_subtitle">Устройство получит книгу по ссылке в вашей сети Wi‑Fi</string>
+    <string name="cast_devices">Устройства рядом</string>
+    <string name="cast_searching">Ищем Chromecast, телевизоры и колонки…</string>
+    <string name="cast_searching_hint">Телефон и устройство должны быть в одной сети Wi‑Fi.</string>
+    <string name="cast_connecting">Подключение…</string>
+    <string name="cast_loading">Отправляем книгу…</string>
+    <string name="cast_playing">Играет на</string>
+    <string name="cast_paused">Пауза на</string>
+    <string name="cast_stop">Остановить трансляцию</string>
+    <string name="cast_unsupported">Google Cast недоступен на этом телефоне.</string>
+    <string name="cast_permission">Разрешите доступ к устройствам в сети, чтобы найти Chromecast и телевизоры.</string>
+    <string name="cast_permission_action">Разрешить</string>
+    <string name="cast_problem_network">Подключитесь к Wi‑Fi: устройство получает книгу по локальной сети.</string>
+    <string name="cast_problem_connect">Не удалось подключиться к устройству.</string>
+    <string name="cast_problem_playback">Устройство не смогло воспроизвести книгу.</string>
 </resources>

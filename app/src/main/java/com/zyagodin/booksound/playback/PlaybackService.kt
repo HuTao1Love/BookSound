@@ -178,6 +178,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         savePosition()
+        container.watchRemote.update(player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }, playing = false, player.currentPosition)
         container.sleepTimer.detach(player)
         scope.cancel()
         session?.run {
@@ -285,6 +286,7 @@ class PlaybackService : MediaSessionService() {
                 periodicSave?.cancel()
                 savePosition()
             }
+            container.watchRemote.update(player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }, isPlaying, player.currentPosition)
         }
 
         override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -301,6 +303,7 @@ class PlaybackService : MediaSessionService() {
             }
             if (bookId == currentBookId) return
             currentBookId = bookId
+            container.watchRemote.update(bookId, player.isPlaying, player.currentPosition)
             applyVoicePreset()
             player.chapters = emptyList()
             if (bookId == null) return

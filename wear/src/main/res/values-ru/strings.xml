@@ -1,5 +1,7 @@
 <resources>
     <string name="now_playing">Сейчас играет</string>
+    <string name="on_phone">На телефоне</string>
+    <string name="phone_unreachable">Телефон не ответил</string>
     <string name="library_empty">Отправьте книгу с телефона: откройте её в BookSound, ⋮ → Отправить на часы.</string>
     <string name="receiving">Получение · %1$d%%</string>
     <string name="book_progress">%1$d%% · ещё %2$s</string>
