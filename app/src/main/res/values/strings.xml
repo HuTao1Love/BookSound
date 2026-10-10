@@ -559,21 +559,21 @@
     <string name="update_failed_watch">The watch couldn\'t save the update.</string>
     <string name="update_failed_install">Couldn\'t start the installation.</string>
     <!-- Output and Cast (player) -->
-    <string name="output_listening_on">Listening on</string>
+    <string name="output_title">Where to listen</string>
+    <string name="output_section_phone">On this phone</string>
+    <string name="output_bluetooth_hint">Bluetooth headphones and speakers</string>
     <string name="output_choose">Choose where to listen</string>
     <string name="output_this_phone">This phone</string>
     <string name="output_bluetooth">Bluetooth</string>
     <string name="output_headphones">Headphones</string>
     <string name="output_other">Speaker</string>
     <string name="cast_title">Cast</string>
-    <string name="cast_subtitle">The device gets the book as a link on your Wi‑Fi</string>
-    <string name="cast_devices">Nearby devices</string>
     <string name="cast_searching">Looking for Chromecasts, TVs and speakers…</string>
     <string name="cast_searching_hint">The phone and the device need to be on the same Wi‑Fi.</string>
     <string name="cast_connecting">Connecting…</string>
     <string name="cast_loading">Sending the book…</string>
-    <string name="cast_playing">Playing on</string>
-    <string name="cast_paused">Paused on</string>
+    <string name="cast_playing">Playing</string>
+    <string name="cast_paused">Paused</string>
     <string name="cast_stop">Stop casting</string>
     <string name="cast_unsupported">Google Cast isn\'t available on this phone.</string>
     <string name="cast_permission">Allow access to devices on your network to find Chromecasts and TVs.</string>
