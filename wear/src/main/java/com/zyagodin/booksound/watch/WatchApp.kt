@@ -6,6 +6,7 @@ import com.zyagodin.booksound.watch.data.WatchSettings
 import com.zyagodin.booksound.watch.playback.WatchPlayer
 import com.zyagodin.booksound.watch.surfaces.WatchSurfaces
 import com.zyagodin.booksound.watch.sync.BookReceiver
+import com.zyagodin.booksound.watch.sync.PhoneRemote
 import com.zyagodin.booksound.watch.sync.PositionSync
 import com.zyagodin.booksound.watch.sync.WatchUpdates
 import kotlinx.coroutines.CoroutineScope
@@ -34,5 +35,6 @@ class WatchContainer(app: Application) {
     val positions = PositionSync(app, scope, library)
     val player = WatchPlayer(app)
     val updates = WatchUpdates(app, scope)
+    val phone = PhoneRemote(app)
     val surfaces = WatchSurfaces(app, scope, library, settings)
 }

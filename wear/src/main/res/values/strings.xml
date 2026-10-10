@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">BookSound</string>
     <string name="now_playing">Now playing</string>
+    <string name="on_phone">On phone</string>
+    <string name="phone_unreachable">The phone didn\'t answer</string>
     <string name="library_empty">Send a book from the phone: open it in BookSound, ⋮ → Send to watch.</string>
     <string name="receiving">Receiving · %1$d%%</string>
     <string name="book_progress">%1$d%% · %2$s left</string>

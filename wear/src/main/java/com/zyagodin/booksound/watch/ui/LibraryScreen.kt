@@ -1,17 +1,21 @@
 package com.zyagodin.booksound.watch.ui
 
 import android.text.format.Formatter
+import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,11 +35,13 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
+import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.watch.R
 import com.zyagodin.booksound.watch.WatchContainer
 import com.zyagodin.booksound.watch.sync.IncomingBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -56,6 +62,11 @@ fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBoo
     val context = LocalContext.current
     val free = remember(books) { Formatter.formatShortFileSize(context, container.library.freeBytes()) }
     val nowPlaying = books.firstOrNull { it.id == player.bookId }
+    val phoneBook by remember { container.phone.book }.collectAsStateWithLifecycle(null)
+    // What was asked of the phone, shown until the phone reports its new state.
+    var phoneExpected by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(phoneBook) { phoneExpected = null }
+    val scope = rememberCoroutineScope()
     val listState = rememberTransformingLazyColumnState()
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
@@ -81,6 +92,35 @@ fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBoo
                         icon = { Icon(Icons.Rounded.GraphicEq, contentDescription = null) },
                         secondaryLabel = { Text(nowPlaying.metadata.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         label = { Text(stringResource(R.string.now_playing)) },
+                    )
+                }
+            }
+            phoneBook?.let { book ->
+                item {
+                    val playing = phoneExpected ?: book.playing
+                    Button(
+                        onClick = {
+                            val play = !playing
+                            phoneExpected = play
+                            // One book at a time: the watch stops when the phone takes over.
+                            if (play && player.playWhenReady) container.player.pause()
+                            scope.launch {
+                                if (!container.phone.send(if (play) WatchPaths.COMMAND_PLAY else WatchPaths.COMMAND_PAUSE)) {
+                                    phoneExpected = null
+                                    Toast.makeText(context, R.string.phone_unreachable, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = if (playing) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors(),
+                        icon = {
+                            Icon(
+                                if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = stringResource(if (playing) R.string.pause else R.string.play),
+                            )
+                        },
+                        secondaryLabel = { Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        label = { Text(stringResource(R.string.on_phone)) },
                     )
                 }
             }

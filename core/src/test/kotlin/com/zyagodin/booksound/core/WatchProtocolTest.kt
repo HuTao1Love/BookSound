@@ -6,6 +6,7 @@ import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.core.model.DeviceId
 import com.zyagodin.booksound.core.model.SyncStamp
 import com.zyagodin.booksound.core.sync.PlaybackRecord
+import com.zyagodin.booksound.core.wear.PhoneBook
 import com.zyagodin.booksound.core.wear.WatchBookHeader
 import com.zyagodin.booksound.core.wear.WatchCodec
 import com.zyagodin.booksound.core.wear.WatchPaths
@@ -73,5 +74,13 @@ class WatchProtocolTest {
         listOf(WatchResult.Saved, WatchResult.NoSpace, WatchResult.Failed("size")).forEach {
             assertEquals(it, WatchResult.decode(it.encode()))
         }
+    }
+
+    @Test
+    fun `phone book survives a round trip`() {
+        val book = PhoneBook(BookId("b1"), "Мастер и Маргарита", "Булгаков", playing = true, positionMs = 3_723_000, durationMs = 36_000_000)
+        assertEquals(book, WatchCodec.decodePhoneBook(WatchCodec.encodePhoneBook(book)))
+        val anonymous = book.copy(author = null, playing = false)
+        assertEquals(anonymous, WatchCodec.decodePhoneBook(WatchCodec.encodePhoneBook(anonymous)))
     }
 }

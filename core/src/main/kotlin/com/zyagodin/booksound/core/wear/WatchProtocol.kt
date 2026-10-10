@@ -25,6 +25,10 @@ import java.io.IOException
  * Updating the watch app: the phone streams the new APK through a channel opened on
  * APK_PREFIX + version; the watch answers on APK_RESULT_PREFIX + version and asks the user to
  * install it.
+ *
+ * Playing on the phone from the watch: the phone publishes the book it would resume as a
+ * [PhoneBook] data item at PHONE_BOOK_PATH; the watch sends PHONE_COMMAND_PREFIX + "play" or
+ * "pause" as a message to the phone that declares PHONE_CAPABILITY.
  */
 object WatchPaths {
     /** Capability the watch app declares, so the phone finds watches that have it installed. */
@@ -39,6 +43,15 @@ object WatchPaths {
     /** Channel carrying a new watch app APK; the last path segment is its version. */
     const val APK_PREFIX = "/booksound/apk/"
     const val APK_RESULT_PREFIX = "/booksound/apk-result/"
+
+    /** Capability the phone app declares, so the watch finds a reachable phone with BookSound. */
+    const val PHONE_CAPABILITY = "booksound_phone"
+    /** Data item with the phone's [PhoneBook]. */
+    const val PHONE_BOOK_PATH = "/booksound/phone-book"
+    /** Message asking the phone to play or pause; the last path segment is the command. */
+    const val PHONE_COMMAND_PREFIX = "/booksound/phone-command/"
+    const val COMMAND_PLAY = "play"
+    const val COMMAND_PAUSE = "pause"
 
     /** The book id at the end of a path that starts with [prefix], or null for another path. */
     fun bookId(path: String, prefix: String): BookId? =
@@ -67,6 +80,16 @@ data class WatchBookHeader(
     override fun hashCode(): Int = id.hashCode() * 31 + fileRevision
 }
 
+/** The book the phone plays or would resume, as the watch shows it. */
+data class PhoneBook(
+    val id: BookId,
+    val title: String,
+    val author: String?,
+    val playing: Boolean,
+    val positionMs: Long,
+    val durationMs: Long,
+)
+
 /** The watch's answer to a sent book. */
 sealed interface WatchResult {
     data object Saved : WatchResult
@@ -92,6 +115,7 @@ sealed interface WatchResult {
 object WatchCodec {
     private const val HEADER_MAGIC = 0x42535748 // "BSWH"
     private const val POSITION_MAGIC = 0x42535750 // "BSWP"
+    private const val PHONE_BOOK_MAGIC = 0x4253504E // "BSPN"
     private const val VERSION = 1
 
     fun encodeHeader(header: WatchBookHeader): ByteArray = write(HEADER_MAGIC) {
@@ -129,6 +153,19 @@ object WatchCodec {
     fun encodePosition(record: PlaybackRecord): ByteArray = write(POSITION_MAGIC) { writePlayback(record) }
 
     fun decodePosition(bytes: ByteArray): PlaybackRecord = read(bytes, POSITION_MAGIC) { readPlayback() }
+
+    fun encodePhoneBook(book: PhoneBook): ByteArray = write(PHONE_BOOK_MAGIC) {
+        writeString(book.id.value)
+        writeString(book.title)
+        writeNullable(book.author)
+        writeBoolean(book.playing)
+        writeLong(book.positionMs)
+        writeLong(book.durationMs)
+    }
+
+    fun decodePhoneBook(bytes: ByteArray): PhoneBook = read(bytes, PHONE_BOOK_MAGIC) {
+        PhoneBook(BookId(readString()), readString(), readNullable(), readBoolean(), readLong(), readLong())
+    }
 
     // ---------------------------------------------------------------- helpers
 
