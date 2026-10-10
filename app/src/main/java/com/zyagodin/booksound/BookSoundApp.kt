@@ -17,6 +17,8 @@ import com.zyagodin.booksound.importer.ImportPipeline
 import com.zyagodin.booksound.importer.ImportPlanner
 import com.zyagodin.booksound.importer.ImportSessionStore
 import com.zyagodin.booksound.importer.RemoteTranscoder
+import com.zyagodin.booksound.cast.CastController
+import com.zyagodin.booksound.playback.AudioOutputs
 import com.zyagodin.booksound.playback.PlayerConnection
 import com.zyagodin.booksound.playback.SleepTimer
 import com.zyagodin.booksound.storage.DocumentStore
@@ -155,6 +157,12 @@ class AppContainer(app: Application) {
 
     /** Sends books to the watch app. */
     val watchSender = WatchSender(app, appScope, library)
+
+    /** Bluetooth headphones and other outputs, for the player's output button. */
+    val audioOutputs = AudioOutputs(app)
+
+    /** Plays the book on a Chromecast or a Cast-enabled TV or speaker. */
+    val cast = CastController(app, appScope, library, settings, player)
 
     /** Plays the phone's book on command from the watch. */
     val watchRemote = WatchRemote(app, appScope, library, settings, player)

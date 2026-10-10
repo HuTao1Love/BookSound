@@ -52,8 +52,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -73,20 +73,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.cast.CastUiState
 import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.data.library.BookDetails
+import com.zyagodin.booksound.playback.AudioOutput
 import com.zyagodin.booksound.playback.PlaybackProblem
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.playback.SleepTimerState
 import com.zyagodin.booksound.ui.AppNavigator
-import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.CircleIconButton
 import com.zyagodin.booksound.ui.components.CoverBackdrop
 import com.zyagodin.booksound.ui.components.GradientCircleButton
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
+import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.QuietButton
 import com.zyagodin.booksound.ui.components.WindowLayout
@@ -100,7 +102,7 @@ import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSpeed
 import kotlinx.coroutines.launch
 
-enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE }
+enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE, CAST }
 
 /**
  * Derived, display-ready playback values. The position changes four times a second while playing,
@@ -119,6 +121,9 @@ private class NowPlaying(
     val state: PlayerUiState,
     val chapterIndex: Int,
     val voicePreset: VoicePreset,
+    /** Where the phone plays (Bluetooth headphones…), and the Cast device if casting. */
+    val output: AudioOutput,
+    val cast: CastUiState,
     val position: () -> Long,
 ) {
     val duration: Long = details.item.entry.book.durationMs.takeIf { it > 0 } ?: state.durationMs
@@ -149,6 +154,8 @@ private class PlayerCallbacks(
     val onStop: () -> Unit,
     /** Closes the player and searches the library for a name, e.g. the author's. */
     val onSearch: (String) -> Unit,
+    val onPickOutput: () -> Unit,
+    val onStopCast: () -> Unit,
 )
 
 @Composable
@@ -162,6 +169,9 @@ fun PlayerScreen(navigator: AppNavigator) {
     val sleepState = vm.sleep.collectAsStateWithLifecycle()
     val sleep = { sleepState.value }
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val cast by vm.cast.collectAsStateWithLifecycle()
+    val output by vm.output.collectAsStateWithLifecycle(AudioOutput(AudioOutput.Kind.PHONE, null))
+    val context = LocalContext.current
     val window = rememberWindowLayout()
     var sheet by rememberSaveable { mutableStateOf<PlayerSheet?>(null) }
     var previewMs by remember { mutableStateOf<Long?>(null) }
@@ -194,7 +204,7 @@ fun PlayerScreen(navigator: AppNavigator) {
             if (details.chapters.isEmpty()) -1 else details.chapters.indexOfLast { it.startMs <= position }.coerceAtLeast(0)
         }
     }
-    val now = NowPlaying(details, player, chapterIndex, settings.voicePresetFor(details.item.id)) { previewMs ?: playerState.value.positionMs }
+    val now = NowPlaying(details, player, chapterIndex, settings.voicePresetFor(details.item.id), output, cast) { previewMs ?: playerState.value.positionMs }
     val callbacks = PlayerCallbacks(
         onClose = navigator::back,
         onTogglePlay = vm::togglePlay,
@@ -217,6 +227,8 @@ fun PlayerScreen(navigator: AppNavigator) {
             navigator.back()
         },
         onSearch = navigator::searchLibrary,
+        onPickOutput = { vm.openOutputPicker(context) },
+        onStopCast = vm::stopCasting,
     )
     val skip = settings.skipBackSeconds to settings.skipForwardSeconds
 
@@ -279,6 +291,16 @@ fun PlayerScreen(navigator: AppNavigator) {
             onSelect = { chapter -> vm.seekTo(chapter.startMs); sheet = null },
             onDismiss = { sheet = null },
         )
+        PlayerSheet.CAST -> CastSheet(
+            cast = cast,
+            bookTitle = details.item.metadata.title,
+            onConnect = vm::castTo,
+            onStop = vm::stopCasting,
+            onTogglePlay = vm::togglePlay,
+            onDiscovery = { if (it) vm.startCastDiscovery() else vm.stopCastDiscovery() },
+            onClearProblem = vm::clearCastProblem,
+            onDismiss = { sheet = null },
+        )
         null -> Unit
     }
 }
@@ -308,6 +330,8 @@ private fun CompactPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
         TransportControls(now, skip, cb, playSize = 80.dp)
         Spacer(Modifier.height(Spacing.xl))
         ActionChips(now, sleep, cb, showChapters = true)
+        Spacer(Modifier.height(Spacing.md))
+        OutputRow(now, cb)
         Spacer(Modifier.height(Spacing.lg))
     }
 }
@@ -335,6 +359,8 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                     TransportControls(now, skip, cb, playSize = 80.dp)
                     Spacer(Modifier.height(Spacing.lg))
                     ActionChips(now, sleep, cb, showChapters = false)
+                    Spacer(Modifier.height(Spacing.md))
+                    OutputRow(now, cb)
                     Spacer(Modifier.height(Spacing.lg))
                 }
                 Column(Modifier.weight(1f).fillMaxHeight().padding(top = Spacing.lg, bottom = Spacing.lg)) {
@@ -364,6 +390,8 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                     TransportControls(now, skip, cb, playSize = if (window.isShort) 64.dp else 88.dp)
                     Spacer(Modifier.height(Spacing.lg))
                     ActionChips(now, sleep, cb, showChapters = true)
+                    Spacer(Modifier.height(Spacing.md))
+                    OutputRow(now, cb)
                     Spacer(Modifier.weight(1f))
                 }
             }
@@ -407,6 +435,8 @@ private fun TabletopPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: 
             TransportControls(now, skip, cb, playSize = 80.dp)
             Spacer(Modifier.height(Spacing.md))
             ActionChips(now, sleep, cb, showChapters = true)
+            Spacer(Modifier.height(Spacing.md))
+            OutputRow(now, cb)
         }
     }
 }
@@ -575,6 +605,18 @@ private fun ActionChips(now: NowPlaying, sleep: () -> SleepTimerState, cb: Playe
             }
         }
     }
+}
+
+@Composable
+private fun OutputRow(now: NowPlaying, cb: PlayerCallbacks) {
+    OutputBar(
+        output = now.output,
+        cast = now.cast,
+        onPickOutput = cb.onPickOutput,
+        onCast = { cb.onSheet(PlayerSheet.CAST) },
+        onStopCast = cb.onStopCast,
+        modifier = Modifier.widthIn(max = 480.dp),
+    )
 }
 
 /** The sleep timer's chip; [sleep] is read here, so the countdown redraws only this chip. */
