@@ -102,7 +102,7 @@ import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSpeed
 import kotlinx.coroutines.launch
 
-enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE, CAST }
+enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE, OUTPUT }
 
 /**
  * Derived, display-ready playback values. The position changes four times a second while playing,
@@ -154,8 +154,6 @@ private class PlayerCallbacks(
     val onStop: () -> Unit,
     /** Closes the player and searches the library for a name, e.g. the author's. */
     val onSearch: (String) -> Unit,
-    val onPickOutput: () -> Unit,
-    val onStopCast: () -> Unit,
 )
 
 @Composable
@@ -227,8 +225,6 @@ fun PlayerScreen(navigator: AppNavigator) {
             navigator.back()
         },
         onSearch = navigator::searchLibrary,
-        onPickOutput = { vm.openOutputPicker(context) },
-        onStopCast = vm::stopCasting,
     )
     val skip = settings.skipBackSeconds to settings.skipForwardSeconds
 
@@ -291,9 +287,11 @@ fun PlayerScreen(navigator: AppNavigator) {
             onSelect = { chapter -> vm.seekTo(chapter.startMs); sheet = null },
             onDismiss = { sheet = null },
         )
-        PlayerSheet.CAST -> CastSheet(
+        PlayerSheet.OUTPUT -> OutputSheet(
             cast = cast,
             bookTitle = details.item.metadata.title,
+            output = output,
+            onPickOutput = { vm.openOutputPicker(context) },
             onConnect = vm::castTo,
             onStop = vm::stopCasting,
             onTogglePlay = vm::togglePlay,
@@ -330,8 +328,6 @@ private fun CompactPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
         TransportControls(now, skip, cb, playSize = 80.dp)
         Spacer(Modifier.height(Spacing.xl))
         ActionChips(now, sleep, cb, showChapters = true)
-        Spacer(Modifier.height(Spacing.md))
-        OutputRow(now, cb)
         Spacer(Modifier.height(Spacing.lg))
     }
 }
@@ -359,8 +355,6 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                     TransportControls(now, skip, cb, playSize = 80.dp)
                     Spacer(Modifier.height(Spacing.lg))
                     ActionChips(now, sleep, cb, showChapters = false)
-                    Spacer(Modifier.height(Spacing.md))
-                    OutputRow(now, cb)
                     Spacer(Modifier.height(Spacing.lg))
                 }
                 Column(Modifier.weight(1f).fillMaxHeight().padding(top = Spacing.lg, bottom = Spacing.lg)) {
@@ -390,8 +384,6 @@ private fun TwoPanePlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: P
                     TransportControls(now, skip, cb, playSize = if (window.isShort) 64.dp else 88.dp)
                     Spacer(Modifier.height(Spacing.lg))
                     ActionChips(now, sleep, cb, showChapters = true)
-                    Spacer(Modifier.height(Spacing.md))
-                    OutputRow(now, cb)
                     Spacer(Modifier.weight(1f))
                 }
             }
@@ -420,6 +412,8 @@ private fun TabletopPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: 
             Column(Modifier.weight(1f)) {
                 TitleBlock(now, cb, centered = false)
             }
+            OutputButton(now.output, now.cast) { cb.onSheet(PlayerSheet.OUTPUT) }
+            Spacer(Modifier.width(Spacing.sm))
             VoiceButton(now, cb)
             IconButton(onClick = cb.onClose) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.action_close_player))
@@ -435,8 +429,6 @@ private fun TabletopPlayer(now: NowPlaying, sleep: () -> SleepTimerState, skip: 
             TransportControls(now, skip, cb, playSize = 80.dp)
             Spacer(Modifier.height(Spacing.md))
             ActionChips(now, sleep, cb, showChapters = true)
-            Spacer(Modifier.height(Spacing.md))
-            OutputRow(now, cb)
         }
     }
 }
@@ -451,6 +443,8 @@ private fun PlayerTopBar(now: NowPlaying, cb: PlayerCallbacks) {
             Icons.Rounded.KeyboardArrowDown, stringResource(R.string.action_close_player), cb.onClose,
             containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), iconSize = 28.dp,
         )
+        Spacer(Modifier.width(Spacing.sm))
+        OutputButton(now.output, now.cast) { cb.onSheet(PlayerSheet.OUTPUT) }
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(stringResource(R.string.player_now_playing).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (now.chapters.size > 1) {
@@ -605,18 +599,6 @@ private fun ActionChips(now: NowPlaying, sleep: () -> SleepTimerState, cb: Playe
             }
         }
     }
-}
-
-@Composable
-private fun OutputRow(now: NowPlaying, cb: PlayerCallbacks) {
-    OutputBar(
-        output = now.output,
-        cast = now.cast,
-        onPickOutput = cb.onPickOutput,
-        onCast = { cb.onSheet(PlayerSheet.CAST) },
-        onStopCast = cb.onStopCast,
-        modifier = Modifier.widthIn(max = 480.dp),
-    )
 }
 
 /** The sleep timer's chip; [sleep] is read here, so the countdown redraws only this chip. */

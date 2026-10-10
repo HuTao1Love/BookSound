@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +40,7 @@ import androidx.compose.material.icons.rounded.BluetoothAudio
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.CastConnected
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Headphones
@@ -93,131 +93,62 @@ import com.zyagodin.booksound.ui.theme.LocalGradients
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
 
-// ------------------------------------------------------------------ the bar under the controls
+// ------------------------------------------------------------------ the button
 
 /**
- * Where the book is heard: the phone's output (Bluetooth headphones, a speaker) with the system
- * picker behind it, and Cast beside it. While casting, the whole bar turns into the cast.
+ * Where the book is heard, as one round button in the player's top bar: the phone's output
+ * (highlighted with Bluetooth or wired headphones), or the Cast device, in the accent gradient.
  */
 @Composable
-internal fun OutputBar(
-    output: AudioOutput,
-    cast: CastUiState,
-    onPickOutput: () -> Unit,
-    onCast: () -> Unit,
-    onStopCast: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+internal fun OutputButton(output: AudioOutput, cast: CastUiState, onClick: () -> Unit) {
+    val session = cast.session
+    val description = stringResource(R.string.output_title) + ": " + (session?.deviceName ?: outputName(output))
     AnimatedContent(
-        targetState = cast.session,
-        contentKey = { it != null },
+        targetState = session?.stage to output.kind,
         transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-        modifier = modifier.fillMaxWidth(),
-        label = "output",
-    ) { session ->
-        if (session != null) CastingBar(session, onCast, onStopCast) else LocalOutputBar(output, cast.supported, onPickOutput, onCast)
-    }
-}
-
-@Composable
-private fun LocalOutputBar(output: AudioOutput, castSupported: Boolean, onPickOutput: () -> Unit, onCast: () -> Unit) {
-    val external = output.kind != AudioOutput.Kind.PHONE
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Surface(
-            onClick = onPickOutput,
-            shape = Radii.pill,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-        ) {
-            Row(Modifier.padding(start = Spacing.xs, end = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                val badge by animateColorAsState(
-                    if (external) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                    label = "badge",
-                )
-                Box(Modifier.padding(Spacing.xs).size(36.dp).clip(CircleShape).background(badge), contentAlignment = Alignment.Center) {
-                    Icon(
-                        outputIcon(output.kind),
-                        contentDescription = null,
-                        tint = if (external) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(Spacing.sm))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.output_listening_on),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    AnimatedContent(outputName(output), label = "outputName") { name ->
-                        Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
+        label = "outputButton",
+    ) { (stage, kind) ->
+        if (stage != null) {
+            val gradients = LocalGradients.current
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .shadow(12.dp, CircleShape, ambientColor = gradients.accentColors.last(), spotColor = gradients.accentColors.first())
+                    .clip(CircleShape)
+                    .background(gradients.accent)
+                    .clickable(role = Role.Button, onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
-                    Icons.Rounded.UnfoldMore,
-                    contentDescription = stringResource(R.string.output_choose),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
+                    Icons.Rounded.CastConnected,
+                    contentDescription = description,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(22.dp).then(if (stage != CastSessionState.Stage.CASTING) Modifier.alpha(pulse()) else Modifier),
                 )
             }
-        }
-        if (castSupported) {
+        } else {
+            val external = kind != AudioOutput.Kind.PHONE
             CircleIconButton(
-                Icons.Rounded.Cast,
-                stringResource(R.string.cast_title),
-                onCast,
-                containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                if (external) outputIcon(kind) else Icons.Rounded.Devices,
+                description,
+                onClick,
                 iconSize = 22.dp,
+                containerColor = if (external) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                contentColor = if (external) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
             )
         }
     }
 }
 
-@Composable
-private fun CastingBar(session: CastSessionState, onOpen: () -> Unit, onStop: () -> Unit) {
-    val gradients = LocalGradients.current
-    val busy = session.stage != CastSessionState.Stage.CASTING
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .shadow(16.dp, Radii.pill, ambientColor = gradients.accentColors.last(), spotColor = gradients.accentColors.first())
-            .clip(Radii.pill)
-            .background(gradients.accent)
-            .clickable(role = Role.Button, onClick = onOpen)
-            .padding(start = Spacing.md, end = Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimary) {
-            Icon(Icons.Rounded.CastConnected, contentDescription = null, modifier = Modifier.size(22.dp).then(if (busy) Modifier.alpha(pulse()) else Modifier))
-            Spacer(Modifier.width(Spacing.md))
-            Column(Modifier.weight(1f).padding(vertical = Spacing.sm)) {
-                Text(
-                    stringResource(sessionStatus(session)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LocalContentColor.current.copy(alpha = 0.8f),
-                )
-                Text(session.deviceName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            CircleIconButton(
-                Icons.Rounded.Close,
-                stringResource(R.string.cast_stop),
-                onStop,
-                size = 40.dp,
-                iconSize = 20.dp,
-                containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            )
-        }
-    }
-}
+// ------------------------------------------------------------------ the sheet
 
-// ------------------------------------------------------------------ the cast sheet
-
+/** Where to listen: this phone (its output picker for Bluetooth) or a Cast device. */
 @Composable
-internal fun CastSheet(
+internal fun OutputSheet(
     cast: CastUiState,
     bookTitle: String,
+    output: AudioOutput,
+    onPickOutput: () -> Unit,
     onConnect: (CastTarget) -> Unit,
     onStop: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -245,9 +176,18 @@ internal fun CastSheet(
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
         ) {
-            SheetHeader()
+            SheetHeader(bookTitle)
             Spacer(Modifier.height(Spacing.xl))
 
+            SectionLabel(stringResource(R.string.output_section_phone))
+            PhoneRow(output, current = cast.session == null, onClick = onPickOutput)
+            Spacer(Modifier.height(Spacing.xl))
+
+            SectionLabel(stringResource(R.string.cast_title)) {
+                if (cast.supported && permitted) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             when {
                 !cast.supported -> Notice(Icons.Rounded.ErrorOutline, stringResource(R.string.cast_unsupported))
                 !permitted -> {
@@ -287,7 +227,7 @@ internal fun CastSheet(
 }
 
 @Composable
-private fun SheetHeader() {
+private fun SheetHeader(bookTitle: String) {
     val gradients = LocalGradients.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -298,12 +238,12 @@ private fun SheetHeader() {
                 .background(gradients.accent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Cast, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+            Icon(Icons.Rounded.Devices, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
         }
         Spacer(Modifier.width(Spacing.lg))
         Column {
-            Text(stringResource(R.string.cast_title), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.cast_subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.output_title), style = MaterialTheme.typography.titleLarge)
+            Text(bookTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -360,15 +300,6 @@ private fun SessionCard(session: CastSessionState, bookTitle: String, kind: Cast
 
 @Composable
 private fun DeviceList(cast: CastUiState, onConnect: (CastTarget) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = Spacing.xs, bottom = Spacing.sm)) {
-        Text(
-            stringResource(R.string.cast_devices).uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
     if (cast.devices.isEmpty()) {
         Searching()
         return
@@ -378,6 +309,50 @@ private fun DeviceList(cast: CastUiState, onConnect: (CastTarget) -> Unit) {
             val session = cast.session
             val current = session != null && session.deviceName == device.name
             DeviceRow(device, current, busy = current && session?.stage != CastSessionState.Stage.CASTING) { if (!current) onConnect(device) }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String, trailing: @Composable () -> Unit = {}) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = Spacing.xs, bottom = Spacing.sm)) {
+        Text(
+            text.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        trailing()
+    }
+}
+
+/** The phone's own output; opens the system picker with Bluetooth headphones and speakers. */
+@Composable
+private fun PhoneRow(output: AudioOutput, current: Boolean, onClick: () -> Unit) {
+    val container by animateColorAsState(
+        if (current) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        label = "phone",
+    )
+    Surface(onClick = onClick, shape = Radii.card, color = container, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = Spacing.md, vertical = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(outputIcon(output.kind), contentDescription = null, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(outputName(output), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(R.string.output_bluetooth_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(Icons.Rounded.UnfoldMore, contentDescription = stringResource(R.string.output_choose), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
