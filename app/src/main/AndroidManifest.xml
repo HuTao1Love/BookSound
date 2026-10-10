@@ -103,7 +103,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Listening positions published by the watch app. -->
+        <!-- Listening positions published by the watch app, and its play and pause commands. -->
         <service
             android:name=".wear.PhoneWearListenerService"
             android:exported="true"
@@ -113,6 +113,14 @@
                 <data
                     android:host="*"
                     android:pathPrefix="/booksound/position/"
+                    android:scheme="wear" />
+            </intent-filter>
+            <!-- Play and pause from the watch. -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/booksound/phone-command/"
                     android:scheme="wear" />
             </intent-filter>
         </service>

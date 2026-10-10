@@ -29,6 +29,7 @@ import com.zyagodin.booksound.torrent.TorrentKeepAlive
 import com.zyagodin.booksound.torrent.TorrentStore
 import com.zyagodin.booksound.update.UpdateManager
 import com.zyagodin.booksound.wear.PlaybackOnlyStore
+import com.zyagodin.booksound.wear.WatchRemote
 import com.zyagodin.booksound.wear.WatchSender
 import com.zyagodin.booksound.wear.WatchSyncBackend
 import android.util.Log
@@ -67,6 +68,8 @@ class BookSoundApp : Application(), ImageLoaderFactory {
         }
         // Positions saved on the watch while the app wasn't running.
         container.sync.requestSync()
+        // So the watch can resume the last book even before the player ran.
+        container.watchRemote.restore()
         container.appScope.launch {
             container.torrents.needsForeground.collect { needed -> if (needed) TorrentKeepAlive.start(this@BookSoundApp) }
         }
@@ -152,6 +155,9 @@ class AppContainer(app: Application) {
 
     /** Sends books to the watch app. */
     val watchSender = WatchSender(app, appScope, library)
+
+    /** Plays the phone's book on command from the watch. */
+    val watchRemote = WatchRemote(app, appScope, library, settings, player)
 
     /** Updates the phone and watch apps from GitHub releases. */
     val updates = UpdateManager(app, appScope, http)
