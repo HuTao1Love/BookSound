@@ -1,10 +1,9 @@
 package com.zyagodin.booksound.ui.components
 
-import androidx.compose.animation.core.animate
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.DraggableState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,14 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,20 +38,22 @@ import com.zyagodin.booksound.R
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.ui.theme.Spacing
-import kotlinx.coroutines.launch
 
 /** Height of the bar above the navigation bar inset (progress line + content row). */
 val MiniPlayerHeight = 62.dp
 
 /**
  * "Now playing" bar docked to the bottom edge of library screens; its background runs under the
- * navigation bar. Tap it or swipe it up to open the player.
+ * navigation bar. Tap it to open the player, or drag it up: [drag] pulls the player up after the
+ * finger and [onDragStopped] (with the release velocity) lets it finish opening or fall back.
  */
 @Composable
 fun MiniPlayer(
     book: BookDetails,
     state: () -> PlayerUiState,
     onOpen: () -> Unit,
+    drag: DraggableState,
+    onDragStopped: (velocity: Float) -> Unit,
     onTogglePlay: () -> Unit,
     onSkipBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -70,15 +66,6 @@ fun MiniPlayer(
     val playing by remember(state) { derivedStateOf { state().playWhenReady } }
     val bookDuration = book.item.entry.book.durationMs
 
-    // Swipe up: the bar follows the finger a little; far or fast enough opens the player.
-    val density = LocalDensity.current
-    val openDistance = with(density) { 40.dp.toPx() }
-    val maxLift = with(density) { 96.dp.toPx() }
-    val openVelocity = with(density) { 500.dp.toPx() }
-    val scope = rememberCoroutineScope()
-    var lift by remember { mutableFloatStateOf(0f) }
-    val drag = rememberDraggableState { delta -> lift = (lift + delta).coerceIn(-maxLift, 0f) }
-
     Surface(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -86,15 +73,7 @@ fun MiniPlayer(
         modifier = modifier
             .widthIn(max = 640.dp)
             .fillMaxWidth()
-            .graphicsLayer { translationY = lift }
-            .draggable(
-                state = drag,
-                orientation = Orientation.Vertical,
-                onDragStopped = { velocity ->
-                    if (lift < -openDistance || velocity < -openVelocity) onOpen()
-                    scope.launch { animate(lift, 0f) { value, _ -> lift = value } }
-                },
-            ),
+            .draggable(drag, Orientation.Vertical, onDragStopped = { onDragStopped(it) }),
     ) {
         Column(Modifier.navigationBarsPadding()) {
             PositionLine {

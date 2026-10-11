@@ -1,20 +1,19 @@
 package com.zyagodin.booksound.ui
 
 import android.net.Uri
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -24,6 +23,7 @@ import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
@@ -35,17 +35,24 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.metadata
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -68,12 +75,13 @@ import com.zyagodin.booksound.ui.navigation.CoverPickerKey
 import com.zyagodin.booksound.ui.navigation.ImportEditorKey
 import com.zyagodin.booksound.ui.navigation.ImportsKey
 import com.zyagodin.booksound.ui.navigation.LibraryKey
-import com.zyagodin.booksound.ui.navigation.PlayerKey
 import com.zyagodin.booksound.ui.navigation.RemovedBooksKey
 import com.zyagodin.booksound.ui.navigation.SeriesKey
 import com.zyagodin.booksound.ui.navigation.SettingsKey
 import com.zyagodin.booksound.ui.onboarding.OnboardingScreen
 import com.zyagodin.booksound.ui.player.PlayerScreen
+import com.zyagodin.booksound.ui.player.PlayerSheetState
+import com.zyagodin.booksound.ui.player.rememberPlayerSheetState
 import com.zyagodin.booksound.ui.settings.RemovedBooksScreen
 import com.zyagodin.booksound.ui.settings.SettingsScreen
 import com.zyagodin.booksound.ui.theme.BookSoundTheme
@@ -81,28 +89,11 @@ import com.zyagodin.booksound.ui.torrent.AddTorrentDialog
 import com.zyagodin.booksound.torrent.TorrentSource
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** The "Add torrent" dialog is open; [initial] is a link or file handed over by another app. */
 private class AddTorrentRequest(val initial: TorrentSource?)
-
-/**
- * The player slides up over the screen below (it is opened by swiping the mini player up) and
- * slides back down when closed by the button, a swipe down or the back gesture. The screen below
- * stays put: the default cross-fade made both screens half transparent and the one below vanished
- * abruptly halfway through.
- */
-private val PlayerTransitions = metadata {
-    put(NavDisplay.TransitionKey) {
-        slideInVertically(tween(350, easing = LinearOutSlowInEasing)) { it } togetherWith ExitTransition.KeepUntilTransitionsFinished
-    }
-    put(NavDisplay.PopTransitionKey) {
-        EnterTransition.None togetherWith slideOutVertically(tween(300, easing = FastOutLinearInEasing)) { it }
-    }
-    put(NavDisplay.PredictivePopTransitionKey) { _: Int ->
-        EnterTransition.None togetherWith slideOutVertically(tween(300, easing = FastOutLinearInEasing)) { it }
-    }
-}
 
 /** Extra bottom padding screens must leave for the floating mini player. */
 val LocalBottomOverlayPadding = compositionLocalOf { 0.dp }
@@ -113,11 +104,14 @@ class AppNavigator(
     private val showAddTorrent: (TorrentSource?) -> Unit = {},
     /** The library and a book are shown side by side. */
     private val twoPane: () -> Boolean = { false },
+    /** The player is not a screen in the back stack but slides over them; see [PlayerSheetState]. */
+    private val player: PlayerSheetState? = null,
 ) {
     /** Text to search the library for, asked for from another screen; the library takes it. */
     var pendingSearch by mutableStateOf<String?>(null)
 
     fun openBook(bookId: String) {
+        player?.collapse()
         // In list-detail mode, selecting another book replaces the open detail instead of stacking.
         if (backStack.lastOrNull() is BookKey) backStack[backStack.lastIndex] = BookKey(bookId) else backStack.add(BookKey(bookId))
     }
@@ -138,13 +132,18 @@ class AppNavigator(
     }
 
     fun openPlayer() {
-        if (backStack.lastOrNull() != PlayerKey) backStack.add(PlayerKey)
+        player?.expand()
     }
 
-    fun openImportEditor(sessionId: String) = backStack.add(ImportEditorKey(sessionId))
+    fun openImportEditor(sessionId: String) {
+        player?.collapse()
+        backStack.add(ImportEditorKey(sessionId))
+    }
+
     fun openCoverPicker(sessionId: String) = backStack.add(CoverPickerKey(sessionId))
 
     fun openImports(replaceCurrent: Boolean = false) {
+        player?.collapse()
         if (replaceCurrent) backStack.removeLastOrNull()
         if (backStack.lastOrNull() != ImportsKey) backStack.add(ImportsKey)
     }
@@ -159,6 +158,7 @@ class AppNavigator(
     }
 
     fun backToLibrary() {
+        player?.collapse()
         while (backStack.size > 1) backStack.removeLastOrNull()
     }
 }
@@ -193,8 +193,9 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     val listPaneWidth = (windowWidth / 2).coerceIn(360.dp, 520.dp)
     val directive = calculatePaneScaffoldDirective(currentWindowAdaptiveInfoV2()).copy(defaultPanePreferredWidth = listPaneWidth)
     val twoPane = rememberUpdatedState(directive.maxHorizontalPartitions > 1)
-    val navigator = remember(backStack) {
-        AppNavigator(backStack, showAddTorrent = { addTorrent = AddTorrentRequest(it) }, twoPane = { twoPane.value })
+    val player = rememberPlayerSheetState()
+    val navigator = remember(backStack, player) {
+        AppNavigator(backStack, showAddTorrent = { addTorrent = AddTorrentRequest(it) }, twoPane = { twoPane.value }, player = player)
     }
     val listDetail = rememberListDetailSceneStrategy<NavKey>(directive = directive)
     // The position changes four times a second while playing: only the mini player reads it, the
@@ -231,6 +232,10 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     }
 
     val top = backStack.lastOrNull()
+    val playerShown by remember { derivedStateOf { player.fraction > 0f } }
+    // Fully open, the screens below are hidden from accessibility services as they were when the
+    // player was a screen of its own.
+    val playerCovers by remember { derivedStateOf { player.fraction >= 1f } }
     val showMiniPlayer = nowPlaying != null && hasBook &&
         (top == LibraryKey || top is SeriesKey || top is BookKey || top == ImportsKey || top == SettingsKey)
     // Two panes side by side: the bar docks under the list pane instead of straddling both.
@@ -240,9 +245,10 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
     // Screens add the navigation bar inset themselves; the docked bar sits right on top of it.
     val overlay: Dp = if (showMiniPlayer) MiniPlayerHeight else 0.dp
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onSizeChanged { player.travel = it.height.toFloat() }) {
         CompositionLocalProvider(LocalBottomOverlayPadding provides overlay) {
             NavDisplay(
+                modifier = if (playerCovers) Modifier.clearAndSetSemantics { } else Modifier,
                 backStack = backStack,
                 onBack = { backStack.removeLastOrNull() },
                 entryDecorators = listOf(
@@ -260,7 +266,6 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     entry<BookKey>(metadata = ListDetailSceneStrategy.detailPane()) { key ->
                         BookDetailScreen(key.bookId, navigator)
                     }
-                    entry<PlayerKey>(metadata = PlayerTransitions) { PlayerScreen(navigator) }
                     entry<ImportEditorKey> { key -> ImportEditorScreen(key.sessionId, navigator) }
                     entry<CoverPickerKey> { key -> CoverPickerScreen(key.sessionId, navigator) }
                     entry<ImportsKey> { ImportsScreen(navigator) }
@@ -302,21 +307,72 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                 onLater = ::answered,
             )
         }
+        if (playerShown) PlayerOverlay(player, navigator)
         AnimatedVisibility(
             visible = showMiniPlayer,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
-            modifier = if (besideDetail) Modifier.align(Alignment.BottomStart).width(listPaneWidth) else Modifier.align(Alignment.BottomCenter),
+            modifier = (if (besideDetail) Modifier.align(Alignment.BottomStart).width(listPaneWidth) else Modifier.align(Alignment.BottomCenter))
+                .then(if (playerShown) Modifier.clearAndSetSemantics { } else Modifier)
+                // Rides on the rising player's top edge, fading out as it goes.
+                .graphicsLayer {
+                    translationY = -player.fraction * player.travel
+                    alpha = (1f - player.fraction * 4f).coerceAtLeast(0f)
+                },
         ) {
             nowPlaying?.let { book ->
                 MiniPlayer(
                     book = book,
                     state = { playerState.value },
                     onOpen = navigator::openPlayer,
+                    drag = player.draggable,
+                    onDragStopped = player::settle,
                     onTogglePlay = container.player::togglePlayPause,
                     onSkipBack = container.player::skipBack,
                 )
             }
+        }
+    }
+}
+
+/**
+ * The player over the screens, pulled up [PlayerSheetState.fraction] of the way; the screens below
+ * dim as it rises. Drags its content leaves alone (the chapter list scrolls, the seek bar seeks)
+ * move it.
+ */
+@Composable
+private fun PlayerOverlay(state: PlayerSheetState, navigator: AppNavigator) {
+    PredictiveBackHandler(enabled = state.isOpen) { progress ->
+        state.followBack(progress.map { it.progress })
+    }
+    // Its own view models, cleared when it closes as they were when the player was a screen.
+    val owner = remember {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+    }
+    DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .drawBehind { drawRect(Color.Black, alpha = 0.4f * state.fraction) },
+    )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                translationY = (1f - state.fraction) * state.travel
+                // The mini player's corners, squaring off as it opens.
+                val corner = 20.dp.toPx() * (1f - state.fraction)
+                shape = RoundedCornerShape(topStart = corner, topEnd = corner)
+                clip = true
+            }
+            .draggable(state.draggable, Orientation.Vertical, onDragStopped = { state.settle(it) })
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+            PlayerScreen(navigator, onClose = state::collapse)
         }
     }
 }
