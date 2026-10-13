@@ -107,13 +107,6 @@
     <string name="sort_descending">По убыванию</string>
     <string name="scan_result">Библиотека обновлена: добавлено %1$d, не найдено %2$d</string>
     <string name="scan_permission_lost">Нет доступа к папке библиотеки. Выберите её снова в настройках.</string>
-    <string name="importing_book">Импорт «%1$s»</string>
-    <plurals name="importing_books">
-        <item quantity="one">Импорт %1$d книги</item>
-        <item quantity="few">Импорт %1$d книг</item>
-        <item quantity="many">Импорт %1$d книг</item>
-        <item quantity="other">Импорт %1$d книги</item>
-    </plurals>
 
     <string name="remove_title">Убрать из библиотеки?</string>
     <string name="remove_message">«%1$s» и прогресс прослушивания будут убраны из BookSound.</string>
@@ -562,6 +555,7 @@
     <string name="update_step_downloading_phone">Скачиваю обновление…</string>
     <string name="update_done_watch">На часах откройте BookSound и нажмите «Установить обновление».</string>
     <string name="update_done_phone">Подтвердите установку на телефоне.</string>
+    <string name="update_done_watch_next">Потом откройте BookSound — он отправит обновление на часы.</string>
     <string name="update_failed_network">Не удалось связаться с GitHub. Проверьте подключение.</string>
     <string name="update_failed_no_release">На GitHub пока нет релизов.</string>
     <string name="update_failed_watch_unreachable">Часы не на связи. Держите их рядом и попробуйте снова.</string>

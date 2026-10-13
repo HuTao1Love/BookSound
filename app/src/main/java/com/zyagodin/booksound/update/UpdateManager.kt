@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
 import com.zyagodin.booksound.BuildConfigInfo
@@ -55,17 +56,21 @@ sealed interface UpdateState {
     data class Working(val step: Step, val progress: Float?) : UpdateState
     enum class Step { DOWNLOADING_WATCH, SENDING_WATCH, DOWNLOADING_PHONE }
 
-    /** The watch has the APK and asks to install it; the phone's installer was opened if [phoneInstalling]. */
-    data class Done(val watchSent: Boolean, val phoneInstalling: Boolean) : UpdateState
+    /**
+     * The watch has the APK and asks to install it; the phone's installer was opened if
+     * [phoneInstalling]. [watchNext]: the watch app goes out once the new phone app starts.
+     */
+    data class Done(val watchSent: Boolean, val phoneInstalling: Boolean, val watchNext: Boolean = false) : UpdateState
 
     data class Failed(val reason: Reason) : UpdateState
     enum class Reason { NETWORK, NO_RELEASE, WATCH_UNREACHABLE, WATCH_NO_SPACE, WATCH_FAILED, INSTALL }
 }
 
 /**
- * Checks GitHub for a newer BookSound release and installs it: the watch app first (the phone
- * downloads it and sends it over the Data Layer; the watch asks to install), then the phone app,
- * whose installation ends this process.
+ * Checks GitHub for a newer BookSound release and installs it: the phone app first, then the
+ * watch app (the phone sends it over the Data Layer; the watch asks to install). Installing the
+ * phone app ends this process, so both APKs are downloaded before it and the watch's waits in
+ * the cache; the updated app sends it when it starts ([resumeWatchUpdate]).
  */
 class UpdateManager(
     private val context: Context,
@@ -80,6 +85,7 @@ class UpdateManager(
     private val channels = Wearable.getChannelClient(context)
     private val messages = Wearable.getMessageClient(context)
     private val dir = File(context.cacheDir, "updates")
+    private val prefs = context.getSharedPreferences("updates", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state
@@ -111,23 +117,27 @@ class UpdateManager(
     fun update(checked: UpdateState.Checked) {
         if (job?.isActive == true) return
         job = scope.launch(Dispatchers.IO) {
+            val version = checked.release.version.toString()
             val failure = try {
-                var watchSent = false
-                if (checked.watchUpdate) {
-                    val asset = checked.release.watchApk!!
-                    val apk = download(asset, "BookSound-Watch-${checked.release.version}.apk", UpdateState.Step.DOWNLOADING_WATCH)
-                    sendToWatch(apk, checked.release.version.toString())?.let { return@launch run { _state.value = UpdateState.Failed(it) } }
-                    watchSent = true
-                }
+                val watchApk = if (checked.watchUpdate) {
+                    download(checked.release.watchApk!!, watchApkName(version), UpdateState.Step.DOWNLOADING_WATCH)
+                } else null
                 if (checked.phoneUpdate) {
-                    val apk = download(checked.release.phoneApk!!, "BookSound-${checked.release.version}.apk", UpdateState.Step.DOWNLOADING_PHONE)
+                    val apk = download(checked.release.phoneApk!!, "BookSound-$version.apk", UpdateState.Step.DOWNLOADING_PHONE)
                     if (ApkInstaller.versionOf(context, apk) == null) throw IOException("Not a BookSound APK")
-                    _state.value = UpdateState.Done(watchSent, phoneInstalling = true)
+                    if (watchApk != null) prefs.edit().putString(KEY_PENDING_WATCH, version).apply()
+                    _state.value = UpdateState.Done(watchSent = false, phoneInstalling = true, watchNext = watchApk != null)
                     withContext(Dispatchers.Main) { ApkInstaller.install(context, apk) }
+                    null
+                } else if (watchApk != null) {
+                    sendToWatch(watchApk, version) ?: run {
+                        _state.value = UpdateState.Done(watchSent = true, phoneInstalling = false)
+                        null
+                    }
                 } else {
-                    _state.value = UpdateState.Done(watchSent, phoneInstalling = false)
+                    _state.value = UpdateState.Done(watchSent = false, phoneInstalling = false)
+                    null
                 }
-                null
             } catch (e: IOException) {
                 Log.w(TAG, "Update failed", e)
                 UpdateState.Reason.NETWORK
@@ -138,6 +148,46 @@ class UpdateManager(
             failure?.let { _state.value = UpdateState.Failed(it) }
         }
     }
+
+    /**
+     * After the phone app was updated: sends the watch app downloaded alongside it. Does nothing
+     * until the phone runs that version (the user may not have confirmed the installation yet).
+     * A watch that isn't connected now gets it on a later start; meanwhile Settings offers it too.
+     */
+    fun resumeWatchUpdate() {
+        val pending = prefs.getString(KEY_PENDING_WATCH, null) ?: return
+        val pendingVersion = AppVersion.parse(pending)
+        val phone = AppVersion.parse(BuildConfigInfo.versionName(context))
+        if (pendingVersion == null || phone == null || phone > pendingVersion) return clearPendingWatch()
+        if (phone < pendingVersion || job?.isActive == true) return
+        job = scope.launch(Dispatchers.IO) {
+            val watch = watchVersion()
+            if (watch == null || !isOlder(watch, pendingVersion)) return@launch clearPendingWatch()
+            if (reachableWatch() == null) return@launch
+            clearPendingWatch()
+            val failure = try {
+                val apk = File(dir, watchApkName(pending)).takeIf { it.isFile }
+                    ?: latestRelease()?.takeIf { it.version == pendingVersion }?.watchApk
+                        ?.let { download(it, watchApkName(pending), UpdateState.Step.DOWNLOADING_WATCH) }
+                    ?: return@launch
+                sendToWatch(apk, pending) ?: run {
+                    _state.value = UpdateState.Done(watchSent = true, phoneInstalling = false)
+                    null
+                }
+            } catch (e: IOException) {
+                Log.w(TAG, "Watch update failed", e)
+                UpdateState.Reason.NETWORK
+            } catch (e: Exception) {
+                Log.w(TAG, "Watch update failed", e)
+                UpdateState.Reason.WATCH_FAILED
+            }
+            failure?.let { _state.value = UpdateState.Failed(it) }
+        }
+    }
+
+    private fun clearPendingWatch() = prefs.edit().remove(KEY_PENDING_WATCH).apply()
+
+    private fun watchApkName(version: String) = "BookSound-Watch-$version.apk"
 
     fun dismiss() {
         if (job?.isActive != true) _state.value = UpdateState.Idle
@@ -172,7 +222,9 @@ class UpdateManager(
 
     private fun download(asset: Release.Asset, name: String, step: UpdateState.Step): File {
         dir.mkdirs()
-        dir.listFiles()?.filter { it.name != name }?.forEach { it.delete() }
+        // Earlier releases' APKs; both of this one stay (see the class comment).
+        val release = name.substringAfterLast('-')
+        dir.listFiles()?.filter { !it.name.endsWith("-$release") && !it.name.endsWith("-$release.part") }?.forEach { it.delete() }
         val target = File(dir, name)
         if (target.length() == asset.size) return target
         _state.value = UpdateState.Working(step, 0f)
@@ -214,13 +266,16 @@ class UpdateManager(
         null
     }
 
+    /** A connected watch with BookSound; null when there is none (or no Wear OS on this phone). */
+    private suspend fun reachableWatch(): Node? = try {
+        capabilities.getCapability(WatchPaths.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await().nodes.firstOrNull()
+    } catch (e: Exception) {
+        null
+    }
+
     /** Streams the watch APK to the watch; returns null once the watch has it, else why not. */
     private suspend fun sendToWatch(apk: File, version: String): UpdateState.Reason? {
-        val node = try {
-            capabilities.getCapability(WatchPaths.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await().nodes.firstOrNull()
-        } catch (e: Exception) {
-            null
-        } ?: return UpdateState.Reason.WATCH_UNREACHABLE
+        val node = reachableWatch() ?: return UpdateState.Reason.WATCH_UNREACHABLE
         val result = CompletableDeferred<WatchResult>()
         val listener = MessageClient.OnMessageReceivedListener { event ->
             if (event.path == WatchPaths.APK_RESULT_PREFIX + version) result.complete(WatchResult.decode(event.data))
@@ -260,5 +315,6 @@ class UpdateManager(
         private const val TAG = "UpdateManager"
         const val REPOSITORY = "HuTao1Love/BookSound"
         private const val RESULT_TIMEOUT_MS = 60_000L
+        private const val KEY_PENDING_WATCH = "pending_watch"
     }
 }

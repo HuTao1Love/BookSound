@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -87,15 +86,12 @@ import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
-import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
-import com.zyagodin.booksound.importer.ImportService
 import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.AppBottomSheet
 import com.zyagodin.booksound.ui.components.BookCover
-import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
@@ -107,7 +103,6 @@ import com.zyagodin.booksound.ui.components.rememberWindowLayout
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,11 +182,6 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onSettings = navigator::openSettings,
                         onDownloads = { navigator.openImports() },
                     )
-                }
-                if (state.activeImports.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "imports") {
-                        ImportBanner(state.activeImports, onClick = { navigator.openImports() })
-                    }
                 }
                 when {
                     state.loading -> item(span = { GridItemSpan(maxLineSpan) }, key = "loading") {
@@ -369,13 +359,14 @@ private fun LibraryHeader(
 }
 
 /**
- * Opens the downloads. The badge counts torrents in progress (the books of one torrent count once)
- * and turns to the accent colour when one waits for its details to be reviewed.
+ * Opens the downloads. Like an app icon's notification count, the badge counts what is in progress:
+ * torrents (the books of one torrent count once) and imports. It turns to the accent colour when a
+ * torrent waits for its details to be reviewed.
  */
 @Composable
 private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
     val torrents = state.activeTorrents
-    val downloads = torrents.distinctBy { it.record.downloadKey }.size
+    val downloads = torrents.distinctBy { it.record.downloadKey }.size + state.activeImports.size
     val needsReview = torrents.any {
         !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED)
     }
@@ -475,39 +466,6 @@ private fun SortField.label(): Int = when (this) {
     SortField.SERIES -> R.string.sort_series
     SortField.DURATION -> R.string.sort_duration
     SortField.PROGRESS -> R.string.sort_progress
-}
-
-@Composable
-private fun ImportBanner(jobs: List<ImportJob>, onClick: () -> Unit) {
-    val job = jobs.first()
-    Surface(
-        onClick = onClick,
-        shape = Radii.card,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-    ) {
-        Column(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (jobs.size > 1) pluralStringResource(R.plurals.importing_books, jobs.size, jobs.size)
-                        else stringResource(R.string.importing_book, job.title),
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        stringResource(ImportService.stageLabel(job.stage)) + (job.progress?.let { " · ${(it * 100).roundToInt()}%" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            BookProgressBar(job.progress ?: 0f, height = 4.dp)
-        }
-    }
 }
 
 /** Long-press menu of a book in the library and in a series. */
