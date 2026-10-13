@@ -107,11 +107,6 @@
     <string name="sort_descending">Descending</string>
     <string name="scan_result">Library updated: %1$d added, %2$d missing</string>
     <string name="scan_permission_lost">BookSound can\'t access the library folder. Choose it again in Settings.</string>
-    <string name="importing_book">Importing “%1$s”</string>
-    <plurals name="importing_books">
-        <item quantity="one">Importing %1$d book</item>
-        <item quantity="other">Importing %1$d books</item>
-    </plurals>
 
     <!-- Remove -->
     <string name="remove_title">Remove from library?</string>
@@ -552,6 +547,7 @@
     <string name="update_step_downloading_phone">Downloading the update…</string>
     <string name="update_done_watch">On the watch, open BookSound and tap Install update.</string>
     <string name="update_done_phone">Confirm the installation on the phone.</string>
+    <string name="update_done_watch_next">Then open BookSound: it sends the update to the watch.</string>
     <string name="update_failed_network">Couldn\'t reach GitHub. Check the connection.</string>
     <string name="update_failed_no_release">There are no releases on GitHub yet.</string>
     <string name="update_failed_watch_unreachable">The watch isn\'t connected. Keep it nearby and try again.</string>

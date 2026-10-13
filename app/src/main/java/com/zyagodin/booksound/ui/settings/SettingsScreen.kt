@@ -167,8 +167,6 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     val update: StateFlow<UpdateState> = container.updates.state
     fun checkUpdates() = container.updates.check()
-    fun installUpdate(checked: UpdateState.Checked) = container.updates.update(checked)
-    fun dismissUpdate() = container.updates.dismiss()
 }
 
 private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS, NIGHT_START, NIGHT_END }
@@ -319,10 +317,6 @@ fun SettingsScreen(navigator: AppNavigator) {
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = bottom))
     }
 
-    if (update != UpdateState.Idle && update != UpdateState.Checking) {
-        UpdateDialog(update, onUpdate = vm::installUpdate, onDismiss = vm::dismissUpdate)
-    }
-
     when (choice) {
         ChoiceKind.SKIP_BACK -> OptionsSheet(stringResource(R.string.settings_skip_back), listOf(5, 10, 15, 30, 60), settings.skipBackSeconds, { stringResource(R.string.seconds_value, it) }, { vm.setSkipBack(it); choice = null }) { choice = null }
         ChoiceKind.SKIP_FORWARD -> OptionsSheet(stringResource(R.string.settings_skip_forward), listOf(10, 15, 30, 45, 60), settings.skipForwardSeconds, { stringResource(R.string.seconds_value, it) }, { vm.setSkipForward(it); choice = null }) { choice = null }
@@ -370,8 +364,9 @@ private fun bitrateLabel(kbps: Int): String = stringResource(
     },
 )
 
+/** Shown over any screen: the watch part of an update runs after the updated app starts. */
 @Composable
-private fun UpdateDialog(state: UpdateState, onUpdate: (UpdateState.Checked) -> Unit, onDismiss: () -> Unit) {
+internal fun UpdateDialog(state: UpdateState, onUpdate: (UpdateState.Checked) -> Unit, onDismiss: () -> Unit) {
     val offersUpdate = state is UpdateState.Checked && !state.upToDate
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -412,6 +407,7 @@ private fun UpdateDialog(state: UpdateState, onUpdate: (UpdateState.Checked) -> 
                     is UpdateState.Done -> {
                         if (state.watchSent) Text(stringResource(R.string.update_done_watch))
                         if (state.phoneInstalling) Text(stringResource(R.string.update_done_phone))
+                        if (state.watchNext) Text(stringResource(R.string.update_done_watch_next))
                     }
                     is UpdateState.Failed -> Text(
                         stringResource(
