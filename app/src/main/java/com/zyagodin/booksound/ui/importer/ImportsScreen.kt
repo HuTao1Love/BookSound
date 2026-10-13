@@ -2,6 +2,8 @@ package com.zyagodin.booksound.ui.importer
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,9 +22,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDone
@@ -37,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +62,9 @@ import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.ConfirmDialog
+import com.zyagodin.booksound.ui.components.GradientCircleButton
 import com.zyagodin.booksound.ui.components.MessageState
+import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.QuietButton
 import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.torrent.TorrentItem
@@ -78,6 +87,7 @@ fun ImportsScreen(navigator: AppNavigator) {
     val torrents by container.torrents.items.collectAsStateWithLifecycle()
     var cancelJob by remember { mutableStateOf<String?>(null) }
     var removeTorrent by remember { mutableStateOf<TorrentItem?>(null) }
+    var showImportSheet by rememberSaveable { mutableStateOf(false) }
     val torrentActions = remember(navigator) {
         TorrentActions(
             review = { navigator.openImportEditor(container.importSessions.torrent(it.id).id) },
@@ -94,65 +104,85 @@ fun ImportsScreen(navigator: AppNavigator) {
     }
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = Spacing.sm, vertical = Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = navigator::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back)) }
-            Text(stringResource(R.string.imports_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = Spacing.sm))
-            if (jobs.any { !it.isActive } || torrents.any { it.record.phase == TorrentPhase.COMPLETED }) {
-                QuietButton(stringResource(R.string.action_clear_finished), {
-                    manager.dismissFinished()
-                    container.torrents.dismissFinished()
-                })
-            }
-        }
-        if (jobs.isEmpty() && torrents.isEmpty()) {
-            MessageState(
-                icon = Icons.Rounded.CloudDone,
-                title = stringResource(R.string.imports_empty_title),
-                message = stringResource(R.string.imports_empty_message),
-            )
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = bottom + Spacing.xl),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxSize(),
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (torrents.isNotEmpty()) {
-                    item(key = "torrents-header") {
-                        SectionHeader(stringResource(R.string.torrents_section), Modifier.widthIn(max = 720.dp).fillMaxWidth())
-                    }
-                    items(torrents, key = { "torrent:" + it.id }) { item ->
-                        TorrentCard(item, torrentActions, Modifier.widthIn(max = 720.dp).animateItem())
-                    }
-                    if (jobs.isNotEmpty()) {
-                        item(key = "imports-header") {
-                            SectionHeader(stringResource(R.string.imports_title), Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = Spacing.md))
-                        }
-                    }
+                IconButton(onClick = navigator::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back)) }
+                Text(stringResource(R.string.imports_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = Spacing.sm))
+                if (jobs.any { !it.isActive } || torrents.any { it.record.phase == TorrentPhase.COMPLETED }) {
+                    QuietButton(stringResource(R.string.action_clear_finished), {
+                        manager.dismissFinished()
+                        container.torrents.dismissFinished()
+                    })
                 }
-                items(jobs.reversed(), key = { it.id }) { job ->
-                    JobCard(
-                        job = job,
-                        onCancel = { cancelJob = job.id },
-                        onRetry = { manager.retry(job.id) },
-                        onDismiss = { manager.dismiss(job.id) },
-                        onOpen = { job.resultBookId?.let { navigator.backToLibrary(); navigator.openBook(it) } },
-                        onPlay = {
-                            job.resultBookId?.let {
-                                container.player.play(it)
-                                navigator.openPlayer()
-                            }
+            }
+            if (jobs.isEmpty() && torrents.isEmpty()) {
+                // Scrolls so that the button stays reachable above the mini player in landscape.
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    MessageState(
+                        icon = Icons.Rounded.CloudDone,
+                        title = stringResource(R.string.imports_empty_title),
+                        message = stringResource(R.string.imports_empty_message),
+                        modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight).padding(bottom = bottom),
+                        action = {
+                            PrimaryButton(stringResource(R.string.action_import_audiobook), onClick = { showImportSheet = true }, icon = Icons.Rounded.Add)
                         },
-                        modifier = Modifier.widthIn(max = 720.dp).animateItem(),
                     )
                 }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = bottom + Spacing.xl + 56.dp + Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (torrents.isNotEmpty()) {
+                        item(key = "torrents-header") {
+                            SectionHeader(stringResource(R.string.torrents_section), Modifier.widthIn(max = 720.dp).fillMaxWidth())
+                        }
+                        items(torrents, key = { "torrent:" + it.id }) { item ->
+                            TorrentCard(item, torrentActions, Modifier.widthIn(max = 720.dp).animateItem())
+                        }
+                        if (jobs.isNotEmpty()) {
+                            item(key = "imports-header") {
+                                SectionHeader(stringResource(R.string.imports_title), Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = Spacing.md))
+                            }
+                        }
+                    }
+                    items(jobs.reversed(), key = { it.id }) { job ->
+                        JobCard(
+                            job = job,
+                            onCancel = { cancelJob = job.id },
+                            onRetry = { manager.retry(job.id) },
+                            onDismiss = { manager.dismiss(job.id) },
+                            onOpen = { job.resultBookId?.let { navigator.backToLibrary(); navigator.openBook(it) } },
+                            onPlay = {
+                                job.resultBookId?.let {
+                                    container.player.play(it)
+                                    navigator.openPlayer()
+                                }
+                            },
+                            modifier = Modifier.widthIn(max = 720.dp).animateItem(),
+                        )
+                    }
+                }
+            }
+        }
+        if (jobs.isNotEmpty() || torrents.isNotEmpty()) {
+            GradientCircleButton(
+                onClick = { showImportSheet = true },
+                size = 56.dp,
+                glow = true,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = Spacing.lg, bottom = bottom + Spacing.lg),
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.action_import), modifier = Modifier.size(28.dp))
             }
         }
     }
+    ImportSourcePicker(navigator, visible = showImportSheet, onDismiss = { showImportSheet = false })
     removeTorrent?.let { item ->
         ConfirmDialog(
             // A book of a torrent with several books goes alone; the others keep downloading.
