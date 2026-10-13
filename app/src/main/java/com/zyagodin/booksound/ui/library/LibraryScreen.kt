@@ -1,10 +1,5 @@
 package com.zyagodin.booksound.ui.library
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +11,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -39,7 +34,6 @@ import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -47,7 +41,6 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
@@ -56,7 +49,6 @@ import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,7 +81,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.ProgressFilter
@@ -105,13 +96,13 @@ import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.AppBottomSheet
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.BookProgressBar
-import com.zyagodin.booksound.ui.components.GradientCircleButton
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SheetAction
 import com.zyagodin.booksound.ui.components.titleWithSeries
+import com.zyagodin.booksound.ui.importer.ImportSourcePicker
 import com.zyagodin.booksound.ui.components.rememberWindowLayout
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
@@ -146,19 +137,6 @@ fun LibraryScreen(navigator: AppNavigator) {
         navigator.pendingSearch = null
     }
 
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    fun ensureNotificationPermission() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) navigator.openImportEditor(vm.startImport(ImportSelection.Documents(uris)))
-    }
-    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
-        if (uri != null) navigator.openImportEditor(vm.startImport(ImportSelection.Folder(uri)))
-    }
-
     LaunchedEffect(vm) {
         vm.events.collect { event ->
             val message = when (event) {
@@ -178,18 +156,6 @@ fun LibraryScreen(navigator: AppNavigator) {
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = bottomOverlay)) },
-        floatingActionButton = {
-            if (state.totalCount > 0) {
-                GradientCircleButton(
-                    onClick = { showImportSheet = true },
-                    size = 56.dp,
-                    glow = true,
-                    modifier = Modifier.padding(bottom = bottomOverlay).navigationBarsPadding(),
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.action_import), modifier = Modifier.size(28.dp))
-                }
-            }
-        },
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = state.scanning,
@@ -202,7 +168,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                 state = gridState,
                 contentPadding = PaddingValues(
                     start = Spacing.lg, end = Spacing.lg,
-                    bottom = Spacing.xxxl + 56.dp + bottomOverlay + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                    bottom = Spacing.xxxl + bottomOverlay + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
                 ),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs),
@@ -274,26 +240,7 @@ fun LibraryScreen(navigator: AppNavigator) {
             .background(Brush.verticalGradient(listOf(bg, bg.copy(alpha = 0.85f)))),
     )
 
-    if (showImportSheet) {
-        ImportSourceSheet(
-            onDismiss = { showImportSheet = false },
-            onPickFiles = {
-                showImportSheet = false
-                ensureNotificationPermission()
-                pickFiles.launch(arrayOf("audio/*", "video/mp4", "application/octet-stream", "image/*"))
-            },
-            onPickFolder = {
-                showImportSheet = false
-                ensureNotificationPermission()
-                pickFolder.launch(null)
-            },
-            onAddTorrent = {
-                showImportSheet = false
-                ensureNotificationPermission()
-                navigator.addTorrent()
-            },
-        )
-    }
+    ImportSourcePicker(navigator, visible = showImportSheet, onDismiss = { showImportSheet = false })
 
     val actionItem = actionsFor?.let { id -> state.items.firstOrNull { it.id == id } }
     if (actionItem != null) {
@@ -433,17 +380,17 @@ private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
         !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED)
     }
     IconButton(onClick = onClick) {
-        BadgedBox(
-            badge = {
-                if (downloads > 0) {
-                    Badge(
-                        containerColor = if (needsReview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = if (needsReview) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                    ) { Text("$downloads") }
-                }
-            },
-        ) {
+        // Not BadgedBox: it reads the badge's baseline, which crashes the lookahead pass
+        // that follows a rotation.
+        Box {
             Icon(Icons.Rounded.Download, contentDescription = stringResource(R.string.torrents_section))
+            if (downloads > 0) {
+                Badge(
+                    containerColor = if (needsReview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (needsReview) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-6).dp),
+                ) { Text("$downloads") }
+            }
         }
     }
 }
@@ -559,46 +506,6 @@ private fun ImportBanner(jobs: List<ImportJob>, onClick: () -> Unit) {
             }
             Spacer(Modifier.height(Spacing.sm))
             BookProgressBar(job.progress ?: 0f, height = 4.dp)
-        }
-    }
-}
-
-@Composable
-private fun ImportSourceSheet(onDismiss: () -> Unit, onPickFiles: () -> Unit, onPickFolder: () -> Unit, onAddTorrent: () -> Unit) {
-    AppBottomSheet(onDismiss = onDismiss) {
-        Column(Modifier.padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl)) {
-            Text(stringResource(R.string.import_sheet_title), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(Spacing.sm))
-            Text(
-                stringResource(R.string.import_sheet_message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(Spacing.xl))
-            ImportOption(Icons.Rounded.AudioFile, stringResource(R.string.import_option_files), stringResource(R.string.import_option_files_hint), onPickFiles)
-            Spacer(Modifier.height(Spacing.md))
-            ImportOption(Icons.Rounded.FolderOpen, stringResource(R.string.import_option_folder), stringResource(R.string.import_option_folder_hint), onPickFolder)
-            Spacer(Modifier.height(Spacing.md))
-            ImportOption(Icons.Rounded.Download, stringResource(R.string.import_option_torrent), stringResource(R.string.import_option_torrent_hint), onAddTorrent)
-        }
-    }
-}
-
-@Composable
-private fun ImportOption(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, hint: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = Radii.card, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(52.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-            Spacer(Modifier.width(Spacing.lg))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
