@@ -72,6 +72,8 @@ class BookSoundApp : Application(), ImageLoaderFactory {
         container.sync.requestSync()
         // So the watch can resume the last book even before the player ran.
         container.watchRemote.restore()
+        // Just updated: the watch app goes next.
+        container.updates.resumeWatchUpdate()
         container.appScope.launch {
             container.torrents.needsForeground.collect { needed -> if (needed) TorrentKeepAlive.start(this@BookSoundApp) }
         }

@@ -84,6 +84,8 @@ import com.zyagodin.booksound.ui.player.PlayerSheetState
 import com.zyagodin.booksound.ui.player.rememberPlayerSheetState
 import com.zyagodin.booksound.ui.settings.RemovedBooksScreen
 import com.zyagodin.booksound.ui.settings.SettingsScreen
+import com.zyagodin.booksound.ui.settings.UpdateDialog
+import com.zyagodin.booksound.update.UpdateState
 import com.zyagodin.booksound.ui.theme.BookSoundTheme
 import com.zyagodin.booksound.ui.torrent.AddTorrentDialog
 import com.zyagodin.booksound.torrent.TorrentSource
@@ -293,6 +295,12 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     maybeAskBackgroundWork()
                 },
             )
+        }
+        val update by container.updates.state.collectAsStateWithLifecycle()
+        update.let { state ->
+            if (state != UpdateState.Idle && state != UpdateState.Checking) {
+                UpdateDialog(state, onUpdate = container.updates::update, onDismiss = container.updates::dismiss)
+            }
         }
         if (askBackgroundWork) {
             fun answered() {

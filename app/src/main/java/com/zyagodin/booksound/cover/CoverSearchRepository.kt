@@ -8,6 +8,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -143,22 +144,40 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
      * often point to sites that refuse direct downloads or use plain http; the search engine's
      * own thumbnail is used then.
      */
+    /**
+     * The full-size picture of [cover]. Web results link to the image on its own site, which can
+     * be slow or hang; the thumbnail (on the search engine's fast CDN) is fetched alongside and
+     * used when the full picture doesn't arrive within [FULL_IMAGE_WAIT_MS].
+     */
     suspend fun download(cover: OnlineCover): EmbeddedPicture? = withContext(Dispatchers.IO) {
-        val candidates = listOfNotNull(
+        val fullUrls = listOfNotNull(
             cover.fullUrl,
             cover.fullUrl.takeIf { it.startsWith("http://") }?.replaceFirst("http://", "https://"),
-            cover.thumbnailUrl,
         ).distinct()
-        for (url in candidates) {
-            val bytes = try {
-                get(url, browser = cover.fromWeb)
-            } catch (e: IOException) {
-                Log.i(TAG, "Image download failed: ${e.message}")
-                null
-            } ?: continue
-            CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }?.let { return@withContext it }
+        val thumbnailUrl = cover.thumbnailUrl.takeIf { it !in fullUrls }
+            ?: return@withContext fullUrls.firstNotNullOfOrNull { downloadPicture(it, cover.fromWeb) }
+        coroutineScope {
+            val thumbnail = async { downloadPicture(thumbnailUrl, cover.fromWeb) }
+            val full = withTimeoutOrNull(FULL_IMAGE_WAIT_MS) {
+                fullUrls.firstNotNullOfOrNull { downloadPicture(it, cover.fromWeb) }
+            }
+            if (full != null) {
+                thumbnail.cancel()
+                full
+            } else {
+                thumbnail.await()
+            }
         }
-        null
+    }
+
+    private suspend fun downloadPicture(url: String, browser: Boolean): EmbeddedPicture? {
+        val bytes = try {
+            get(url, browser)
+        } catch (e: IOException) {
+            Log.i(TAG, "Image download failed: ${e.message}")
+            null
+        } ?: return null
+        return CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }
     }
 
     private suspend fun bingImages(query: String): List<OnlineCover> {
@@ -293,6 +312,9 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
     }
 
     companion object {
+        /** How long a full-size picture may take before its thumbnail is used instead. */
+        private const val FULL_IMAGE_WAIT_MS = 6_000L
+
         /**
          * "Series Title" for a volume of a series, so that "Childhood — Home Tutor" is searched
          * as "Mushoku Tensei Childhood — Home Tutor"; the title alone when it already names the
