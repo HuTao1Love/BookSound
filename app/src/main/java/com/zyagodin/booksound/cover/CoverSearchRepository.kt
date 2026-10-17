@@ -176,6 +176,10 @@ class CoverSearchRepository(private val http: OkHttpClient, private val googleBo
         } catch (e: IOException) {
             Log.i(TAG, "Image download failed: ${e.message}")
             null
+        } catch (e: IllegalArgumentException) {
+            // Web search results carry links scraped from other pages; some are not valid URLs.
+            Log.i(TAG, "Unusable image link $url: ${e.message}")
+            null
         } ?: return null
         return CoverImages.normalize(bytes)?.takeIf { looksLikeRealCover(it) }
     }
