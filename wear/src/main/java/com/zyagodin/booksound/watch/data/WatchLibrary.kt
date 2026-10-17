@@ -2,11 +2,18 @@ package com.zyagodin.booksound.watch.data
 
 import android.content.Context
 import android.util.Log
+import com.zyagodin.booksound.core.io.FileChannelSource
+import com.zyagodin.booksound.core.metadata.AudioProbe
+import com.zyagodin.booksound.core.metadata.CorruptedFileException
+import com.zyagodin.booksound.core.metadata.UnsupportedFormatException
 import com.zyagodin.booksound.core.model.BookId
 import com.zyagodin.booksound.core.model.BookMetadata
 import com.zyagodin.booksound.core.model.Chapter
+import com.zyagodin.booksound.core.model.ChapterMark
 import com.zyagodin.booksound.core.model.DeviceId
 import com.zyagodin.booksound.core.model.SyncStamp
+import com.zyagodin.booksound.core.organize.ChapterPlanner
+import com.zyagodin.booksound.core.organize.DraftPart
 import com.zyagodin.booksound.core.sync.PlaybackConflictResolver
 import com.zyagodin.booksound.core.sync.PlaybackRecord
 import com.zyagodin.booksound.core.wear.WatchBookHeader
@@ -19,6 +26,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 
 /** A book stored on the watch. */
@@ -85,10 +93,79 @@ class WatchLibrary(context: Context, private val device: () -> DeviceId) {
         books.filterNot { it.id == id } + book
     }
 
-    suspend fun remove(id: String) = edit { books ->
-        audioFile(id).delete()
-        coverFile(id).delete()
-        books.filterNot { it.id == id }
+    /** Deletes a book and its files; false, with the book still listed, when its audio can't be deleted. */
+    suspend fun remove(id: String): Boolean {
+        var removed = false
+        edit { books ->
+            val audio = audioFile(id)
+            if (audio.exists() && !audio.delete()) {
+                Log.w(TAG, "Can't delete $audio")
+                return@edit books
+            }
+            // A cover left behind is swept by recoverOrphans().
+            coverFile(id).delete()
+            removed = true
+            books.filterNot { it.id == id }
+        }
+        return removed
+    }
+
+    /**
+     * Brings back books whose audio is here but missing from the list (an unreadable list, or the
+     * app killed between moving a file in and saving the list) from the tags in the file, so they
+     * can be listened to or deleted again. Files that can't be read and covers without a book are
+     * deleted. Positions come back from the phone (PositionSync.pullAll).
+     */
+    suspend fun recoverOrphans() = edit { books ->
+        val known = books.mapTo(HashSet()) { it.id }
+        coversDir.listFiles().orEmpty()
+            .filter { it.nameWithoutExtension !in known && !audioFile(it.nameWithoutExtension).exists() }
+            .forEach { it.delete() }
+        val found = booksDir.listFiles { f -> f.extension == "m4b" }.orEmpty()
+            .filter { it.nameWithoutExtension !in known }
+            .mapNotNull { file ->
+                try {
+                    recover(file)
+                } catch (e: Exception) {
+                    if (e is CorruptedFileException || e is UnsupportedFormatException) {
+                        Log.w(TAG, "Unreadable ${file.name}, deleting it", e)
+                        file.delete()
+                        coverFile(file.nameWithoutExtension).delete()
+                    } else {
+                        // Perhaps only for now: tried again at the next start.
+                        Log.w(TAG, "Can't recover ${file.name}", e)
+                    }
+                    null
+                }
+            }
+        if (found.isNotEmpty()) Log.i(TAG, "Recovered ${found.size} books")
+        books + found
+    }
+
+    private fun recover(file: File): WatchBook {
+        val parsed = FileInputStream(file).use { AudioProbe.probe(FileChannelSource(it.channel), file.name) }
+        val tags = parsed.tags
+        val metadata = BookMetadata(
+            title = tags.title ?: tags.album ?: file.nameWithoutExtension,
+            author = tags.artist ?: tags.albumArtist,
+            narrator = tags.narrator ?: tags.composer,
+            series = tags.series,
+            seriesIndex = tags.seriesPart,
+        ).normalized()
+        val duration = parsed.durationMs ?: 0L
+        val chapters = ChapterPlanner.plan(
+            listOf(DraftPart(file.path, file.name, metadata.title, duration, parsed.chapters.ifEmpty { listOf(ChapterMark(0, metadata.title)) })),
+        )
+        return WatchBook(
+            id = file.nameWithoutExtension,
+            metadata = metadata,
+            durationMs = duration,
+            chapters = chapters,
+            fileSize = file.length(),
+            fileRevision = 0,
+            addedAt = file.lastModified(),
+            playback = null,
+        )
     }
 
     /** Saves the position listened to here; returns the new record to publish. */
@@ -149,6 +226,8 @@ class WatchLibrary(context: Context, private val device: () -> DeviceId) {
         }
     } catch (e: Exception) {
         Log.e(TAG, "Library index unreadable", e)
+        // Kept aside for a look; the books are found again from their files by recoverOrphans().
+        indexFile.renameTo(File(root, "library.json.bad"))
         emptyList()
     }
 
