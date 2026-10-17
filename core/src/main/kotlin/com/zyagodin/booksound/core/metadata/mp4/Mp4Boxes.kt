@@ -221,14 +221,19 @@ class SampleTable private constructor(
 
         fun readChunkOffsets(stbl: Mp4Node): LongArray {
             stbl.child("stco")?.payload?.let { p ->
-                val n = p.u32(4).toInt()
-                return LongArray(n) { p.u32(8 + it * 4) }
+                return LongArray(entryCount(p, 4)) { p.u32(8 + it * 4) }
             }
             stbl.child("co64")?.payload?.let { p ->
-                val n = p.u32(4).toInt()
-                return LongArray(n) { p.u64(8 + it * 8) }
+                return LongArray(entryCount(p, 8)) { p.u64(8 + it * 8) }
             }
             throw CorruptedFileException("Missing chunk offsets")
+        }
+
+        /** A table's entry count, checked against its size: a damaged count must not allocate gigabytes. */
+        private fun entryCount(p: ByteArray, entrySize: Int): Int {
+            val n = p.u32(4)
+            if (n > (p.size - 8) / entrySize) throw CorruptedFileException("Chunk offset table is truncated")
+            return n.toInt()
         }
     }
 }

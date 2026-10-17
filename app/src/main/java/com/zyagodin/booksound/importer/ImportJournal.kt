@@ -13,6 +13,10 @@ import java.io.File
  * If the process dies mid-import, [recover] (run at startup) deletes the partial file, puts back
  * a book that was being replaced, and removes the job's temporary directory — so an interrupted
  * import never leaves a damaged book or garbage behind.
+ *
+ * Each step is recorded before (or, for a URI only known afterwards, right after) it happens:
+ * the book being replaced is recorded by its folder and temporary name before it is moved, so it
+ * is found again even if the app dies during the move.
  */
 class ImportJournal(context: Context, private val documents: DocumentStore) {
 
@@ -20,8 +24,17 @@ class ImportJournal(context: Context, private val documents: DocumentStore) {
     private data class Entry(
         val jobId: String,
         val partialUri: String? = null,
+        /** The replaced book after the move, as journals written before [asideName] recorded it. */
         val asideUri: String? = null,
         val asideOriginalName: String? = null,
+        /** Folder of the replaced book, and the temporary name it is moved aside to. */
+        val treeUri: String? = null,
+        val directoryId: String? = null,
+        val asideName: String? = null,
+        /** The new book under its final name, before the database knows it. */
+        val committedUri: String? = null,
+        /** The database has the new book: only the replaced one is left to delete. */
+        val saved: Boolean = false,
     )
 
     private val file = File(context.noBackupFilesDir, "import-journal.json")
@@ -33,10 +46,16 @@ class ImportJournal(context: Context, private val documents: DocumentStore) {
 
     fun recordPartial(jobId: String, uri: Uri) = update(jobId) { it.copy(partialUri = uri.toString()) }
 
-    fun recordAside(jobId: String, uri: Uri, originalName: String) =
-        update(jobId) { it.copy(asideUri = uri.toString(), asideOriginalName = originalName) }
+    /** Before the book at [originalName] in [directoryId] is renamed to [asideName]. */
+    fun recordAside(jobId: String, treeUri: Uri, directoryId: String, asideName: String, originalName: String) = update(jobId) {
+        it.copy(treeUri = treeUri.toString(), directoryId = directoryId, asideName = asideName, asideOriginalName = originalName)
+    }
 
-    fun clearPartial(jobId: String) = update(jobId) { it.copy(partialUri = null) }
+    /** The partial file now has its final name, [uri]. */
+    fun recordCommitted(jobId: String, uri: Uri) = update(jobId) { it.copy(partialUri = null, committedUri = uri.toString()) }
+
+    /** The new book is in the database. */
+    fun recordSaved(jobId: String) = update(jobId) { it.copy(saved = true) }
 
     fun remove(jobId: String) = synchronized(lock) { write(read().filterNot { it.jobId == jobId }) }
 
@@ -45,9 +64,17 @@ class ImportJournal(context: Context, private val documents: DocumentStore) {
         val entries = synchronized(lock) { read() }
         for (e in entries) {
             try {
-                e.partialUri?.let { documents.delete(Uri.parse(it)) }
-                if (e.asideUri != null && e.asideOriginalName != null) {
-                    runCatching { documents.rename(Uri.parse(e.asideUri), e.asideOriginalName) }
+                val aside = asideOf(e)
+                if (e.saved) {
+                    // The new book is in the library: the one it replaced is no longer needed.
+                    aside?.let { documents.delete(it) }
+                } else {
+                    e.partialUri?.let { documents.delete(Uri.parse(it)) }
+                    // Before the replaced book takes its name back.
+                    e.committedUri?.let { documents.delete(Uri.parse(it)) }
+                    if (aside != null && e.asideOriginalName != null) {
+                        runCatching { documents.rename(aside, e.asideOriginalName) }
+                    }
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "Recovery of ${e.jobId} failed", t)
@@ -55,6 +82,15 @@ class ImportJournal(context: Context, private val documents: DocumentStore) {
         }
         synchronized(lock) { write(emptyList()) }
         workRoot.listFiles()?.forEach { it.deleteRecursively() }
+    }
+
+    /** The replaced book under its temporary name, if it was moved aside. */
+    private fun asideOf(e: Entry): Uri? {
+        e.asideUri?.let { return Uri.parse(it) }
+        val tree = e.treeUri ?: return null
+        val directory = e.directoryId ?: return null
+        val name = e.asideName ?: return null
+        return documents.children(Uri.parse(tree), directory).firstOrNull { !it.isDirectory && it.name == name }?.uri
     }
 
     private fun update(jobId: String, change: (Entry) -> Entry) = synchronized(lock) {

@@ -107,6 +107,7 @@
     <string name="sort_descending">Descending</string>
     <string name="scan_result">Library updated: %1$d added, %2$d missing</string>
     <string name="scan_permission_lost">BookSound can\'t access the library folder. Choose it again in Settings.</string>
+    <string name="low_storage_warning">Only %1$s free on the phone. Imports, downloads and saving your place may stop working: free up some space.</string>
 
     <!-- Remove -->
     <string name="remove_title">Remove from library?</string>
