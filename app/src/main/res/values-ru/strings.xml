@@ -107,6 +107,7 @@
     <string name="sort_descending">По убыванию</string>
     <string name="scan_result">Библиотека обновлена: добавлено %1$d, не найдено %2$d</string>
     <string name="scan_permission_lost">Нет доступа к папке библиотеки. Выберите её снова в настройках.</string>
+    <string name="low_storage_warning">На телефоне свободно всего %1$s. Импорт, загрузки и сохранение позиции могут перестать работать: освободите место.</string>
 
     <string name="remove_title">Убрать из библиотеки?</string>
     <string name="remove_message">«%1$s» и прогресс прослушивания будут убраны из BookSound.</string>

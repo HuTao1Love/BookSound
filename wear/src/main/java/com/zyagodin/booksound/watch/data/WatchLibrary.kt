@@ -96,16 +96,22 @@ class WatchLibrary(context: Context, private val device: () -> DeviceId) {
     /** Deletes a book and its files; false, with the book still listed, when its audio can't be deleted. */
     suspend fun remove(id: String): Boolean {
         var removed = false
-        edit { books ->
-            val audio = audioFile(id)
-            if (audio.exists() && !audio.delete()) {
-                Log.w(TAG, "Can't delete $audio")
-                return@edit books
+        try {
+            edit { books ->
+                val audio = audioFile(id)
+                if (audio.exists() && !audio.delete()) {
+                    Log.w(TAG, "Can't delete $audio")
+                    return@edit books
+                }
+                // A cover left behind is swept by recoverOrphans().
+                coverFile(id).delete()
+                removed = true
+                books.filterNot { it.id == id }
             }
-            // A cover left behind is swept by recoverOrphans().
-            coverFile(id).delete()
-            removed = true
-            books.filterNot { it.id == id }
+        } catch (e: IOException) {
+            // The list can't be saved (a full disk): the book stays listed until the next start drops it.
+            Log.w(TAG, "Can't save the library after deleting $id", e)
+            return false
         }
         return removed
     }

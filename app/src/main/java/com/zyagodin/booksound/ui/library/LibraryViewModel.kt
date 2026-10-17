@@ -16,14 +16,18 @@ import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.torrent.TorrentItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class LibraryUiState(
     val loading: Boolean = true,
@@ -88,6 +92,17 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
+    /**
+     * Free bytes on the phone while they are below [LOW_STORAGE_BYTES], else null. Checked while the
+     * library is on screen: with the disk full, imports, downloads and saving the listening position fail.
+     */
+    val lowStorage: StateFlow<Long?> = flow {
+        while (true) {
+            emit(withContext(Dispatchers.IO) { container.dataDir.usableSpace }.takeIf { it < LOW_STORAGE_BYTES })
+            delay(LOW_STORAGE_CHECK_MS)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun setQuery(text: String) {
         query.value = text
     }
@@ -122,5 +137,10 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         val session = container.importSessions.create(selection)
         session.analysisJob = container.appScope.launch { container.importAnalyzer.analyze(session) }
         return session.id
+    }
+
+    private companion object {
+        const val LOW_STORAGE_BYTES = 500L * 1024 * 1024
+        const val LOW_STORAGE_CHECK_MS = 30_000L
     }
 }
