@@ -12,6 +12,7 @@ import com.zyagodin.booksound.watch.sync.WatchUpdates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class WatchApp : Application() {
     lateinit var container: WatchContainer
@@ -21,7 +22,11 @@ class WatchApp : Application() {
         super.onCreate()
         container = WatchContainer(this)
         container.receiver.cleanUp()
-        container.positions.pullAll()
+        container.scope.launch {
+            container.library.recoverOrphans()
+            // After the recovery, so recovered books get their positions too.
+            container.positions.pullAll()
+        }
         container.updates.publishVersion()
     }
 }
