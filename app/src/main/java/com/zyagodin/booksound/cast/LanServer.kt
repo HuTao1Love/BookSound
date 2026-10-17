@@ -44,6 +44,8 @@ class LanServer(private val context: Context) {
         val server = socket ?: start() ?: return null
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         val resolvedSize = size.takeIf { it > 0 } ?: sizeOf(uri)
+        // One link per name: the book or cover shared before this one is no longer needed.
+        shared.keys.removeIf { it.endsWith("/$name") }
         shared["/$token/$name"] = Shared(mimeType, resolvedSize) {
             context.contentResolver.openInputStream(uri) ?: throw IOException("Can't open $uri")
         }
