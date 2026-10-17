@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -103,12 +104,14 @@ import com.zyagodin.booksound.ui.components.rememberWindowLayout
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
+import com.zyagodin.booksound.util.formatSize
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(navigator: AppNavigator) {
     val vm = appViewModel { LibraryViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val lowStorage by vm.lowStorage.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -182,6 +185,9 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onSettings = navigator::openSettings,
                         onDownloads = { navigator.openImports() },
                     )
+                }
+                lowStorage?.let { free ->
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "low-storage") { LowStorageNotice(free) }
                 }
                 when {
                     state.loading -> item(span = { GridItemSpan(maxLineSpan) }, key = "loading") {
@@ -498,5 +504,23 @@ internal fun BookActionsSheet(
         )
         SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(Spacing.lg))
+    }
+}
+
+/** The phone is almost full: shown above the books until space is freed. */
+@Composable
+private fun LowStorageNotice(freeBytes: Long) {
+    val context = LocalContext.current
+    Surface(
+        shape = Radii.card,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.sm),
+    ) {
+        Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Warning, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(Spacing.md))
+            Text(stringResource(R.string.low_storage_warning, formatSize(context, freeBytes.coerceAtLeast(0))), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
