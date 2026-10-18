@@ -463,10 +463,10 @@
     <!-- Sleep timer -->
     <string name="sleep_end_of_book">End of book</string>
     <string name="sleep_end_of_book_short">Book end</string>
-    <string name="sleep_shake_hint">Shake the phone to start the timer over.</string>
-    <string name="sleep_shake_hint_chapter">Shake the phone to listen to one more chapter.</string>
+    <string name="sleep_shake_hint">When the sound starts fading, shake the phone to start the timer over.</string>
+    <string name="sleep_shake_hint_chapter">When the sound starts fading, shake the phone to listen to one more chapter.</string>
     <string name="settings_shake">Shake to reset</string>
-    <string name="settings_shake_hint">Shake the phone while the timer runs to start it over, or soon after it pauses the book to keep listening</string>
+    <string name="settings_shake_hint">Shake the phone while the sound fades before the timer pauses the book to start it over, or soon after the pause to keep listening</string>
     <string name="settings_sleep_repeat">Keep sleep timer</string>
     <string name="settings_sleep_repeat_hint">When the timer runs out, it starts again as soon as you resume the book</string>
     <string name="settings_sleep_auto_night">Sleep timer at night</string>

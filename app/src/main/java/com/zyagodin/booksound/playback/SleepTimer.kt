@@ -35,9 +35,10 @@ sealed interface SleepTimerState {
  * Sleep timer driven by the playback service. The UI talks to this object directly (same
  * process); the service attaches the player it controls.
  *
- * Shake to reset: while the timer runs and the book plays, shaking the phone starts the countdown
- * over (in "end of chapter" mode: plays one more chapter) and undoes the fade-out. For a little
- * while after the timer has paused the book, a shake plays it on with the same timer.
+ * Shake to reset: once the timer is about to pause the book (the sound fades out), shaking the
+ * phone starts the countdown over (in "end of chapter" mode: plays one more chapter) and undoes the
+ * fade-out. For a little while after the timer has paused the book, a shake plays it on with the
+ * same timer. Earlier shakes do nothing, so the timer isn't stretched by a phone moved in the hand.
  *
  * Repeat ([com.zyagodin.booksound.data.settings.AppSettings.sleepRepeat]): a timer that ran out is
  * remembered and starts again as soon as the book plays again, until the user turns it off.
@@ -219,8 +220,12 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
                 resumeAfterShake(p)
                 return
             }
-            is SleepTimerState.Countdown -> _state.value = s.copy(remainingMs = s.totalMs)
+            is SleepTimerState.Countdown -> {
+                if (!nearEnd(s.remainingMs)) return
+                _state.value = s.copy(remainingMs = s.totalMs)
+            }
             is SleepTimerState.EndOfChapter -> {
+                if (!nearEnd(s.remainingMs)) return
                 val next = s.chapterIndex + 1
                 if (s.chapterIndex >= 0 && next < p.chapters.size) _state.value = s.copy(chapterIndex = next)
             }
@@ -248,8 +253,6 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
                 val played = if (playing && wasPlaying && !pausedSinceTick) elapsed else 0L
                 wasPlaying = playing
                 pausedSinceTick = false
-                // Listen for shakes only while they can do something: timer on, book playing.
-                if (playing && shakeToReset()) shake.start() else shake.stop()
                 when (val s = _state.value) {
                     SleepTimerState.Off -> {
                         shake.stop()
@@ -261,13 +264,17 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
                             stop()
                             return@launch
                         }
-                        if (!playing) continue
+                        if (!playing) {
+                            shake.stop()
+                            continue
+                        }
                         val remaining = s.remainingMs - played
                         if (remaining <= 0) {
                             finish(p)
                             return@launch
                         }
                         _state.value = s.copy(remainingMs = remaining)
+                        listenForShake(remaining)
                         applyFade(p, remaining)
                     }
                     is SleepTimerState.EndOfChapter -> {
@@ -292,7 +299,11 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
                         val remaining = chapter?.let { ((it.endMs - p.currentPosition) / speed).toLong() }
                             ?: ((p.duration - p.currentPosition) / speed).toLong().takeIf { p.duration > 0 }
                         _state.value = s.copy(remainingMs = remaining, chapterIndex = target)
-                        if (!p.isPlaying || remaining == null) continue
+                        if (!p.isPlaying || remaining == null) {
+                            shake.stop()
+                            continue
+                        }
+                        listenForShake(remaining)
                         if (remaining <= TICK_MS) {
                             delay(remaining.coerceAtLeast(0))
                             finish(p)
@@ -303,6 +314,14 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
                 }
             }
         }
+    }
+
+    /** The timer is about to pause the book: the only time a shake resets it. */
+    private fun nearEnd(remainingMs: Long?): Boolean = remainingMs != null && remainingMs <= SHAKE_WINDOW_MS
+
+    /** Listens for shakes only while they can do something: book playing, the timer near its end. */
+    private fun listenForShake(remainingMs: Long) {
+        if (nearEnd(remainingMs) && shakeToReset()) shake.start() else shake.stop()
     }
 
     private fun applyFade(p: Player, remainingMs: Long) {
@@ -371,6 +390,9 @@ class SleepTimer(context: Context, private val scope: CoroutineScope, private va
         private const val TICK_MS = 500L
         private const val FADE_MS = 15_000L
         private const val NIGHT_CHECK_MS = 30_000L
+
+        /** How long before the timer runs out a shake resets it: while the sound fades out. */
+        private const val SHAKE_WINDOW_MS = FADE_MS
 
         /** How long after the timer paused the book a shake still plays it on. */
         private const val RESUME_WINDOW_MS = 2 * 60_000L
