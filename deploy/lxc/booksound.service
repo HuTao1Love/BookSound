@@ -1,0 +1,23 @@
+[Unit]
+Description=BookSound server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=booksound
+Group=booksound
+Environment=BOOKSOUND_DATA=/var/lib/booksound
+Environment=BOOKSOUND_PORT=8080
+EnvironmentFile=-/etc/booksound.env
+ExecStart=/opt/booksound/bin/booksound-server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/booksound
+
+[Install]
+WantedBy=multi-user.target
