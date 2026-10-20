@@ -74,3 +74,11 @@ tasks.named<JavaExec>("run") {
     environment("BOOKSOUND_DATA", rootProject.layout.projectDirectory.dir("server/run-data").asFile.absolutePath)
     environment("BOOKSOUND_PORT", providers.gradleProperty("port").getOrElse("8080"))
 }
+
+// The release archive for LXC/bare-metal installs: bin/booksound-server, lib/*.jar.
+tasks.named<Tar>("distTar") {
+    compression = Compression.GZIP
+    archiveExtension.set("tar.gz")
+    archiveFileName.set("booksound-server.tar.gz")
+}
+tasks.named<Zip>("distZip") { enabled = false }

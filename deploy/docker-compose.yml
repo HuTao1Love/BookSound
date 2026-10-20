@@ -1,0 +1,19 @@
+# docker compose -f deploy/docker-compose.yml up -d
+# The setup token for the first (admin) account is printed in the log: docker compose logs booksound
+services:
+  booksound:
+    image: ghcr.io/hutao1love/booksound-server:latest
+    container_name: booksound
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"
+    volumes:
+      # Everything the server keeps: the library (Author/Series/NN - Title.m4b), its database, covers,
+      # watch copies and downloads. An existing library folder can be mounted as /data/library.
+      - ./booksound-data:/data
+    environment:
+      # The router's address, so the server sees the real client address and https behind KeenDNS.
+      BOOKSOUND_TRUSTED_PROXIES: "192.168.1.1"
+      TZ: "Europe/Moscow"

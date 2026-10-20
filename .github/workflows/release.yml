@@ -1,8 +1,9 @@
-# Builds a signed release APK and publishes it on GitHub.
+# Builds a signed release APK and the server, and publishes them on GitHub.
 #
 # - Every push to main (each merged pull request) becomes a release tagged
 #   <appVersion from gradle.properties>.<run number>, e.g. 0.1.57, with the APKs attached: the
-#   phone app and the Wear OS watch app (installed on the watch with adb).
+#   phone app and the Wear OS watch app (installed on the watch with adb), and the server archive
+#   for LXC installs; the server's Docker image goes to ghcr.io/<owner>/booksound-server.
 # - A release published by hand (Releases → Draft a new release) gets the APK attached.
 # - Run by hand from the Actions tab: the APK is kept as a workflow artifact.
 #
@@ -27,6 +28,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -85,33 +87,65 @@ jobs:
         # - No lintVitalRelease: it ran next to R8 on the runner's 4 cores and slowed it down.
         run: |
           chmod +x gradlew
-          ./gradlew :core:test :app:assembleRelease :wear:assembleRelease \
+          ./gradlew :core:test :api:test :server:test :app:assembleRelease :wear:assembleRelease :server:installDist :server:distTar \
             -x lintVitalRelease \
             "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8" \
             -PversionName="$VERSION_NAME" \
             -PversionCode="${{ github.run_number }}"
           cp app/build/outputs/apk/release/app-release.apk "BookSound-$VERSION_NAME.apk"
           cp wear/build/outputs/apk/release/wear-release.apk "BookSound-Watch-$VERSION_NAME.apk"
+          cp server/build/distributions/booksound-server.tar.gz "BookSound-Server-$VERSION_NAME.tar.gz"
 
       - name: Attach the APK to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" "BookSound-Server-$VERSION_NAME.tar.gz" --clobber
 
       - name: Publish a release for the push to main
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$VERSION_NAME" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" \
+          gh release create "$VERSION_NAME" "BookSound-$VERSION_NAME.apk" "BookSound-Watch-$VERSION_NAME.apk" "BookSound-Server-$VERSION_NAME.tar.gz" \
             --target "${{ github.sha }}" \
             --title "BookSound $VERSION_NAME" \
             --generate-notes
+
+      # The server image, for amd64 and arm64 (the jars are the same; arm64 runs without torrents).
+      - name: Set up Docker Buildx
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the GitHub container registry
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the server image
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          IMAGE="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/booksound-server"
+          docker buildx build --platform linux/amd64,linux/arm64 -f deploy/Dockerfile \
+            -t "$IMAGE:$VERSION_NAME" -t "$IMAGE:latest" --push .
+
+      - name: Smoke-test the server image
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          IMAGE="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/booksound-server"
+          docker run -d --name booksound -p 8080:8080 "$IMAGE:$VERSION_NAME"
+          for i in $(seq 1 30); do curl -fsS localhost:8080/api/status && exit 0; sleep 2; done
+          docker logs booksound
+          exit 1
 
       - name: Keep the APK as an artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: BookSound-${{ env.VERSION_NAME }}
-          path: BookSound-*.apk
+          path: |
+            BookSound-*.apk
+            BookSound-Server-*.tar.gz
