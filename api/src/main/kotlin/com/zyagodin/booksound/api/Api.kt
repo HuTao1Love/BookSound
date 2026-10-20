@@ -22,6 +22,8 @@ object ApiPaths {
     const val STATUS = "/api/status"
     const val SETUP = "/api/auth/setup"
     const val LOGIN = "/api/auth/login"
+    const val WEB_LOGIN = "/api/auth/web-login"
+    const val PASSWORD = "/api/auth/password"
     const val REFRESH = "/api/auth/refresh"
     const val LOGOUT = "/api/auth/logout"
     const val ME = "/api/auth/me"
@@ -41,6 +43,7 @@ object ApiPaths {
     const val ADMIN_SETTINGS = "/api/admin/settings"
     const val ADMIN_RESCAN = "/api/admin/rescan"
     const val WATCH_PROFILES = "/api/watch-profiles"
+    const val PREFERENCES = "/api/preferences"
 
     fun book(id: String) = "$BOOKS/$id"
     fun bookFile(id: String) = "$BOOKS/$id/file"
@@ -400,7 +403,7 @@ data class ServerSettingsDto(
     val encoderBitrateKbps: Int,
     val downmixMono: Boolean,
     val parallelImports: Int,
-    /** Upload speed limit while downloading torrents, KiB/s; 0 means the minimum libtorrent allows. */
+    /** Upload speed limit while downloading torrents, KiB/s; 0 is no limit. Nothing is seeded after a download. */
     val torrentUploadLimitKibps: Int,
     val torrentListenPort: Int,
     /** Size limit of the folder of watch versions, MiB. */

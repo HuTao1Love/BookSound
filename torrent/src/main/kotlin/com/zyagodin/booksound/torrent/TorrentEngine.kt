@@ -67,7 +67,12 @@ data class EngineStatus(
  *
  * Events (resume data, errors) arrive on libtorrent's alert thread through [listener].
  */
-class TorrentEngine(private val sessionStateFile: File, private val log: (String, Throwable?) -> Unit) {
+class TorrentEngine(
+    private val sessionStateFile: File,
+    /** Adjusts the session settings before it starts (the server's port and upload limit). */
+    private val tune: (SettingsPack) -> Unit = {},
+    private val log: (String, Throwable?) -> Unit,
+) {
 
     sealed interface Event {
         data class ResumeData(val infoHash: String, val data: ByteArray) : Event
@@ -167,6 +172,7 @@ class TorrentEngine(private val sessionStateFile: File, private val log: (String
             .alertQueueSize(5000)
         settings.setEnableDht(true)
         settings.setEnableLsd(true)
+        tune(settings)
         params.settings = settings
         // Plain read/write I/O: memory-mapped files are unreliable on some Android storage.
         params.setPosixDiskIO()
