@@ -2,7 +2,7 @@ package com.zyagodin.booksound.data.library
 
 import android.net.Uri
 import android.util.Log
-import com.zyagodin.booksound.core.io.readUpTo
+import com.zyagodin.booksound.core.library.ContentId
 import com.zyagodin.booksound.core.metadata.AudioContainer
 import com.zyagodin.booksound.core.metadata.AudioProbe
 import com.zyagodin.booksound.core.model.BookMetadata
@@ -23,8 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.security.MessageDigest
-import java.util.UUID
 import kotlin.coroutines.coroutineContext
 
 sealed interface ScanResult {
@@ -196,14 +194,8 @@ class LibraryScanner(
     }
 
     /** Stable id for files without an embedded BookSound id: derived from size and leading content. */
-    private fun contentDerivedId(entry: DocEntry): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        documents.openSource(entry.uri, entry.name).use { source ->
-            digest.update(source.readUpTo(0, 4 * 1024 * 1024))
-            digest.update(source.size.toString().toByteArray())
-        }
-        return UUID.nameUUIDFromBytes(digest.digest()).toString()
-    }
+    private fun contentDerivedId(entry: DocEntry): String =
+        documents.openSource(entry.uri, entry.name).use { ContentId.of(it) }
 
     companion object {
         private const val TAG = "LibraryScanner"
