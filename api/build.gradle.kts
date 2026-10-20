@@ -27,7 +27,7 @@ dependencies {
 val tsOutput = rootProject.layout.projectDirectory.file("web/src/api/types.gen.ts")
 
 /** Writes the API types for the web app. CI runs it and fails when the committed file differs. */
-val generateTs by tasks.registering(JavaExec::class) {
+tasks.register<JavaExec>("generateTs") {
     group = "build"
     description = "Generates web/src/api/types.gen.ts from the API types."
     classpath = sourceSets.main.get().runtimeClasspath

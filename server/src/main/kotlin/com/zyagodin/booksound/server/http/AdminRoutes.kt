@@ -12,11 +12,12 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
-import io.ktor.server.http.content.staticResources
-import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
+import io.ktor.server.response.respondBytes
+import io.ktor.server.response.header
+import io.ktor.http.HttpHeaders
+import io.ktor.http.defaultForFilePath
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -94,20 +95,23 @@ fun Route.adminRoutes(ctx: ServerContext) {
 
 /** The web app, built into the jar: files by path, and index.html for its client-side routes. */
 fun Application.webApp() {
-    val index = Application::class.java.getResource("/web/index.html")?.readText()
+    val loader = Application::class.java.classLoader
+    val index = loader.getResource("web/index.html")?.readBytes()
     routing {
-        staticResources("/", "web") {
-            default("index.html")
-            cacheControl { file ->
-                if (file.path.contains("/assets/")) listOf(io.ktor.http.CacheControl.MaxAge(31536000, visibility = io.ktor.http.CacheControl.Visibility.Public))
-                else listOf(io.ktor.http.CacheControl.NoCache(null))
-            }
-        }
         get("{path...}") {
-            if (call.request.path().startsWith("/api/") || index == null) {
+            val path = call.parameters.getAll("path").orEmpty().joinToString("/")
+            if (path.startsWith("api/") || index == null || path.split('/').any { it == ".." }) {
                 call.respond(HttpStatusCode.NotFound)
+                return@get
+            }
+            val bytes = path.takeIf { it.isNotEmpty() && '.' in it.substringAfterLast('/') }?.let { loader.getResource("web/$it")?.readBytes() }
+            if (bytes == null) {
+                call.response.header(HttpHeaders.CacheControl, "no-cache")
+                call.respondBytes(index, ContentType.Text.Html)
             } else {
-                call.respondText(index, ContentType.Text.Html)
+                // Built assets have content hashes in their names; the rest (service worker, manifest) must be checked.
+                call.response.header(HttpHeaders.CacheControl, if (path.startsWith("assets/")) "public, max-age=31536000, immutable" else "no-cache")
+                call.respondBytes(bytes, ContentType.defaultForFilePath(path))
             }
         }
     }
