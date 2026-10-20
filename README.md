@@ -89,6 +89,7 @@ The server is optional: the app works without it exactly as before. With it:
 **Docker** (amd64 and arm64; torrents need amd64, libtorrent has no arm64 Linux build):
 
 ```sh
+sudo mkdir -p /srv/booksound && sudo chown 1001:1001 /srv/booksound   # the container runs as uid 1001
 docker run -d --name booksound -p 8080:8080 -p 6881:6881 -p 6881:6881/udp \
   -v /srv/booksound:/data ghcr.io/hutao1love/booksound-server:latest
 docker logs booksound 2>&1 | grep "setup token"
