@@ -2,15 +2,11 @@ package com.zyagodin.booksound.data.library
 
 import android.net.Uri
 import android.util.Log
+import com.zyagodin.booksound.core.library.AdoptedFile
 import com.zyagodin.booksound.core.library.ContentId
 import com.zyagodin.booksound.core.metadata.AudioContainer
 import com.zyagodin.booksound.core.metadata.AudioProbe
-import com.zyagodin.booksound.core.model.BookMetadata
-import com.zyagodin.booksound.core.model.ChapterMark
 import com.zyagodin.booksound.core.naming.LibraryLayout
-import com.zyagodin.booksound.core.organize.ChapterPlanner
-import com.zyagodin.booksound.core.organize.DraftPart
-import com.zyagodin.booksound.core.organize.NamePatternParser
 import com.zyagodin.booksound.cover.CoverImages
 import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.data.settings.SettingsRepository
@@ -92,7 +88,7 @@ class LibraryScanner(
                 continue
             }
             val ext = entry.name.substringAfterLast('.', "").lowercase()
-            if (ext !in LIBRARY_EXTENSIONS) continue
+            if (ext !in AdoptedFile.EXTENSIONS) continue
             val relativePath = (path + entry.name).joinToString("/")
 
             val existing = byUri[entry.uri.toString()]
@@ -127,23 +123,9 @@ class LibraryScanner(
                     seen += bookId
                     continue
                 }
-                val tags = parsed.tags
-                val guess = NamePatternParser.parse(entry.name)
-                val metadata = BookMetadata(
-                    title = tags.title ?: tags.album ?: guess.title ?: entry.name.substringBeforeLast('.'),
-                    author = tags.artist ?: tags.albumArtist ?: guess.author ?: path.firstOrNull()?.takeIf { it != LibraryLayout.UNKNOWN_AUTHOR },
-                    narrator = tags.narrator ?: tags.composer,
-                    series = tags.series ?: if (path.size >= 2) path[1] else null,
-                    seriesIndex = tags.seriesPart ?: guess.seriesIndex,
-                    year = tags.year,
-                    genre = tags.genre,
-                    description = tags.description ?: tags.comment,
-                    language = tags.language,
-                ).normalized()
+                val metadata = AdoptedFile.metadata(parsed, entry.name, path)
                 val duration = parsed.durationMs ?: 0L
-                val chapters = ChapterPlanner.plan(
-                    listOf(DraftPart(entry.uri.toString(), entry.name, metadata.title, duration, parsed.chapters.ifEmpty { listOf(ChapterMark(0, metadata.title)) })),
-                )
+                val chapters = AdoptedFile.chapters(parsed, entry.uri.toString(), entry.name, metadata.title)
                 val cover = parsed.cover?.let { CoverImages.normalize(it.bytes) }
                 val coverFile = cover?.let { covers.save(bookId, it) }
                 library.saveImportedBook(
@@ -200,6 +182,6 @@ class LibraryScanner(
     companion object {
         private const val TAG = "LibraryScanner"
         private const val STALE_TEMP_MS = 60 * 60 * 1000L
-        val LIBRARY_EXTENSIONS = setOf("m4b", "m4a")
+        val LIBRARY_EXTENSIONS = AdoptedFile.EXTENSIONS
     }
 }

@@ -1,0 +1,327 @@
+package com.zyagodin.booksound.server.auth
+
+import com.zyagodin.booksound.api.DeviceCodeResponse
+import com.zyagodin.booksound.api.DeviceDto
+import com.zyagodin.booksound.api.DeviceKind
+import com.zyagodin.booksound.api.TokenResponse
+import com.zyagodin.booksound.api.UserDto
+import com.zyagodin.booksound.server.db.Database
+import com.zyagodin.booksound.server.db.Tx
+import com.zyagodin.booksound.server.db.bool
+import com.zyagodin.booksound.server.db.long
+import com.zyagodin.booksound.server.db.str
+import org.slf4j.LoggerFactory
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/** Who made a request: a user, from one of their devices. */
+data class Principal(val userId: String, val userName: String, val isAdmin: Boolean, val deviceId: String, val viaCookie: Boolean) {
+    val user get() = UserDto(userId, userName, isAdmin)
+}
+
+sealed interface LoginResult {
+    data class Success(val user: UserDto) : LoginResult
+    data object InvalidCredentials : LoginResult
+    data class Locked(val untilMs: Long) : LoginResult
+}
+
+class AuthException(val code: String, message: String? = null) : Exception(message ?: code)
+
+/**
+ * Accounts, devices and tokens. Every token is a random secret stored only as a hash. Apps get a
+ * short-lived access token and a refresh token that is replaced on every use; the web app gets a
+ * session cookie. Revoking a device ends all of them.
+ */
+class AuthService(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) {
+    private val log = LoggerFactory.getLogger(AuthService::class.java)
+
+    /** Valid until the first account is created; printed to the log so only whoever runs the server sees it. */
+    @Volatile
+    var setupToken: String? = null
+        private set
+
+    private data class Cached(val principal: Principal, val expiresAt: Long, val checkedAt: Long)
+
+    private val cache = ConcurrentHashMap<String, Cached>()
+
+    fun init() {
+        if (db.tx { queryOne("SELECT COUNT(*) FROM users") { it.getInt(1) } } == 0) {
+            setupToken = Secrets.token().take(24)
+            log.warn("No accounts yet. Open the web app and create the admin account with this setup token: {}", setupToken)
+        }
+    }
+
+    val setupRequired get() = setupToken != null
+
+    // ------------------------------------------------------------------------------------- users
+
+    fun createFirstAdmin(token: String, name: String, password: String): UserDto {
+        val expected = setupToken ?: throw AuthException("setup_done")
+        if (!java.security.MessageDigest.isEqual(expected.toByteArray(), token.trim().toByteArray())) {
+            throw AuthException("invalid_credentials", "Wrong setup token")
+        }
+        val user = createUser(name, password, isAdmin = true)
+        setupToken = null
+        return user
+    }
+
+    fun createUser(name: String, password: String, isAdmin: Boolean): UserDto {
+        val clean = name.trim()
+        if (clean.isEmpty() || clean.length > 64) throw AuthException("bad_request", "Invalid user name")
+        checkPassword(password)
+        val id = UUID.randomUUID().toString()
+        val hash = Secrets.hashPassword(password)
+        db.tx {
+            if (queryOne("SELECT 1 FROM users WHERE name = ?", clean) { 1 } != null) throw AuthException("conflict", "User exists")
+            update("INSERT INTO users (id, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)", id, clean, hash, isAdmin, clock())
+        }
+        return UserDto(id, clean, isAdmin)
+    }
+
+    fun users(): List<UserDto> = db.tx {
+        query("SELECT id, name, is_admin FROM users ORDER BY name") { UserDto(it.str("id")!!, it.str("name")!!, it.bool("is_admin")) }
+    }
+
+    fun updateUser(id: String, password: String?, isAdmin: Boolean?) {
+        password?.let(::checkPassword)
+        val hash = password?.let(Secrets::hashPassword)
+        db.tx {
+            if (queryOne("SELECT 1 FROM users WHERE id = ?", id) { 1 } == null) throw AuthException("not_found")
+            if (isAdmin == false) requireAnotherAdmin(id)
+            hash?.let { update("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?", it, id) }
+            isAdmin?.let { update("UPDATE users SET is_admin = ? WHERE id = ?", it, id) }
+        }
+        if (hash != null) revokeAllDevices(id, keep = null)
+        cache.clear()
+    }
+
+    fun deleteUser(id: String) {
+        db.tx {
+            requireAnotherAdmin(id)
+            update("DELETE FROM users WHERE id = ?", id)
+        }
+        cache.clear()
+    }
+
+    fun changePassword(principal: Principal, current: String, new: String) {
+        val stored = db.tx { queryOne("SELECT password_hash FROM users WHERE id = ?", principal.userId) { it.str("password_hash") } }
+            ?: throw AuthException("not_found")
+        if (!Secrets.verifyPassword(current, stored)) throw AuthException("invalid_credentials")
+        checkPassword(new)
+        db.tx { update("UPDATE users SET password_hash = ? WHERE id = ?", Secrets.hashPassword(new), principal.userId) }
+        // Other devices sign in again with the new password.
+        revokeAllDevices(principal.userId, keep = principal.deviceId)
+    }
+
+    private fun Tx.requireAnotherAdmin(userId: String) {
+        val admins = query("SELECT id FROM users WHERE is_admin = 1") { it.str("id")!! }
+        if (admins == listOf(userId)) throw AuthException("conflict", "The last admin can't be removed")
+    }
+
+    private fun checkPassword(password: String) {
+        if (password.length < 8) throw AuthException("bad_request", "Password must be at least 8 characters")
+        if (password.length > 256) throw AuthException("bad_request", "Password is too long")
+    }
+
+    /** Checks a password; repeated failures lock the account for longer each time (up to an hour). */
+    fun checkCredentials(name: String, password: String): LoginResult {
+        val now = clock()
+        data class Row(val id: String, val name: String, val hash: String, val admin: Boolean, val failed: Int, val lockedUntil: Long?)
+        val row = db.tx {
+            queryOne("SELECT * FROM users WHERE name = ?", name.trim()) {
+                Row(it.str("id")!!, it.str("name")!!, it.str("password_hash")!!, it.bool("is_admin"), it.getInt("failed_logins"), it.long("locked_until"))
+            }
+        }
+        if (row == null) {
+            Secrets.burnPasswordCheck(password)
+            return LoginResult.InvalidCredentials
+        }
+        if (row.lockedUntil != null && row.lockedUntil > now) return LoginResult.Locked(row.lockedUntil)
+        if (!Secrets.verifyPassword(password, row.hash)) {
+            val failed = row.failed + 1
+            val lock = if (failed >= FREE_ATTEMPTS) now + minOf(60_000L shl minOf(failed - FREE_ATTEMPTS, 6), 3_600_000L) else null
+            db.tx { update("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?", failed, lock, row.id) }
+            return LoginResult.InvalidCredentials
+        }
+        if (row.failed != 0) db.tx { update("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", row.id) }
+        return LoginResult.Success(UserDto(row.id, row.name, row.admin))
+    }
+
+    // ----------------------------------------------------------------------------------- devices
+
+    fun createDevice(userId: String, name: String, kind: DeviceKind, syncId: String?): String {
+        val id = UUID.randomUUID().toString()
+        db.tx {
+            update(
+                "INSERT INTO devices (id, user_id, name, kind, sync_id, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                id, userId, name.trim().take(80).ifEmpty { kind.name.lowercase() }, kind, syncId?.take(80), clock(), clock(),
+            )
+        }
+        return id
+    }
+
+    /** Access and refresh tokens for an app on [deviceId]. */
+    fun issueTokens(deviceId: String, user: UserDto): TokenResponse {
+        val access = Secrets.token()
+        val refresh = Secrets.token()
+        val expires = clock() + ACCESS_TTL_MS
+        db.tx {
+            update("DELETE FROM tokens WHERE device_id = ?", deviceId)
+            update("INSERT INTO tokens (hash, device_id, kind, expires_at) VALUES (?, ?, 'ACCESS', ?)", Secrets.tokenHash(access), deviceId, expires)
+            update("INSERT INTO tokens (hash, device_id, kind, expires_at) VALUES (?, ?, 'REFRESH', ?)", Secrets.tokenHash(refresh), deviceId, clock() + REFRESH_TTL_MS)
+        }
+        cache.entries.removeIf { it.value.principal.deviceId == deviceId }
+        return TokenResponse(access, expires, refresh, deviceId, user)
+    }
+
+    /** Replaces a refresh token with a new pair. A token that was already replaced revokes the device: it leaked. */
+    fun refresh(refreshToken: String): TokenResponse {
+        val hash = Secrets.tokenHash(refreshToken)
+        val now = clock()
+        val found = db.tx {
+            queryOne(
+                """SELECT d.id AS device_id, u.id AS user_id, u.name, u.is_admin FROM tokens t
+                   JOIN devices d ON d.id = t.device_id JOIN users u ON u.id = d.user_id
+                   WHERE t.hash = ? AND t.kind = 'REFRESH' AND t.expires_at > ? AND d.revoked_at IS NULL""",
+                hash, now,
+            ) { it.str("device_id")!! to UserDto(it.str("user_id")!!, it.str("name")!!, it.bool("is_admin")) }
+        }
+        if (found == null) {
+            val stolenFrom = db.tx { queryOne("SELECT id FROM devices WHERE previous_refresh_hash = ? AND revoked_at IS NULL", hash) { it.str("id") } }
+            if (stolenFrom != null) {
+                log.warn("A replaced refresh token was used again; revoking device {}", stolenFrom)
+                revokeDevice(stolenFrom)
+            }
+            throw AuthException("unauthorized")
+        }
+        val (deviceId, user) = found
+        db.tx { update("UPDATE devices SET previous_refresh_hash = ?, last_seen_at = ? WHERE id = ?", hash, now, deviceId) }
+        return issueTokens(deviceId, user)
+    }
+
+    /** A web session: one long-lived token kept in an HttpOnly cookie, extended while it is used. */
+    fun issueSession(deviceId: String): String {
+        val token = Secrets.token()
+        db.tx { update("INSERT INTO tokens (hash, device_id, kind, expires_at) VALUES (?, ?, 'SESSION', ?)", Secrets.tokenHash(token), deviceId, clock() + SESSION_TTL_MS) }
+        return token
+    }
+
+    /** The principal for an access token or session cookie, or null. */
+    fun authenticate(token: String, viaCookie: Boolean): Principal? {
+        val hash = Secrets.tokenHash(token)
+        val now = clock()
+        cache[hash]?.let { c ->
+            if (c.expiresAt > now && now - c.checkedAt < CACHE_MS) return c.principal.copy(viaCookie = viaCookie)
+        }
+        val kind = if (viaCookie) "SESSION" else "ACCESS"
+        data class Row(val principal: Principal, val expiresAt: Long)
+        val row = db.tx {
+            queryOne(
+                """SELECT d.id AS device_id, u.id AS user_id, u.name, u.is_admin, t.expires_at FROM tokens t
+                   JOIN devices d ON d.id = t.device_id JOIN users u ON u.id = d.user_id
+                   WHERE t.hash = ? AND t.kind = ? AND t.expires_at > ? AND d.revoked_at IS NULL""",
+                hash, kind, now,
+            ) { Row(Principal(it.str("user_id")!!, it.str("name")!!, it.bool("is_admin"), it.str("device_id")!!, viaCookie), it.long("expires_at")!!) }
+        } ?: run {
+            cache.remove(hash)
+            return null
+        }
+        var expiresAt = row.expiresAt
+        db.tx {
+            update("UPDATE devices SET last_seen_at = ? WHERE id = ?", now, row.principal.deviceId)
+            if (viaCookie && row.expiresAt - now < SESSION_TTL_MS / 2) {
+                expiresAt = now + SESSION_TTL_MS
+                update("UPDATE tokens SET expires_at = ? WHERE hash = ?", expiresAt, hash)
+            }
+        }
+        cache[hash] = Cached(row.principal, expiresAt, now)
+        return row.principal
+    }
+
+    fun logout(principal: Principal) = revokeDevice(principal.deviceId)
+
+    fun devices(principal: Principal): List<DeviceDto> = db.tx {
+        query(
+            "SELECT * FROM devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY COALESCE(last_seen_at, created_at) DESC",
+            principal.userId,
+        ) {
+            DeviceDto(
+                it.str("id")!!, it.str("name")!!, DeviceKind.valueOf(it.str("kind")!!),
+                it.long("created_at")!!, it.long("last_seen_at"), it.str("id") == principal.deviceId,
+            )
+        }
+    }
+
+    fun revokeDevice(principal: Principal, deviceId: String) {
+        val owner = db.tx { queryOne("SELECT user_id FROM devices WHERE id = ?", deviceId) { it.str("user_id") } }
+        if (owner != principal.userId && !principal.isAdmin) throw AuthException("not_found")
+        revokeDevice(deviceId)
+    }
+
+    private fun revokeDevice(deviceId: String) {
+        db.tx {
+            update("UPDATE devices SET revoked_at = ? WHERE id = ?", clock(), deviceId)
+            update("DELETE FROM tokens WHERE device_id = ?", deviceId)
+        }
+        cache.entries.removeIf { it.value.principal.deviceId == deviceId }
+    }
+
+    private fun revokeAllDevices(userId: String, keep: String?) {
+        val ids = db.tx { query("SELECT id FROM devices WHERE user_id = ? AND revoked_at IS NULL", userId) { it.str("id")!! } }
+        ids.filter { it != keep }.forEach(::revokeDevice)
+    }
+
+    // ------------------------------------------------------------------------------- device codes
+
+    /** A device without a keyboard (a watch) shows [DeviceCodeResponse.userCode]; a signed-in user approves it. */
+    fun startDeviceCode(name: String, kind: DeviceKind, syncId: String?): DeviceCodeResponse {
+        val code = Secrets.userCode()
+        val poll = Secrets.token()
+        val expires = clock() + DEVICE_CODE_TTL_MS
+        db.tx {
+            update("DELETE FROM device_codes WHERE expires_at < ?", clock())
+            update(
+                "INSERT INTO device_codes (user_code, poll_hash, device_name, device_kind, sync_id, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+                code, Secrets.tokenHash(poll), name.take(80), kind, syncId, expires,
+            )
+        }
+        return DeviceCodeResponse(code, poll, expires, DEVICE_CODE_POLL_SECONDS)
+    }
+
+    fun approveDeviceCode(principal: Principal, userCode: String) {
+        val normalized = userCode.uppercase().filter { it.isLetterOrDigit() }.let { if (it.length == 8) it.take(4) + "-" + it.drop(4) else it }
+        val changed = db.tx {
+            update("UPDATE device_codes SET approved_by = ? WHERE user_code = ? AND expires_at > ? AND approved_by IS NULL", principal.userId, normalized, clock())
+        }
+        if (changed == 0) throw AuthException("not_found", "Unknown or expired code")
+    }
+
+    /** Tokens once the code is approved; [AuthException] "pending" before, "expired" after it ran out. */
+    fun pollDeviceCode(pollToken: String): TokenResponse {
+        data class Row(val code: String, val name: String, val kind: DeviceKind, val syncId: String?, val expires: Long, val approvedBy: String?)
+        val row = db.tx {
+            queryOne("SELECT * FROM device_codes WHERE poll_hash = ?", Secrets.tokenHash(pollToken)) {
+                Row(it.str("user_code")!!, it.str("device_name")!!, DeviceKind.valueOf(it.str("device_kind")!!), it.str("sync_id"), it.long("expires_at")!!, it.str("approved_by"))
+            }
+        } ?: throw AuthException("expired")
+        if (row.approvedBy == null) {
+            if (row.expires < clock()) throw AuthException("expired")
+            throw AuthException("pending")
+        }
+        val user = db.tx {
+            update("DELETE FROM device_codes WHERE user_code = ?", row.code)
+            queryOne("SELECT id, name, is_admin FROM users WHERE id = ?", row.approvedBy) { UserDto(it.str("id")!!, it.str("name")!!, it.bool("is_admin")) }
+        } ?: throw AuthException("expired")
+        return issueTokens(createDevice(user.id, row.name, row.kind, row.syncId), user)
+    }
+
+    companion object {
+        const val ACCESS_TTL_MS = 60 * 60 * 1000L
+        const val REFRESH_TTL_MS = 180L * 24 * 60 * 60 * 1000
+        const val SESSION_TTL_MS = 30L * 24 * 60 * 60 * 1000
+        const val DEVICE_CODE_TTL_MS = 10 * 60 * 1000L
+        const val DEVICE_CODE_POLL_SECONDS = 5
+        private const val FREE_ATTEMPTS = 5
+        private const val CACHE_MS = 30_000L
+    }
+}
