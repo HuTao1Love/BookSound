@@ -72,4 +72,5 @@ tasks.processResources {
 tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
     environment("BOOKSOUND_DATA", rootProject.layout.projectDirectory.dir("server/run-data").asFile.absolutePath)
+    environment("BOOKSOUND_PORT", providers.gradleProperty("port").getOrElse("8080"))
 }

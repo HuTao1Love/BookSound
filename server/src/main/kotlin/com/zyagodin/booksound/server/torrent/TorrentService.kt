@@ -506,6 +506,29 @@ class TorrentService private constructor(
 
     companion object {
         private const val METADATA_ATTEMPTS = 5
+        private const val NATIVE_PROPERTY = "libtorrent4j.jni.path"
+
+        /**
+         * libtorrent4j loads its native library from [NATIVE_PROPERTY] or the system library path; the desktop
+         * artifacts ship it inside the jar, so it is copied out first. Only x86_64 builds exist for Linux and Windows.
+         */
+        private fun prepareNativeLibrary(dir: File) {
+            if (System.getProperty(NATIVE_PROPERTY) != null) return
+            val arch = System.getProperty("os.arch").lowercase()
+            if (arch != "amd64" && arch != "x86_64") error("no libtorrent build for $arch")
+            val name = if (System.getProperty("os.name").lowercase().startsWith("windows")) "libtorrent4j.dll" else "libtorrent4j.so"
+            val resource = TorrentService::class.java.getResource("/lib/x86_64/$name") ?: error("$name is not on the classpath")
+            dir.mkdirs()
+            val target = File(dir, name)
+            val bytes = resource.readBytes()
+            if (!target.isFile || target.length() != bytes.size.toLong()) {
+                val tmp = File(dir, "$name.tmp")
+                tmp.writeBytes(bytes)
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            System.setProperty(NATIVE_PROPERTY, target.absolutePath)
+        }
         private const val MAX_TORRENT_BYTES = 10 * 1024 * 1024
 
         fun create(
@@ -519,6 +542,7 @@ class TorrentService private constructor(
         ): TorrentService? {
             val log = LoggerFactory.getLogger(TorrentService::class.java)
             val engine = try {
+                prepareNativeLibrary(File(dir, "native"))
                 // Loading the native library fails on platforms libtorrent4j has no build for (arm64 Linux).
                 TorrentEngine(
                     File(dir, "session.state"),

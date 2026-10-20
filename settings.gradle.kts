@@ -19,6 +19,14 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Node.js for building the web app (see web/build.gradle.kts).
+        ivy {
+            name = "Node.js"
+            setUrl("https://nodejs.org/dist/")
+            patternLayout { artifact("v[revision]/[artifact](-v[revision]-[classifier]).[ext]") }
+            metadataSources { artifact() }
+            content { includeModule("org.nodejs", "node") }
+        }
     }
 }
 
@@ -30,3 +38,4 @@ include(":wear")
 include(":api")
 include(":torrent")
 include(":server")
+include(":web")
