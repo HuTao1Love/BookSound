@@ -5,22 +5,21 @@ import android.net.Uri
 import android.util.Log
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.metadata.AudioProbe
-import com.zyagodin.booksound.core.metadata.CorruptedFileException
-import com.zyagodin.booksound.core.metadata.UnsupportedFormatException
 import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.organize.ChapterPlanner
 import com.zyagodin.booksound.core.organize.CoverCandidate
 import com.zyagodin.booksound.core.organize.CoverOrigin
 import com.zyagodin.booksound.core.organize.DraftPart
 import com.zyagodin.booksound.core.organize.ImportDraft
-import com.zyagodin.booksound.core.organize.ImportDraftBuilder
 import com.zyagodin.booksound.core.organize.ImportSourceFile
+import com.zyagodin.booksound.core.organize.SourceAnalysis
+import com.zyagodin.booksound.core.organize.SourceAnalyzer
+import com.zyagodin.booksound.core.organize.SourceCandidate
 import com.zyagodin.booksound.cover.CoverImages
 import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.data.library.LibraryRepository
 import com.zyagodin.booksound.data.library.metadata
 import com.zyagodin.booksound.storage.DocumentStore
-import com.zyagodin.booksound.storage.NotSeekableException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -128,12 +127,9 @@ class ImportAnalyzer(
         return audio to images
     }
 
-    private fun isImage(name: String) = name.substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+    private fun isImage(name: String) = SourceAnalyzer.isImage(name)
 
-    private fun isAudioName(name: String): Boolean {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        return ext in AudioProbe.SUPPORTED_EXTENSIONS || ext in AudioProbe.KNOWN_UNSUPPORTED_EXTENSIONS
-    }
+    private fun isAudioName(name: String) = SourceAnalyzer.isAudioName(name)
 
     // ---------------------------------------------------------------- analysis
 
@@ -143,44 +139,32 @@ class ImportAnalyzer(
         report: (AnalysisState.Analyzing) -> Unit,
     ): AnalysisState {
         val (audio, images) = found
-        if (audio.isEmpty()) return AnalysisState.Failed(AnalysisFailure.NO_AUDIO_FILES)
-        val parsed = mutableListOf<ImportSourceFile>()
-        val skipped = mutableListOf<SkippedFile>()
-        audio.forEachIndexed { i, c ->
-            coroutineContext.ensureActive()
-            report(AnalysisState.Analyzing(i, audio.size, c.name))
-            try {
-                val result = documents.openSource(c.uri, c.name).use { AudioProbe.probe(it, c.name) }
-                parsed += ImportSourceFile(c.uri.toString(), c.name, c.dir, c.size, result)
-            } catch (e: UnsupportedFormatException) {
-                skipped += SkippedFile(c.name, SkipReason.UNSUPPORTED, e.message)
-            } catch (e: CorruptedFileException) {
-                skipped += SkippedFile(c.name, SkipReason.CORRUPTED, e.message)
-            } catch (e: NotSeekableException) {
-                skipped += SkippedFile(c.name, SkipReason.UNREADABLE, e.message)
-            } catch (e: IOException) {
-                skipped += SkippedFile(c.name, SkipReason.UNREADABLE, e.message)
-            } catch (e: SecurityException) {
-                skipped += SkippedFile(c.name, SkipReason.UNREADABLE, e.message)
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "Parser failure for ${c.name}", e)
-                skipped += SkippedFile(c.name, SkipReason.CORRUPTED, e.message)
+        val byId = (audio + images).associateBy { it.uri.toString() }
+        val coroutine = coroutineContext
+        val result = SourceAnalyzer.analyze(
+            audio = audio.map { it.toSource() },
+            images = images.map { it.toSource() },
+            sourceName = sourceName,
+            open = { documents.openSource(byId.getValue(it.id).uri, it.name) },
+            readImage = { img, max -> documents.readBytes(byId.getValue(img.id).uri, max) },
+            untitledPart = { context.getString(R.string.chapter_number, it) },
+            onFileFailed = { c, e -> Log.w(TAG, "Parser failure for ${c.name}", e) },
+            beforeFile = { i, c ->
+                coroutine.ensureActive()
+                report(AnalysisState.Analyzing(i, audio.size, c.name))
+            },
+        )
+        return when (result) {
+            SourceAnalysis.NoAudio -> AnalysisState.Failed(AnalysisFailure.NO_AUDIO_FILES)
+            is SourceAnalysis.NothingReadable -> AnalysisState.Failed(AnalysisFailure.ALL_FILES_FAILED, result.skipped)
+            is SourceAnalysis.Ready -> {
+                report(AnalysisState.Analyzing(audio.size, audio.size, null))
+                AnalysisState.Ready(result.draft, result.files, result.skipped)
             }
         }
-        if (parsed.isEmpty()) return AnalysisState.Failed(AnalysisFailure.ALL_FILES_FAILED, skipped)
-        report(AnalysisState.Analyzing(audio.size, audio.size, null))
-
-        val folderImages = images
-            .filter { it.size in 1..MAX_IMAGE_BYTES }
-            .take(MAX_FOLDER_IMAGES)
-            .mapNotNull { img ->
-                val bytes = documents.readBytes(img.uri, MAX_IMAGE_BYTES.toInt()) ?: return@mapNotNull null
-                val mime = EmbeddedPicture.sniffMimeType(bytes) ?: return@mapNotNull null
-                img.name to EmbeddedPicture(bytes, mime)
-            }
-        val draft = ImportDraftBuilder.build(sourceName, parsed, folderImages) { context.getString(R.string.chapter_number, it) }
-        return AnalysisState.Ready(draft, parsed, skipped)
     }
+
+    private fun Candidate.toSource() = SourceCandidate(uri.toString(), name, dir, size)
 
     private suspend fun analyzeExisting(session: ImportSession, bookId: String): AnalysisState {
         val book = library.book(bookId) ?: return AnalysisState.Failed(AnalysisFailure.BOOK_NOT_FOUND)
@@ -223,8 +207,5 @@ class ImportAnalyzer(
 
     companion object {
         private const val TAG = "ImportAnalyzer"
-        private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
-        private const val MAX_IMAGE_BYTES = 15L * 1024 * 1024
-        private const val MAX_FOLDER_IMAGES = 6
     }
 }
