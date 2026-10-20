@@ -8,6 +8,7 @@ import com.zyagodin.booksound.watch.surfaces.WatchSurfaces
 import com.zyagodin.booksound.watch.sync.BookReceiver
 import com.zyagodin.booksound.watch.sync.PhoneRemote
 import com.zyagodin.booksound.watch.sync.PositionSync
+import com.zyagodin.booksound.watch.sync.WatchServer
 import com.zyagodin.booksound.watch.sync.WatchUpdates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,7 @@ class WatchApp : Application() {
         container = WatchContainer(this)
         container.receiver.cleanUp()
         container.positions.pullAll()
+        container.server.pull()
         container.updates.publishVersion()
     }
 }
@@ -32,7 +34,9 @@ class WatchContainer(app: Application) {
     val settings = WatchSettings(app)
     val library = WatchLibrary(app) { settings.deviceId }
     val receiver = BookReceiver(app, scope, library)
-    val positions = PositionSync(app, scope, library)
+    /** The user's BookSound server, when the phone (or a sign-in code) connected the watch to it. */
+    val server = WatchServer(app, scope, library, settings)
+    val positions = PositionSync(app, scope, library, server)
     val player = WatchPlayer(app)
     val updates = WatchUpdates(app, scope)
     val phone = PhoneRemote(app)

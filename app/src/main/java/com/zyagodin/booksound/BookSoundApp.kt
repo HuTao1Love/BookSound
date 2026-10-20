@@ -24,6 +24,8 @@ import com.zyagodin.booksound.playback.SleepTimer
 import com.zyagodin.booksound.storage.DocumentStore
 import com.zyagodin.booksound.sync.RoomSyncLocalStore
 import com.zyagodin.booksound.sync.SyncCoordinator
+import com.zyagodin.booksound.sync.SyncTarget
+import com.zyagodin.booksound.server.ServerManager
 import com.zyagodin.booksound.torrent.NetworkMonitor
 import com.zyagodin.booksound.torrent.TorrentEngine
 import com.zyagodin.booksound.torrent.TorrentManager
@@ -124,7 +126,7 @@ class AppContainer(app: Application) {
         documents = documents,
         covers = covers,
         parallelImports = settings.state.map { it.parallelImports }.stateIn(appScope, SharingStarted.Eagerly, settings.state.value.parallelImports),
-        onBookFileChanged = { bookId -> reopenIfPlaying(bookId) },
+        onBookFileChanged = { bookId -> reopenIfPlaying(bookId); uploadIfWanted(bookId) },
     )
 
     val scanner = LibraryScanner(documents, library, covers, settings) { importManager.activeJobIds() }
@@ -149,16 +151,26 @@ class AppContainer(app: Application) {
         covers = covers,
     ).also { manager -> importSessions.torrentSessionStarter = manager::loadSession }
 
-    /** Listening positions are shared with the watch app; see [WatchSyncBackend]. */
+    /** The optional BookSound server; inactive until the user signs in. */
+    val server = ServerManager(app, appScope, http, database, library, documents, covers, settings)
+
+    /**
+     * Listening positions are shared with the watch app (see [WatchSyncBackend]) and, when signed in, with the
+     * server, which also tells which books it has.
+     */
     val sync = SyncCoordinator(
         appScope,
-        PlaybackOnlyStore(RoomSyncLocalStore(database, settings)),
+        listOf(
+            SyncTarget(WatchSyncBackend(app), PlaybackOnlyStore(RoomSyncLocalStore(database, settings))),
+            server.syncTarget,
+        ),
         device = { library.device() },
-        backend = WatchSyncBackend(app),
-    )
+    ).also { coordinator -> server.requestSync = coordinator::requestSync }
 
-    /** Sends books to the watch app. */
-    val watchSender = WatchSender(app, appScope, library)
+    /** Sends books to the watch app: the server's smaller copy when the user chose a watch profile. */
+    val watchSender = WatchSender(app, appScope, library) { bookId, onWaiting ->
+        settings.current().serverWatchProfile?.let { profile -> server.watchCopy(bookId, profile, onWaiting) }
+    }
 
     /** Bluetooth headphones and other outputs, for the player's output button. */
     val audioOutputs = AudioOutputs(app)
@@ -190,6 +202,14 @@ class AppContainer(app: Application) {
         copy(item = item.copy(entry = item.entry.copy(positionMs = 0, finished = false, lastPlayedAt = null)), speed = null)
 
     /** After a book's file was rewritten, reload it in the player at the same position. */
+    /** A book written by an import goes to the server too, when the user asked for that. */
+    private fun uploadIfWanted(bookId: String) {
+        appScope.launch {
+            if (server.account.value == null || !settings.current().serverAutoUpload) return@launch
+            library.book(bookId)?.takeIf { !it.deleted }?.let { server.upload(it.id, it.title) }
+        }
+    }
+
     private fun reopenIfPlaying(bookId: String) {
         appScope.launch(Dispatchers.Main) {
             val state = player.state.value

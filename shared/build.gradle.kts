@@ -1,5 +1,5 @@
-// Android code used by both the phone app and the watch app: the audiobook player wrapper and
-// the Wear OS Data Layer plumbing they talk to each other with.
+// Android code used by both the phone app and the watch app: the audiobook player wrapper, the
+// Wear OS Data Layer plumbing they talk to each other with, and the client of the optional server.
 plugins {
     alias(libs.plugins.android.library)
 }
@@ -21,6 +21,8 @@ android {
 
 dependencies {
     api(project(":core"))
+    api(project(":api"))
+    api(libs.okhttp)
     api(libs.androidx.media3.common)
     api(libs.play.services.wearable)
     api(libs.kotlinx.coroutines.play.services)

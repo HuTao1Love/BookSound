@@ -144,6 +144,10 @@ class LibraryRepository(private val db: Database) {
         seq
     }
 
+    fun touchPlayback(userId: String, bookId: String) = db.tx {
+        update("UPDATE playback SET seq = ? WHERE user_id = ? AND book_id = ?", nextSeq(), userId, bookId)
+    }
+
     /** Books someone has started and not finished. */
     fun booksInProgress(): Set<String> = db.tx {
         query("SELECT DISTINCT book_id FROM playback WHERE finished = 0 AND position_ms > 0 AND deleted = 0") { it.str("book_id")!! }

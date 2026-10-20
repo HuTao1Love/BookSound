@@ -317,8 +317,6 @@
     <string name="settings_mono_hint">Smaller files; fine for most narration</string>
     <string name="settings_auto_cover">Find covers online</string>
     <string name="settings_auto_cover_hint">Search automatically when files have no cover</string>
-    <string name="settings_sync">Sync</string>
-    <string name="settings_sync_hint">Local only. Sync with a home server can be added later.</string>
     <string name="settings_version">Version %1$s</string>
     <string name="quality_48">48 kbps · smallest files</string>
     <string name="quality_64">64 kbps · recommended for speech</string>
@@ -577,4 +575,42 @@
     <string name="cast_problem_network">Connect to Wi‑Fi: the device gets the book over the local network.</string>
     <string name="cast_problem_connect">Couldn\'t connect to the device.</string>
     <string name="cast_problem_playback">The device couldn\'t play the book.</string>
+
+    <!-- Server -->
+    <string name="server_title">BookSound server</string>
+    <string name="server_not_connected">Not connected. A home server shares the library, converts torrents and syncs progress.</string>
+    <string name="server_signed_in_as">%1$s at %2$s</string>
+    <string name="server_sign_in">Sign in</string>
+    <string name="server_address">Server address</string>
+    <string name="server_user">User name</string>
+    <string name="server_password">Password</string>
+    <string name="server_wrong_password">Wrong user name or password</string>
+    <string name="server_unreachable">Can\'t reach the server: %1$s</string>
+    <string name="server_about">The server is optional: without it everything works on this phone as before. With it, books from the server\'s library can be downloaded, your books uploaded, and listening progress follows you between the phone, the watch and the browser.</string>
+    <string name="server_sync_now">Sync now</string>
+    <string name="server_sign_out">Sign out</string>
+    <string name="server_group_options">Options</string>
+    <string name="server_auto_upload">Upload new books</string>
+    <string name="server_auto_upload_hint">Books imported on this phone go to the server too</string>
+    <string name="server_watch_copies">Books for the watch</string>
+    <string name="server_watch_original">The phone\'s file</string>
+    <string name="server_connect_watch">Connect the watch</string>
+    <string name="server_connect_watch_hint">The watch signs in to the server itself and downloads books over Wi-Fi</string>
+    <string name="server_connect">Connect</string>
+    <string name="server_watch_connected">The watch is connected to the server</string>
+    <string name="server_watch_not_connected">No watch with BookSound found</string>
+    <string name="server_group_transfers">Transfers</string>
+    <string name="server_clear">Clear</string>
+    <string name="server_group_books">On the server only (%1$d)</string>
+    <string name="server_books_empty">Every book of the server is on this phone.</string>
+    <string name="server_download">Download</string>
+    <string name="server_downloading">Downloading from the server</string>
+    <string name="server_uploading">Uploading to the server</string>
+    <string name="server_stage_queued">Waiting</string>
+    <string name="server_stage_done">Done</string>
+    <string name="server_stage_failed">Failed: %1$s</string>
+    <string name="server_stage_cancelled">Cancelled</string>
+    <string name="server_channel">Server transfers</string>
+    <string name="server_upload_started">Uploading to the server</string>
+    <string name="action_upload_to_server">Upload to the server</string>
 </resources>

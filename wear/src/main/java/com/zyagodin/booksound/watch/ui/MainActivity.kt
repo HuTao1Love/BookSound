@@ -46,10 +46,12 @@ class MainActivity : ComponentActivity() {
                                 container,
                                 onOpenPlayer = { nav.navigate(ROUTE_PLAYER) { launchSingleTop = true } },
                                 onOpenBook = { nav.navigate("$ROUTE_BOOK/$it") },
+                                onOpenServer = { nav.navigate(ROUTE_SERVER) },
                             )
                         }
                         composable(ROUTE_PLAYER) { PlayerScreen(container, onOpenChapters = { nav.navigate(ROUTE_CHAPTERS) }) }
                         composable(ROUTE_CHAPTERS) { ChaptersScreen(container, onDone = { nav.popBackStack() }) }
+                        composable(ROUTE_SERVER) { ServerScreen(container) }
                         composable("$ROUTE_BOOK/{id}") { entry ->
                             BookScreen(
                                 container,
@@ -105,5 +107,6 @@ class MainActivity : ComponentActivity() {
         const val ROUTE_PLAYER = "player"
         const val ROUTE_CHAPTERS = "chapters"
         const val ROUTE_BOOK = "book"
+        const val ROUTE_SERVER = "server"
     }
 }

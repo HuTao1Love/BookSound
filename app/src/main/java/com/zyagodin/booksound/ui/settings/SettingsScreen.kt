@@ -29,9 +29,9 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
@@ -105,6 +105,7 @@ import com.zyagodin.booksound.ui.components.AppBottomSheet
 import com.zyagodin.booksound.ui.components.BackgroundWork
 import com.zyagodin.booksound.ui.components.rememberBackgroundWorkRequest
 import com.zyagodin.booksound.ui.components.SectionHeader
+import com.zyagodin.booksound.ui.navigation.appContainer
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.player.voicePresetName
 import com.zyagodin.booksound.ui.theme.Radii
@@ -224,6 +225,14 @@ fun SettingsScreen(navigator: AppNavigator) {
                                 },
                             )
                             Item(Icons.Rounded.DeleteSweep, stringResource(R.string.settings_removed_books), stringResource(R.string.settings_removed_books_hint, removed), onClick = navigator::openRemovedBooks)
+                            val serverAccount by appContainer().server.account.collectAsStateWithLifecycle()
+                            Item(
+                                Icons.Rounded.Dns,
+                                stringResource(R.string.server_title),
+                                serverAccount?.let { stringResource(R.string.server_signed_in_as, it.userName, it.url.removePrefix("https://")) }
+                                    ?: stringResource(R.string.server_not_connected),
+                                onClick = navigator::openServer,
+                            )
                         }
                         Group(stringResource(R.string.settings_group_playback)) {
                             Item(Icons.Rounded.FastRewind, stringResource(R.string.settings_skip_back), stringResource(R.string.seconds_value, settings.skipBackSeconds), onClick = { choice = ChoiceKind.SKIP_BACK })
@@ -289,7 +298,6 @@ fun SettingsScreen(navigator: AppNavigator) {
                             Toggle(Icons.Rounded.DarkMode, stringResource(R.string.settings_amoled), stringResource(R.string.settings_amoled_hint), settings.amoledBlack, vm::setAmoled)
                         }
                         Group(stringResource(R.string.settings_group_about)) {
-                            Item(Icons.Rounded.CloudSync, stringResource(R.string.settings_sync), stringResource(R.string.settings_sync_hint), onClick = null)
                             Item(Icons.Rounded.Info, stringResource(R.string.app_name), stringResource(R.string.settings_version, BuildConfigInfo.versionName(context)), onClick = null)
                             Item(
                                 Icons.Rounded.SystemUpdate,

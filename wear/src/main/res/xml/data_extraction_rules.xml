@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Server tokens belong to this watch: restored elsewhere they would sign both devices out. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="server_account.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="server_account.xml" />
+    </device-transfer>
+</data-extraction-rules>

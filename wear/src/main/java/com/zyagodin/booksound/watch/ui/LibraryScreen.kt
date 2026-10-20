@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
@@ -46,11 +47,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
-fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBook: (String) -> Unit) {
+fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBook: (String) -> Unit, onOpenServer: () -> Unit) {
     val books by container.library.books.collectAsStateWithLifecycle()
     val player by container.player.state.collectAsStateWithLifecycle()
     val speaker by container.settings.speaker.collectAsStateWithLifecycle()
     val pendingUpdate by container.updates.pending.collectAsStateWithLifecycle()
+    val serverAccount by container.server.account.collectAsStateWithLifecycle()
     // Play services writes incoming files without telling the app: look at them while visible.
     var incoming by remember { mutableStateOf(emptyList<IncomingBook>()) }
     LaunchedEffect(Unit) {
@@ -159,6 +161,17 @@ fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBoo
                     icon = { BookCover(container.library.coverFile(book.id), book.fileRevision) },
                     secondaryLabel = { Text(status, maxLines = 1) },
                     label = { Text(book.metadata.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                )
+            }
+            item {
+                Button(
+                    onClick = onOpenServer,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(),
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true),
+                    icon = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
+                    secondaryLabel = serverAccount?.let { a -> { Text(a.url.removePrefix("https://"), maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                    label = { Text(stringResource(R.string.server_title)) },
                 )
             }
             item {

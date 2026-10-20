@@ -9,12 +9,13 @@ import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.shared.DataLayerPositions
 import com.zyagodin.booksound.watch.WatchApp
 
-/** Wakes the watch app for books and listening positions coming from the phone. */
+/** Wakes the watch app for books, listening positions and the server login coming from the phone. */
 class WatchListenerService : WearableListenerService() {
     private val container get() = (application as WatchApp).container
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path.startsWith(WatchPaths.HEADER_PREFIX)) container.receiver.onHeader(event.data, event.sourceNodeId)
+        if (event.path == WatchPaths.SERVER_AUTH_PATH) container.server.onLogin(event.data)
     }
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
