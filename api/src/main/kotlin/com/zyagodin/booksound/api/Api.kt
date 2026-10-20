@@ -148,6 +148,10 @@ data class DeviceDto(
 @Serializable
 data class WatchDeviceRequest(val deviceName: String, val deviceId: String? = null)
 
+/** Sent from the phone to its watch over the Wear Data Layer: the server and the watch's own tokens. */
+@Serializable
+data class WatchServerLogin(val url: String, val tokens: TokenResponse, val watchProfileId: String? = null)
+
 @Serializable
 data class DeviceCodeStartRequest(val deviceName: String, val deviceKind: DeviceKind, val deviceId: String? = null)
 

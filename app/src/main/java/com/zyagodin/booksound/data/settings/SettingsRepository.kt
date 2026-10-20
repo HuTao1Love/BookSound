@@ -75,6 +75,10 @@ data class AppSettings(
     val nameTemplates: List<String> = NameTemplate.DEFAULTS,
     /** Template last applied in the import editor; applied again automatically when it fits. */
     val lastNameTemplate: String? = null,
+    /** Books imported on the phone go to the server too (when signed in). */
+    val serverAutoUpload: Boolean = false,
+    /** Watch profile of the server whose smaller copies go to the watch; null sends the phone's file. */
+    val serverWatchProfile: String? = null,
     /** False until the first settings snapshot has been read; lets the UI avoid flashing onboarding. */
     val loaded: Boolean = false,
 ) {
@@ -131,6 +135,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val syncCursor = stringPreferencesKey("sync_cursor")
         val nameTemplates = stringPreferencesKey("name_templates")
         val lastNameTemplate = stringPreferencesKey("last_name_template")
+        val serverAutoUpload = booleanPreferencesKey("server_auto_upload")
+        val serverWatchProfile = stringPreferencesKey("server_watch_profile")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -166,6 +172,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             backgroundPromptShown = p[Keys.backgroundPrompt] ?: false,
             nameTemplates = p[Keys.nameTemplates]?.split(TEMPLATE_SEPARATOR)?.filter { it.isNotBlank() } ?: NameTemplate.DEFAULTS,
             lastNameTemplate = p[Keys.lastNameTemplate],
+            serverAutoUpload = p[Keys.serverAutoUpload] ?: false,
+            serverWatchProfile = p[Keys.serverWatchProfile],
             loaded = true,
         )
     }
@@ -218,6 +226,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     suspend fun setLastNameTemplate(template: String?) = edit {
         if (template == null) it.remove(Keys.lastNameTemplate) else it[Keys.lastNameTemplate] = template
     }
+    suspend fun setServerAutoUpload(enabled: Boolean) = edit { it[Keys.serverAutoUpload] = enabled }
+    suspend fun setServerWatchProfile(id: String?) = edit { if (id == null) it.remove(Keys.serverWatchProfile) else it[Keys.serverWatchProfile] = id }
     suspend fun setBackgroundPromptShown() = edit { it[Keys.backgroundPrompt] = true }
     suspend fun setLastBook(bookId: String?) = edit { if (bookId == null) it.remove(Keys.lastBook) else it[Keys.lastBook] = bookId }
 

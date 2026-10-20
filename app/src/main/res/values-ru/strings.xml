@@ -320,8 +320,6 @@
     <string name="settings_mono_hint">Файлы меньше; для чтения обычно достаточно</string>
     <string name="settings_auto_cover">Искать обложки в интернете</string>
     <string name="settings_auto_cover_hint">Автоматически, если в файлах нет обложки</string>
-    <string name="settings_sync">Синхронизация</string>
-    <string name="settings_sync_hint">Только на устройстве. Синхронизацию с домашним сервером можно добавить позже.</string>
     <string name="settings_version">Версия %1$s</string>
     <string name="quality_48">48 кбит/с · самые маленькие файлы</string>
     <string name="quality_64">64 кбит/с · рекомендуется для речи</string>
@@ -585,4 +583,42 @@
     <string name="cast_problem_network">Подключитесь к Wi‑Fi: устройство получает книгу по локальной сети.</string>
     <string name="cast_problem_connect">Не удалось подключиться к устройству.</string>
     <string name="cast_problem_playback">Устройство не смогло воспроизвести книгу.</string>
+
+    <!-- Server -->
+    <string name="server_title">Сервер BookSound</string>
+    <string name="server_not_connected">Не подключён. Домашний сервер даёт общую библиотеку, конвертирует торренты и синхронизирует прогресс.</string>
+    <string name="server_signed_in_as">%1$s на %2$s</string>
+    <string name="server_sign_in">Войти</string>
+    <string name="server_address">Адрес сервера</string>
+    <string name="server_user">Имя пользователя</string>
+    <string name="server_password">Пароль</string>
+    <string name="server_wrong_password">Неверное имя или пароль</string>
+    <string name="server_unreachable">Сервер недоступен: %1$s</string>
+    <string name="server_about">Сервер необязателен: без него всё работает на телефоне, как раньше. С ним можно скачивать книги из библиотеки сервера, загружать туда свои, а прогресс прослушивания переходит между телефоном, часами и браузером.</string>
+    <string name="server_sync_now">Синхронизировать</string>
+    <string name="server_sign_out">Выйти</string>
+    <string name="server_group_options">Настройки</string>
+    <string name="server_auto_upload">Загружать новые книги</string>
+    <string name="server_auto_upload_hint">Книги, импортированные на телефоне, попадают и на сервер</string>
+    <string name="server_watch_copies">Книги для часов</string>
+    <string name="server_watch_original">Файл с телефона</string>
+    <string name="server_connect_watch">Подключить часы</string>
+    <string name="server_connect_watch_hint">Часы сами входят на сервер и скачивают книги по Wi-Fi</string>
+    <string name="server_connect">Подключить</string>
+    <string name="server_watch_connected">Часы подключены к серверу</string>
+    <string name="server_watch_not_connected">Часы с BookSound не найдены</string>
+    <string name="server_group_transfers">Передача</string>
+    <string name="server_clear">Очистить</string>
+    <string name="server_group_books">Только на сервере (%1$d)</string>
+    <string name="server_books_empty">Все книги сервера уже есть на телефоне.</string>
+    <string name="server_download">Скачать</string>
+    <string name="server_downloading">Скачивание с сервера</string>
+    <string name="server_uploading">Загрузка на сервер</string>
+    <string name="server_stage_queued">В очереди</string>
+    <string name="server_stage_done">Готово</string>
+    <string name="server_stage_failed">Ошибка: %1$s</string>
+    <string name="server_stage_cancelled">Отменено</string>
+    <string name="server_channel">Передача с сервером</string>
+    <string name="server_upload_started">Загрузка на сервер</string>
+    <string name="action_upload_to_server">Загрузить на сервер</string>
 </resources>

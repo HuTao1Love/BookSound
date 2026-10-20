@@ -99,10 +99,10 @@ class SyncService(
         val winner = when {
             current == null -> incoming
             incoming.stamp.updatedBy == current.stamp.updatedBy ->
-                if (incoming.stamp.updatedAt >= current.stamp.updatedAt) incoming else return null
+                if (incoming.stamp.updatedAt >= current.stamp.updatedAt) incoming else return rejected(userId, incoming)
             else -> resolver.resolve(current.toModel(), incoming.toModel(), null).winner.toDto()
         }
-        if (current != null && winner == current) return null
+        if (current != null && winner == current) return rejected(userId, incoming)
         val stored = winner.copy(
             stamp = StampDto(
                 revision = maxOf(winner.stamp.revision, (current?.stamp?.revision ?: 0) + 1),
@@ -113,6 +113,12 @@ class SyncService(
         )
         repo.savePlayback(userId, stored)
         return stored
+    }
+
+    /** The stored position won: it gets a new change number so the device that sent the losing one pulls it. */
+    private fun rejected(userId: String, incoming: PlaybackDto): PlaybackDto? {
+        repo.touchPlayback(userId, incoming.bookId)
+        return null
     }
 
     fun preferences(userId: String): PreferencesDto = repo.preferences(userId)?.first ?: PreferencesDto(

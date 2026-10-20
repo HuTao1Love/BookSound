@@ -8,12 +8,13 @@ import com.zyagodin.booksound.watch.data.WatchLibrary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Shares listening positions with the phone (see [DataLayerPositions]). */
-class PositionSync(context: Context, private val scope: CoroutineScope, private val library: WatchLibrary) {
+/** Shares listening positions with the phone (see [DataLayerPositions]) and the server, when connected. */
+class PositionSync(context: Context, private val scope: CoroutineScope, private val library: WatchLibrary, private val server: WatchServer) {
     private val positions = DataLayerPositions(context)
 
     /** Publishes a position saved here; Wear OS delivers it whenever the phone is reachable. */
     fun publish(record: PlaybackRecord) {
+        server.push(record)
         scope.launch {
             runCatching { positions.publish(record) }.onFailure { Log.w(TAG, "Can't publish ${record.bookId}", it) }
         }

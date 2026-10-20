@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Server tokens belong to this watch: restored elsewhere they would sign both devices out. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="server_account.xml" />
+</full-backup-content>

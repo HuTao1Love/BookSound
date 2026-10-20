@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object ImportsKey : NavKey
 @Serializable data object SettingsKey : NavKey
 @Serializable data object RemovedBooksKey : NavKey
+@Serializable data object ServerKey : NavKey
 
 @Composable
 fun appContainer(): AppContainer = (LocalContext.current.applicationContext as BookSoundApp).container

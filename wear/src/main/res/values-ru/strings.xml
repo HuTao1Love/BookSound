@@ -26,4 +26,14 @@
     <string name="open">Открыть</string>
     <string name="tile_no_books">На часах пока нет книг</string>
     <string name="complication_label">Прогресс книги</string>
+    <string name="server_title">Сервер BookSound</string>
+    <string name="server_not_connected">Не подключён. На телефоне: Настройки → Сервер BookSound → Подключить часы. Или войдите по коду.</string>
+    <string name="server_sign_in_code">Войти по коду</string>
+    <string name="server_address">Адрес сервера</string>
+    <string name="server_code">Введите %1$s в веб-версии: Аккаунт → Вход на часах</string>
+    <string name="server_code_expired">Код истёк, попробуйте снова</string>
+    <string name="server_preparing">Сервер готовит книгу…</string>
+    <string name="server_all_here">Все книги сервера уже на часах.</string>
+    <string name="server_sign_out">Выйти</string>
+    <string name="server_downloading">Скачивание с сервера</string>
 </resources>
