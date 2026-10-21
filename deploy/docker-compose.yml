@@ -17,3 +17,24 @@ services:
       # The router's address, so the server sees the real client address and https behind KeenDNS.
       BOOKSOUND_TRUSTED_PROXIES: "192.168.1.1"
       TZ: "Europe/Moscow"
+      # "Install update" on the admin page, through the watchtower service below (uncomment both). Without it the
+      # page shows the command to run instead: docker compose pull && docker compose up -d
+      # BOOKSOUND_UPDATER: "watchtower"
+      # BOOKSOUND_WATCHTOWER_URL: "http://watchtower:8080"
+      # BOOKSOUND_WATCHTOWER_TOKEN: "change-me-to-a-long-random-string"
+    labels:
+      # Watchtower updates only the containers with this label.
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # Pulls the new image and restarts the server when the admin page asks for it (and only then).
+  # watchtower:
+  #   image: nickfedor/watchtower:latest
+  #   container_name: watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     WATCHTOWER_HTTP_API_ENDPOINTS: "update"
+  #     WATCHTOWER_HTTP_API_TOKEN: "change-me-to-a-long-random-string"
+  #     WATCHTOWER_LABEL_ENABLE: "true"
+  #     WATCHTOWER_CLEANUP: "true"

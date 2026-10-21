@@ -11,6 +11,8 @@ Environment=BOOKSOUND_DATA=/var/lib/booksound
 Environment=BOOKSOUND_PORT=8080
 # Book names are not ASCII: Java needs a UTF-8 locale to name their files.
 Environment=LANG=C.UTF-8
+# The admin page installs updates through booksound-update.path.
+Environment=BOOKSOUND_UPDATER=systemd
 EnvironmentFile=-/etc/booksound.env
 ExecStart=/opt/booksound/bin/booksound-server
 Restart=on-failure

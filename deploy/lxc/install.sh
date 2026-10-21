@@ -12,7 +12,7 @@ set -eu
 REPO="HuTao1Love/BookSound"
 PREFIX=/opt/booksound
 DATA=/var/lib/booksound
-UNIT_URL="https://raw.githubusercontent.com/$REPO/main/deploy/lxc/booksound.service"
+RAW_URL="https://raw.githubusercontent.com/$REPO/main/deploy/lxc"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run as root." >&2
@@ -70,7 +70,6 @@ if [ -n "$BRANCH" ]; then
     # Without the Android parts (no SDK needed); memory kept low for a small container.
     (cd "$TMP/src" && ./gradlew --no-daemon -q -PserverOnly=true -PversionName="$VERSION"         -Pkotlin.compiler.execution.strategy=in-process "-Dorg.gradle.jvmargs=-Xmx1g" :server:distTar)
     ARCHIVE="$TMP/src/server/build/distributions/booksound-server.tar.gz"
-    cp "$TMP/src/deploy/lxc/booksound.service" "$TMP/booksound.service"
 elif [ -z "$ARCHIVE" ]; then
     echo "Downloading the latest release..."
     URL=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
@@ -96,15 +95,26 @@ cp -a "$SOURCE" "$PREFIX.new"
 rm -rf "$PREFIX"
 mv "$PREFIX.new" "$PREFIX"
 
-UNIT=/etc/systemd/system/booksound.service
+# The service, and the units that let the admin page install updates (booksound-update.*): from the built branch,
+# next to this script, or from GitHub when it was piped into sh.
 SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")
-if [ -f "$TMP/booksound.service" ]; then
-    cp "$TMP/booksound.service" "$UNIT"
-elif [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/booksound.service" ]; then
-    cp "$SCRIPT_DIR/booksound.service" "$UNIT"
-else
-    curl -fsSL -o "$UNIT" "$UNIT_URL"
-fi
+deploy_file() {
+    if [ -f "$TMP/src/deploy/lxc/$1" ]; then
+        cp "$TMP/src/deploy/lxc/$1" "$2"
+    elif [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/$1" ]; then
+        cp "$SCRIPT_DIR/$1" "$2"
+    else
+        curl -fsSL -o "$2" "$RAW_URL/$1"
+    fi
+}
+deploy_file booksound.service /etc/systemd/system/booksound.service
+deploy_file booksound-update.service /etc/systemd/system/booksound-update.service
+deploy_file booksound-update.path /etc/systemd/system/booksound-update.path
+mkdir -p /usr/local/lib/booksound
+deploy_file booksound-update.sh /usr/local/lib/booksound/update.sh
+chmod 755 /usr/local/lib/booksound/update.sh
+mkdir -p "$DATA/update"
+chown booksound:booksound "$DATA/update"
 
 if [ ! -f /etc/booksound.env ]; then
     cat > /etc/booksound.env <<'ENV'
@@ -118,6 +128,7 @@ fi
 
 systemctl daemon-reload
 systemctl enable --now booksound
+systemctl enable --now booksound-update.path
 echo
 echo "BookSound is running on port 8080 (see /etc/booksound.env)."
 echo "The setup token for the first account is in the log: journalctl -u booksound | grep 'setup token'"

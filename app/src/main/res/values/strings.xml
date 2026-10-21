@@ -601,11 +601,7 @@
     <string name="server_connect">Connect</string>
     <string name="server_watch_connected">The watch is connected to the server</string>
     <string name="server_watch_not_connected">No watch with BookSound found</string>
-    <string name="server_group_transfers">Transfers</string>
-    <string name="server_clear">Clear</string>
-    <string name="server_group_books">On the server only (%1$d)</string>
     <string name="server_books_empty">Every book of the server is on this phone.</string>
-    <string name="server_download">Download</string>
     <string name="server_downloading">Downloading from the server</string>
     <string name="server_uploading">Uploading to the server</string>
     <string name="server_stage_queued">Waiting</string>
@@ -636,4 +632,16 @@
         <item quantity="one">%1$d book, %2$s</item>
         <item quantity="other">%1$d books, %2$s</item>
     </plurals>
+    <string name="state_on_server">Only on the server</string>
+    <string name="state_not_on_server">Not on the server</string>
+    <string name="on_server_duration">On the server · %1$s</string>
+    <string name="action_download_to_phone">Download to phone</string>
+    <string name="action_download_to_phone_size">Download to phone · %1$s</string>
+    <string name="action_cancel_download">Cancel download</string>
+    <string name="action_cancel_upload">Cancel upload</string>
+    <string name="downloading_percent">Downloading · %1$d%%</string>
+    <string name="uploading_percent">Sending to the server · %1$d%%</string>
+    <string name="server_only_hint">The book is on the server. Download it to listen on this phone.</string>
+    <string name="server_bulk_upload">Send all books to the server (%1$d)</string>
+    <string name="server_bulk_download">Download all from the server (%1$d · %2$s)</string>
 </resources>

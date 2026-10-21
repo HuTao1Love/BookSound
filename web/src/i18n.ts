@@ -65,6 +65,11 @@ const en = {
     profileRateKeep: "As the source", profileCover: "Cover size, px (0 = none)", profileMode: "Make copies",
     modes: { ON_DEMAND: "When a watch asks", ALL_BOOKS: "For all books", IN_PROGRESS: "For books in progress" },
     newProfile: "New profile",
+    update: "Updates", updateVersion: "Version {{version}}", updateLatest: "Latest release: {{version}}", updateUnknown: "Can't reach GitHub to check for updates",
+    updateUpToDate: "This is the latest version", updateCheck: "Check", updateInstall: "Install update",
+    updateInstalling: "Installing the update; the server restarts by itself…", updateDone: "Updated to {{version}}, reloading…",
+    updateFailed: "The update failed", updateTimeout: "The server did not come back with a new version in 5 minutes",
+    updateManual: "This server can't update itself. Run this on its host:", copy: "Copy", copied: "Copied",
   },
 };
 
@@ -132,6 +137,11 @@ const ru: typeof en = {
     profileRateKeep: "Как в источнике", profileCover: "Обложка, px (0 — без неё)", profileMode: "Делать копии",
     modes: { ON_DEMAND: "Когда часы попросят", ALL_BOOKS: "Для всех книг", IN_PROGRESS: "Для начатых книг" },
     newProfile: "Новый профиль",
+    update: "Обновления", updateVersion: "Версия {{version}}", updateLatest: "Последний релиз: {{version}}", updateUnknown: "Не удалось проверить обновления на GitHub",
+    updateUpToDate: "Установлена последняя версия", updateCheck: "Проверить", updateInstall: "Установить обновление",
+    updateInstalling: "Обновление устанавливается, сервер перезапустится сам…", updateDone: "Обновлено до {{version}}, перезагружаю…",
+    updateFailed: "Обновление не удалось", updateTimeout: "Сервер не вернулся с новой версией за 5 минут",
+    updateManual: "Этот сервер не может обновиться сам. Выполните на его хосте:", copy: "Скопировать", copied: "Скопировано",
   },
 };
 

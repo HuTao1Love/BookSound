@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
@@ -85,9 +87,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
@@ -112,6 +116,7 @@ fun LibraryScreen(navigator: AppNavigator) {
     val vm = appViewModel { LibraryViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val lowStorage by vm.lowStorage.collectAsStateWithLifecycle()
+    val transfers by vm.transfers.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -216,6 +221,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                         SeriesSectionView(
                             section = section,
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
+                            transfers = transfers,
                             onOpen = { navigator.openBook(it.id) },
                             onLongClick = { actionsFor = it.id },
                             onOpenSeries = navigator::openSeries,
@@ -242,7 +248,20 @@ fun LibraryScreen(navigator: AppNavigator) {
     if (actionItem != null) {
         BookActionsSheet(
             item = actionItem,
+            transfer = transfers[actionItem.id],
             onDismiss = { actionsFor = null },
+            onDownload = {
+                actionsFor = null
+                vm.download(actionItem)
+            },
+            onUpload = {
+                actionsFor = null
+                vm.upload(actionItem)
+            },
+            onCancelTransfer = {
+                actionsFor = null
+                vm.cancelTransfer(it)
+            },
             onPlay = {
                 actionsFor = null
                 vm.play(actionItem)
@@ -475,11 +494,18 @@ private fun SortField.label(): Int = when (this) {
     SortField.PROGRESS -> R.string.sort_progress
 }
 
-/** Long-press menu of a book in the library and in a series. */
+/**
+ * Long-press menu of a book in the library and in a series. A book only on the server can be downloaded and
+ * looked at; one the server lacks can be sent there.
+ */
 @Composable
 internal fun BookActionsSheet(
     item: LibraryItem,
+    transfer: ServerTransfer?,
     onDismiss: () -> Unit,
+    onDownload: () -> Unit,
+    onUpload: () -> Unit,
+    onCancelTransfer: (ServerTransfer) -> Unit,
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     onEdit: () -> Unit,
@@ -495,15 +521,32 @@ internal fun BookActionsSheet(
                 item.metadata.author?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        SheetAction(Icons.Rounded.PlayArrow, stringResource(if (item.entry.positionMs > 0) R.string.action_resume else R.string.action_play), onPlay, enabled = !item.isMissing)
-        SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
-        SheetAction(Icons.Rounded.Edit, stringResource(R.string.action_edit_details), onEdit, enabled = !item.isMissing)
-        SheetAction(
-            if (item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle,
-            stringResource(if (item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished),
-            onToggleFinished,
-        )
-        SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
+        if (transfer != null) {
+            SheetAction(
+                Icons.Rounded.Close,
+                stringResource(if (transfer.direction == ServerTransfer.Direction.DOWNLOAD) R.string.action_cancel_download else R.string.action_cancel_upload),
+                { onCancelTransfer(transfer) },
+            )
+        }
+        if (item.onServerOnly) {
+            if (transfer == null) {
+                SheetAction(Icons.Rounded.CloudDownload, stringResource(R.string.action_download_to_phone_size, formatSize(LocalContext.current, item.entry.book.file.sizeBytes)), onDownload)
+            }
+            SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
+        } else {
+            SheetAction(Icons.Rounded.PlayArrow, stringResource(if (item.entry.positionMs > 0) R.string.action_resume else R.string.action_play), onPlay, enabled = !item.isMissing)
+            SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
+            if (item.location == BookLocation.PHONE_ONLY && transfer == null) {
+                SheetAction(Icons.Rounded.CloudUpload, stringResource(R.string.action_upload_to_server), onUpload, enabled = !item.isMissing)
+            }
+            SheetAction(Icons.Rounded.Edit, stringResource(R.string.action_edit_details), onEdit, enabled = !item.isMissing)
+            SheetAction(
+                if (item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle,
+                stringResource(if (item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished),
+                onToggleFinished,
+            )
+            SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(Spacing.lg))
     }
 }

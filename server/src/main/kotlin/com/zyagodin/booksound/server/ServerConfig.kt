@@ -16,6 +16,11 @@ data class ServerConfig(
     val ffmpeg: String,
     val torrentsEnabled: Boolean,
     val version: String,
+    /** What installs a newer release: "systemd" (the LXC install's update unit), "watchtower" or nothing. */
+    val updater: String? = null,
+    /** Watchtower's HTTP API, e.g. http://watchtower:8080, and its token. */
+    val watchtowerUrl: String? = null,
+    val watchtowerToken: String? = null,
 ) {
     val libraryDir get() = File(dataDir, "library")
     val coversDir get() = File(dataDir, "covers")
@@ -24,6 +29,7 @@ data class ServerConfig(
     val uploadsDir get() = File(dataDir, "uploads")
     val workDir get() = File(dataDir, "work")
     val database get() = File(dataDir, "booksound.db")
+    val updateDir get() = File(dataDir, "update")
 
     fun createDirectories() {
         listOf(dataDir, libraryDir, coversDir, derivedDir, torrentsDir, uploadsDir, workDir).forEach { it.mkdirs() }
@@ -44,6 +50,9 @@ data class ServerConfig(
                 torrentsEnabled = value("TORRENTS")?.lowercase() != "off",
                 version = ServerConfig::class.java.getResource("/booksound-version.txt")?.readText()?.trim()
                     ?.takeIf { !it.startsWith("$") } ?: "dev",
+                updater = value("UPDATER")?.lowercase(),
+                watchtowerUrl = value("WATCHTOWER_URL")?.trimEnd('/'),
+                watchtowerToken = value("WATCHTOWER_TOKEN"),
             )
         }
     }
