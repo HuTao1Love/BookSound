@@ -227,7 +227,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                             modifier = Modifier.heightIn(min = 320.dp),
                         )
                     }
-                    else -> items(state.groups, key = { "series:" + (it.series ?: "") }) { section ->
+                    else -> items(state.groups, key = { it.key }) { section ->
                         SeriesSectionView(
                             section = section,
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
