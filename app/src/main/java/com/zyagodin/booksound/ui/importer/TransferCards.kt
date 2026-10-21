@@ -56,6 +56,7 @@ fun ServerTransfer.toRow(onCancel: () -> Unit) = TransferRow(
         when (stage) {
             ServerTransfer.Stage.QUEUED -> stringResource(R.string.server_stage_queued)
             ServerTransfer.Stage.RUNNING -> progress?.let { "${(it * 100).toInt()}%" } ?: "…"
+            ServerTransfer.Stage.FINISHING -> stringResource(R.string.server_stage_finishing)
             ServerTransfer.Stage.DONE -> stringResource(R.string.server_stage_done)
             ServerTransfer.Stage.FAILED -> stringResource(R.string.server_stage_failed, error.orEmpty())
             ServerTransfer.Stage.CANCELLED -> stringResource(R.string.server_stage_cancelled)

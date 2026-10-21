@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError, paths } from "../api/client";
 import { keys } from "../api/hooks";
 import type { SessionDto } from "../api/types.gen";
+import { Logo } from "../components/Ui";
 
 export default function LoginPage({ setup }: { setup: boolean }) {
   const { t } = useTranslation();
@@ -37,13 +38,20 @@ export default function LoginPage({ setup }: { setup: boolean }) {
   };
 
   return (
-    <Box sx={{ minHeight: "100dvh", display: "grid", placeItems: "center", p: 2 }}>
-      <Card sx={{ width: "100%", maxWidth: 400 }} variant="outlined">
-        <CardContent>
+    <Box
+      sx={(th) => ({
+        minHeight: "100dvh", display: "grid", placeItems: "center", p: 2,
+        background: `radial-gradient(50% 45% at 25% 15%, ${th.palette.gradient.from}26, transparent), radial-gradient(45% 40% at 85% 85%, ${th.palette.gradient.to}1f, transparent)`,
+      })}
+    >
+      <Card sx={{ width: "100%", maxWidth: 420, backdropFilter: "blur(12px)" }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Stack component="form" spacing={2} onSubmit={submit}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              {setup ? t("login.setupTitle") : t("appName")}
-            </Typography>
+            <Stack spacing={1.5} sx={{ alignItems: "center", textAlign: "center", pb: 1 }}>
+              <Logo size={64} />
+              <Typography variant="h5">{setup ? t("login.setupTitle") : t("appName")}</Typography>
+              {!setup && <Typography color="text.secondary">{t("login.tagline")}</Typography>}
+            </Stack>
             {setup && <Typography color="text.secondary">{t("login.setupHint")}</Typography>}
             {error && <Alert severity="error">{error}</Alert>}
             {setup && <TextField label={t("login.setupToken")} value={token} onChange={(e) => setToken(e.target.value)} required autoComplete="off" />}

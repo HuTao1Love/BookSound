@@ -26,6 +26,7 @@ import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.cover.CoverImages
 import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.data.db.AppDatabase
+import com.zyagodin.booksound.data.db.BookEntity
 import com.zyagodin.booksound.data.db.PlaybackStateEntity
 import com.zyagodin.booksound.data.db.ServerBookEntity
 import com.zyagodin.booksound.data.library.LibraryRepository
@@ -68,9 +69,10 @@ data class ServerTransfer(
     val error: String? = null,
 ) {
     enum class Direction { DOWNLOAD, UPLOAD }
-    enum class Stage { QUEUED, RUNNING, DONE, FAILED, CANCELLED }
+    /** [FINISHING]: every byte is on the server, which checks the book and adds it to the library. */
+    enum class Stage { QUEUED, RUNNING, FINISHING, DONE, FAILED, CANCELLED }
 
-    val isActive get() = stage == Stage.QUEUED || stage == Stage.RUNNING
+    val isActive get() = stage == Stage.QUEUED || stage == Stage.RUNNING || stage == Stage.FINISHING
     val progress: Float? get() = if (totalBytes > 0) (doneBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else null
 }
 
@@ -156,6 +158,12 @@ class ServerManager(
         remote.filter { it.id !in here }.map { ServerOnlyBook(it, positions[it.id]?.positionMs, positions[it.id]?.finished == true) }
     }
 
+    /** Books on the phone that the server does not have. */
+    fun phoneOnlyBooks(): Flow<List<BookEntity>> = combine(db.server().observeBooks(), db.books().observeLibrary()) { remote, local ->
+        val there = remote.map { it.id }.toSet()
+        local.map { it.book }.filter { it.id !in there && it.missingSince == null }
+    }
+
     /** Ids of the books the server has. */
     fun serverBookIds(): Flow<Set<String>> = db.server().observeBooks().map { list -> list.map { it.id }.toSet() }
 
@@ -167,6 +175,12 @@ class ServerManager(
     fun download(book: ServerBookEntity) = enqueue(ServerTransfer(book.id, book.title, ServerTransfer.Direction.DOWNLOAD, totalBytes = book.sizeBytes))
 
     fun upload(bookId: String, title: String) = enqueue(ServerTransfer(bookId, title, ServerTransfer.Direction.UPLOAD))
+
+    /** Sends every book of the phone that the server lacks. */
+    fun uploadAll(books: List<BookEntity>) = books.forEach { upload(it.id, it.title) }
+
+    /** Brings every book of the server that the phone lacks. */
+    fun downloadAll(books: List<ServerOnlyBook>) = books.forEach { download(it.entity) }
 
     private fun enqueue(transfer: ServerTransfer) {
         if (accounts.current == null) return
@@ -200,7 +214,9 @@ class ServerManager(
         try {
             when (transfer.direction) {
                 ServerTransfer.Direction.DOWNLOAD -> downloadBook(transfer.bookId) { d, t -> progress(key, d, t) }
-                ServerTransfer.Direction.UPLOAD -> uploadBook(transfer.bookId) { d, t -> progress(key, d, t) }
+                ServerTransfer.Direction.UPLOAD -> uploadBook(transfer.bookId, { d, t -> progress(key, d, t) }) {
+                    setStage(key, ServerTransfer.Stage.FINISHING)
+                }
             }
             setStage(key, ServerTransfer.Stage.DONE)
             requestSync()
@@ -290,7 +306,7 @@ class ServerManager(
     }
 
     /** Sends a library book to the server; it lands in the shared library with the same id. */
-    private suspend fun uploadBook(bookId: String, onProgress: (Long, Long) -> Unit) {
+    private suspend fun uploadBook(bookId: String, onProgress: (Long, Long) -> Unit, onFinishing: () -> Unit) {
         val book = library.book(bookId)?.takeIf { !it.deleted } ?: throw IOException("The book is gone")
         val uri = Uri.parse(book.fileUri)
         val size = documents.describe(uri)?.second?.takeIf { it > 0 } ?: throw IOException("Can't read the book file")
@@ -311,7 +327,18 @@ class ServerManager(
             },
             onProgress = onProgress,
         )
-        client.post(ApiPaths.uploadComplete(upload.id), "", String.serializer(), UploadResultDto.serializer())
+        onFinishing()
+        // The server keeps the upload when adding it fails on its side, so that is worth another try.
+        var attempt = 0
+        while (true) {
+            try {
+                client.post(ApiPaths.uploadComplete(upload.id), "", String.serializer(), UploadResultDto.serializer())
+                return
+            } catch (e: ServerException) {
+                if (e.status < 500 || ++attempt >= COMPLETE_ATTEMPTS) throw e
+                delay(5_000L * attempt)
+            }
+        }
     }
 
     // ----------------------------------------------------------------------------------- watch
@@ -371,6 +398,7 @@ class ServerManager(
     }
 
     companion object {
+        private const val COMPLETE_ATTEMPTS = 3
         private const val TAG = "ServerManager"
         private const val WATCH_COPY_WAIT_MS = 15 * 60 * 1000L
     }

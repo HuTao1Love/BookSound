@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#1c1b1f" />
+    <meta name="theme-color" content="#0f1117" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#faf7f3" media="(prefers-color-scheme: light)" />
+    <link rel="preload" href="/fonts/manrope.ttf" as="font" type="font/ttf" crossorigin />
+    <style>
+      @font-face { font-family: "Manrope"; src: url("/fonts/manrope.ttf") format("truetype"); font-weight: 200 800; font-display: swap; }
+      html { background: #0f1117; }
+      @media (prefers-color-scheme: light) { html { background: #faf7f3; } }
+    </style>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>BookSound</title>
   </head>
