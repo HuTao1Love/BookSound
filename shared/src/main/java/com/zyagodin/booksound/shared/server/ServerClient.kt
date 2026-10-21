@@ -77,14 +77,14 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
      * A request that needs no login (device codes). A 202 answer ("not yet") comes back as a
      * [ServerException] with status 202.
      */
-    suspend fun <B, T> postAnonymous(url: String, path: String, body: B, bodySerializer: KSerializer<B>, serializer: KSerializer<T>): T {
+    suspend fun <B, T> postAnonymous(url: String, path: String, body: B, bodySerializer: KSerializer<B>, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(endpoint(url, path)).post(ApiJson.encodeToString(bodySerializer, body).toRequestBody(json)).build()
         val response = execute(request)
         if (response.code == 202) {
             response.close()
             throw ServerException(202, "pending", null)
         }
-        return decode(serializer, response)
+        decode(serializer, response)
     }
 
     /** Takes over a login handed over by the phone (a watch's own device and tokens). */
@@ -105,12 +105,13 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
 
     private suspend fun send(method: String, path: String, body: String): Response = authorized(path) { it.method(method, body.toRequestBody(json)) }
 
-    private suspend fun authorized(path: String, build: (Request.Builder) -> Request.Builder): Response {
+    // Reading or closing a response touches the socket: everything here runs off the main thread.
+    private suspend fun authorized(path: String, build: (Request.Builder) -> Request.Builder): Response = withContext(Dispatchers.IO) {
         val first = execute(build(request(path, accessToken())).build(), checkStatus = false)
-        if (first.code != 401) return checked(first)
+        if (first.code != 401) return@withContext checked(first)
         first.close()
         val token = accessToken(forceRefresh = true)
-        return execute(build(request(path, token)).build())
+        execute(build(request(path, token)).build())
     }
 
     /**
@@ -252,8 +253,9 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
         throw ServerException(response.code, error?.code ?: response.code.toString(), error?.message)
     }
 
-    private fun <T> decode(serializer: KSerializer<T>, response: Response): T =
+    private suspend fun <T> decode(serializer: KSerializer<T>, response: Response): T = withContext(Dispatchers.IO) {
         response.use { ApiJson.decodeFromString(serializer, it.body.string()) }
+    }
 
     companion object {
         private const val CHUNK_BYTES = 8L * 1024 * 1024
