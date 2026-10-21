@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/HuTao1Love/BookSound/main/deploy/lxc/install.sh | sh
 #   sh install.sh /path/to/booksound-server.tar.gz      # a local archive instead of the latest release
+#   sh install.sh --source claude/server                # build a branch from GitHub (needs ~2 GB RAM)
 #
 # Data lives in /var/lib/booksound (library, database, covers); settings in /etc/booksound.env.
 # Running it again updates the program and keeps the data.
@@ -18,13 +19,24 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+ARCHIVE=
+BRANCH=
+if [ "${1:-}" = "--source" ]; then
+    BRANCH=${2:-main}
+else
+    ARCHIVE=${1:-}
+fi
+
 echo "Installing Java and ffmpeg..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq ffmpeg curl ca-certificates gnupg >/dev/null
 # The server needs Java 21 or newer. Distributions without it (Debian 12 ships 17) get Eclipse Temurin.
+# Building from source takes a JDK (Gradle then fetches the JDK it builds with by itself).
+KIND=jre
+[ -n "$BRANCH" ] && KIND=jdk
 JAVA=
-for candidate in openjdk-25-jre-headless openjdk-21-jre-headless temurin-25-jre temurin-21-jre; do
+for candidate in "openjdk-25-$KIND-headless" "openjdk-21-$KIND-headless" "temurin-25-$KIND" "temurin-21-$KIND"; do
     if apt-cache show "$candidate" >/dev/null 2>&1; then JAVA=$candidate; break; fi
 done
 if [ -z "$JAVA" ]; then
@@ -38,9 +50,10 @@ if [ -z "$JAVA" ]; then
     echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $CODENAME main" \
         > /etc/apt/sources.list.d/adoptium.list
     apt-get update -qq
-    JAVA=temurin-21-jre
+    JAVA=temurin-21-$KIND
 fi
 apt-get install -y -qq "$JAVA" >/dev/null
+[ -n "$BRANCH" ] && apt-get install -y -qq git >/dev/null
 
 if ! id booksound >/dev/null 2>&1; then
     useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin booksound
@@ -48,10 +61,17 @@ fi
 mkdir -p "$DATA"
 chown booksound:booksound "$DATA"
 
-ARCHIVE=${1:-}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-if [ -z "$ARCHIVE" ]; then
+if [ -n "$BRANCH" ]; then
+    echo "Building branch $BRANCH from GitHub (several minutes)..."
+    git clone -q --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$TMP/src"
+    VERSION="$(sed -n 's/^appVersion=//p' "$TMP/src/gradle.properties" | tr -d '[:space:]')-$(git -C "$TMP/src" rev-parse --short HEAD)"
+    # Without the Android parts (no SDK needed); memory kept low for a small container.
+    (cd "$TMP/src" && ./gradlew --no-daemon -q -PserverOnly=true -PversionName="$VERSION"         -Pkotlin.compiler.execution.strategy=in-process "-Dorg.gradle.jvmargs=-Xmx1g" :server:distTar)
+    ARCHIVE="$TMP/src/server/build/distributions/booksound-server.tar.gz"
+    cp "$TMP/src/deploy/lxc/booksound.service" "$TMP/booksound.service"
+elif [ -z "$ARCHIVE" ]; then
     echo "Downloading the latest release..."
     URL=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
         | grep -o '"browser_download_url": *"[^"]*BookSound-Server-[^"]*\.tar\.gz"' | head -n 1 | cut -d '"' -f 4)
@@ -78,7 +98,9 @@ mv "$PREFIX.new" "$PREFIX"
 
 UNIT=/etc/systemd/system/booksound.service
 SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")
-if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/booksound.service" ]; then
+if [ -f "$TMP/booksound.service" ]; then
+    cp "$TMP/booksound.service" "$UNIT"
+elif [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/booksound.service" ]; then
     cp "$SCRIPT_DIR/booksound.service" "$UNIT"
 else
     curl -fsSL -o "$UNIT" "$UNIT_URL"
