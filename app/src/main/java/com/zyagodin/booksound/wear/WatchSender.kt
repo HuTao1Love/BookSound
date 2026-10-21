@@ -62,6 +62,8 @@ class WatchSender(
     private val context: Context,
     private val scope: CoroutineScope,
     private val library: LibraryRepository,
+    /** A smaller copy of the book to send instead of the library file (from the server), or null. */
+    private val watchCopy: suspend (bookId: String, onWaiting: () -> Unit) -> java.io.File? = { _, _ -> null },
 ) {
     private val capabilities = Wearable.getCapabilityClient(context)
     private val messages = Wearable.getMessageClient(context)
@@ -145,13 +147,23 @@ class WatchSender(
     private suspend fun send(id: String): WatchTransfer.Stage {
         val book = library.book(id)?.takeIf { !it.deleted } ?: return WatchTransfer.Stage.FAILED
         val node = watchNode() ?: return WatchTransfer.Stage.NO_WATCH
+        val copy = watchCopy(id) {}
+        try {
+            return sendFile(id, book, node, copy)
+        } finally {
+            copy?.delete()
+        }
+    }
+
+    private suspend fun sendFile(id: String, book: com.zyagodin.booksound.data.db.BookEntity, node: Node, copy: java.io.File?): WatchTransfer.Stage {
+        val fileSize = copy?.length() ?: book.fileSize
         val result = CompletableDeferred<WatchResult>().also { results[id] = it }
         val header = WatchBookHeader(
             id = BookId(id),
             metadata = book.metadata(),
             durationMs = book.durationMs,
             chapters = library.chapters(id),
-            fileSize = book.fileSize,
+            fileSize = fileSize,
             fileRevision = book.fileRevision,
             playback = library.playbackState(id)?.let {
                 PlaybackRecord(BookId(id), it.positionMs, it.speed, it.finished, it.lastPlayedAt, SyncStamp(it.revision, it.updatedAt, DeviceId(it.updatedBy), dirty = false))
@@ -159,12 +171,12 @@ class WatchSender(
             cover = book.coverPath?.let(::smallCover),
         )
         messages.sendMessage(node.id, WatchPaths.HEADER_PREFIX + id, WatchCodec.encodeHeader(header)).await()
-        _transfers.update { list -> list.map { if (it.bookId == id) it.copy(stage = WatchTransfer.Stage.SENDING, sentBytes = 0, totalBytes = book.fileSize) else it } }
+        _transfers.update { list -> list.map { if (it.bookId == id) it.copy(stage = WatchTransfer.Stage.SENDING, sentBytes = 0, totalBytes = fileSize) else it } }
 
         val channel = channels.openChannel(node.id, WatchPaths.BOOK_PREFIX + id).await()
         try {
             channels.getOutputStream(channel).await().use { output ->
-                val input = context.contentResolver.openInputStream(Uri.parse(book.fileUri)) ?: throw IOException("Can't open the book file")
+                val input = copy?.inputStream() ?: context.contentResolver.openInputStream(Uri.parse(book.fileUri)) ?: throw IOException("Can't open the book file")
                 input.use {
                     val buffer = ByteArray(BUFFER_SIZE)
                     var sent = 0L

@@ -29,4 +29,13 @@
     <string name="tile_no_books">No books on the watch yet</string>
     <string name="tile_percent">%1$d%%</string>
     <string name="complication_label">Book progress</string>
+    <string name="server_title">BookSound server</string>
+    <string name="server_preparing">The server prepares the book…</string>
+    <string name="server_all_here">Every book of the server is on the watch.</string>
+    <string name="server_sign_out">Sign out</string>
+    <string name="server_downloading">Downloading from the server</string>
+    <string name="server_not_connected">The watch uses the phone’s account. Sign in on the phone: Settings → BookSound server.</string>
+    <string name="server_sign_in_phone">Sign in via the phone</string>
+    <string name="server_asking_phone">Asking the phone… If it is signed in, the watch connects in a moment.</string>
+    <string name="server_phone_missing">The phone with BookSound is out of reach.</string>
 </resources>

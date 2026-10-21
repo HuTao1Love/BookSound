@@ -118,7 +118,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
     // BitTorrent engine (libtorrent via SWIG) with native libraries for ARM devices and x86_64 emulators.
-    implementation(libs.libtorrent4j)
+    implementation(project(":torrent"))
     implementation(libs.libtorrent4j.android.arm)
     implementation(libs.libtorrent4j.android.arm64)
     implementation(libs.libtorrent4j.android.amd64)

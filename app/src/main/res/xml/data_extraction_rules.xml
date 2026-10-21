@@ -6,8 +6,11 @@
     <cloud-backup>
         <!-- Torrent downloads are large, temporary and tied to this device. -->
         <exclude domain="external" path="torrent-downloads/" />
+        <!-- Server tokens belong to this device: restored elsewhere they would sign both devices out. -->
+        <exclude domain="sharedpref" path="server_account.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="external" path="torrent-downloads/" />
+        <exclude domain="sharedpref" path="server_account.xml" />
     </device-transfer>
 </data-extraction-rules>

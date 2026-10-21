@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // and sync contracts. Must not depend on Android so a future backend can reuse it.
 plugins {
     alias(libs.plugins.jetbrains.kotlin.jvm)
+    `java-test-fixtures`
 }
 
 java {

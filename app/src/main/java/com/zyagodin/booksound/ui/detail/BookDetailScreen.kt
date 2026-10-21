@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Watch
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -114,6 +115,11 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     val player: StateFlow<PlayerUiState> = container.player.state
     val watchConnected: StateFlow<Boolean> = container.watchSender.watchConnected
 
+    /** Signed in to a server that doesn't have this book yet. */
+    val canUpload: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(container.server.account, container.server.serverBookIds()) { account, ids ->
+        account != null && bookId !in ids
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     init {
         container.watchSender.refreshWatch()
     }
@@ -124,6 +130,7 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     fun setFinished(finished: Boolean) = viewModelScope.launch { container.library.setFinished(bookId, finished) }
     fun rescan() = viewModelScope.launch { container.scanner.scan() }
     fun sendToWatch(title: String) = container.watchSender.send(bookId, title)
+    fun uploadToServer(title: String) = container.server.upload(bookId, title)
 
     fun remove(deleteFile: Boolean) = viewModelScope.launch {
         if (container.player.state.value.bookId == bookId) container.player.stop()
@@ -154,6 +161,7 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     val state by vm.state.collectAsStateWithLifecycle()
     val playerState = vm.player.collectAsStateWithLifecycle()
     val watchConnected by vm.watchConnected.collectAsStateWithLifecycle()
+    val canUpload by vm.canUpload.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val live = remember(bookId, playerState) { LivePlayback(bookId, playerState) }
     var showRemove by rememberSaveable { mutableStateOf(false) }
@@ -168,7 +176,7 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
             val details = s.details
             val finished = details.item.entry.finished
             val title = details.item.metadata.title
-            val actions = remember(vm, navigator, finished, watchConnected, title) {
+            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title) {
                 DetailActions(
                     onBack = navigator::back,
                     onPlay = {
@@ -190,6 +198,12 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                         {
                             vm.sendToWatch(title)
                             Toast.makeText(context, R.string.watch_send_started, Toast.LENGTH_SHORT).show()
+                        }
+                    } else null,
+                    onUploadToServer = if (canUpload) {
+                        {
+                            vm.uploadToServer(title)
+                            Toast.makeText(context, R.string.server_upload_started, Toast.LENGTH_SHORT).show()
                         }
                     } else null,
                 )
@@ -260,6 +274,8 @@ private class DetailActions(
     val onSearch: (String) -> Unit,
     /** Null when no watch with BookSound is connected. */
     val onSendToWatch: (() -> Unit)?,
+    /** Null unless signed in to a server that lacks the book. */
+    val onUploadToServer: (() -> Unit)? = null,
 )
 
 @Composable
@@ -349,6 +365,14 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
                         leadingIcon = { Icon(Icons.Rounded.Watch, null) },
                         enabled = !details.item.isMissing,
                         onClick = { menu = false; send() },
+                    )
+                }
+                actions.onUploadToServer?.let { upload ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_upload_to_server)) },
+                        leadingIcon = { Icon(Icons.Rounded.CloudUpload, null) },
+                        enabled = !details.item.isMissing,
+                        onClick = { menu = false; upload() },
                     )
                 }
                 DropdownMenuItem(

@@ -31,6 +31,12 @@ import java.io.IOException
  * "pause" as a message to the phone that declares PHONE_CAPABILITY.
  */
 object WatchPaths {
+    /** Message phone → watch: JSON `WatchServerLogin`, the watch's own login to the user's server. Empty body: signed out. */
+    const val SERVER_AUTH_PATH = "/booksound/server-auth"
+
+    /** Message watch → phone, empty body: "sign me in with your account"; the phone answers on [SERVER_AUTH_PATH]. */
+    const val SERVER_AUTH_REQUEST_PATH = "/booksound/server-auth-request"
+
     /** Capability the watch app declares, so the phone finds watches that have it installed. */
     const val WATCH_CAPABILITY = "booksound_watch"
     const val HEADER_PREFIX = "/booksound/header/"
