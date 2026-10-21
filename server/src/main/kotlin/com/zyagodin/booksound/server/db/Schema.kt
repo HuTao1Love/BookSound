@@ -137,5 +137,9 @@ object Schema {
         """
         ALTER TABLE devices ADD COLUMN refreshed_at INTEGER;
         """,
+        // 3: the device an upload comes from, to show uploads under way with their sender.
+        """
+        ALTER TABLE uploads ADD COLUMN device_id TEXT;
+        """,
     )
 }

@@ -8,6 +8,7 @@ import type {
   LibraryEntryDto,
   PreferencesDto,
   ServerSettingsDto,
+  UploadDto,
   SessionDto,
   StatusDto,
   TorrentDto,
@@ -21,6 +22,7 @@ export const keys = {
   books: ["books"],
   book: (id: string) => ["books", id],
   imports: ["imports"],
+  uploads: ["uploads"],
   torrents: ["torrents"],
   devices: ["devices"],
   users: ["users"],
@@ -31,10 +33,31 @@ export const keys = {
 
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: () => api.get<StatusDto>(paths.status) });
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => api.get<SessionDto>(paths.me), retry: false });
-export const useBooks = () => useQuery({ queryKey: keys.books, queryFn: () => api.get<LibraryEntryDto[]>(paths.books) });
+// Live updates come over server-sent events, but proxies (the router's KeenDNS among them) may cut that stream:
+// lists that show progress also poll, quickly while something is under way.
+const activeStages = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
+
+export const useBooks = () => useQuery({ queryKey: keys.books, queryFn: () => api.get<LibraryEntryDto[]>(paths.books), refetchInterval: 60_000 });
 export const useBook = (id: string) => useQuery({ queryKey: keys.book(id), queryFn: () => api.get<LibraryEntryDto>(paths.book(id)) });
-export const useImports = () => useQuery({ queryKey: keys.imports, queryFn: () => api.get<ImportJobDto[]>(paths.imports) });
-export const useTorrents = () => useQuery({ queryKey: keys.torrents, queryFn: () => api.get<TorrentDto[]>(paths.torrents) });
+export const useImports = () =>
+  useQuery({
+    queryKey: keys.imports,
+    queryFn: () => api.get<ImportJobDto[]>(paths.imports),
+    refetchInterval: (q) => (q.state.data?.some((j) => activeStages.includes(j.stage)) ? 3_000 : 30_000),
+  });
+export const useTorrents = () =>
+  useQuery({
+    queryKey: keys.torrents,
+    queryFn: () => api.get<TorrentDto[]>(paths.torrents),
+    refetchInterval: (q) => (q.state.data?.some((t) => t.phase !== "COMPLETED" && t.phase !== "FAILED") ? 3_000 : 30_000),
+  });
+/** Files on their way to the server from any device. */
+export const useUploads = () =>
+  useQuery({
+    queryKey: keys.uploads,
+    queryFn: () => api.get<UploadDto[]>(paths.uploads),
+    refetchInterval: (q) => (q.state.data?.length ? 3_000 : 15_000),
+  });
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>(paths.devices) });
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api.get<UserDto[]>(paths.users) });
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api.get<ServerSettingsDto>(paths.settings) });

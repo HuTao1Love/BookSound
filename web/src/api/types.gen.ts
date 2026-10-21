@@ -178,6 +178,7 @@ export interface UploadDto {
   sizeBytes: number;
   receivedBytes: number;
   kind: UploadKind;
+  from?: string | null;
 }
 
 export interface UploadResultDto {
