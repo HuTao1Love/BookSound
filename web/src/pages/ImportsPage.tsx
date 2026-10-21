@@ -144,7 +144,7 @@ function TorrentsCard() {
           ) : (
             <List disablePadding>
               {list.data!.map((torrent) => (
-                <TorrentRow key={torrent.id} torrent={torrent} onReview={(book) => setReview({ torrent, book })} />
+                <TorrentRow key={torrent.id} torrent={torrent} onReview={(book) => setReview({ torrent, book })} onError={setError} />
               ))}
             </List>
           )}
@@ -155,13 +155,17 @@ function TorrentsCard() {
   );
 }
 
-function TorrentRow({ torrent, onReview }: { torrent: TorrentDto; onReview: (book: TorrentBookDto) => void }) {
+function TorrentRow({ torrent, onReview, onError }: { torrent: TorrentDto; onReview: (book: TorrentBookDto) => void; onError: (message: string) => void }) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const navigate = useNavigate();
   const remove = async () => {
-    await api.delete(`${paths.torrents}/${torrent.id}`);
-    client.setQueryData<TorrentDto[]>(keys.torrents, (old) => old?.filter((x) => x.id !== torrent.id));
+    try {
+      await api.delete(`${paths.torrents}/${torrent.id}`);
+      client.setQueryData<TorrentDto[]>(keys.torrents, (old) => old?.filter((x) => x.id !== torrent.id));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
   };
   const downloading = torrent.phase === "DOWNLOADING";
   return (
@@ -175,7 +179,7 @@ function TorrentRow({ torrent, onReview }: { torrent: TorrentDto; onReview: (boo
           </Typography>
           {torrent.error && <Typography variant="body2" color="error">{torrent.error}</Typography>}
         </Box>
-        {torrent.phase === "FAILED" && <IconButton onClick={() => void api.post(`${paths.torrents}/${torrent.id}/retry`)} aria-label={t("common.retry")}><RefreshIcon /></IconButton>}
+        {torrent.phase === "FAILED" && <IconButton onClick={() => api.post(`${paths.torrents}/${torrent.id}/retry`).catch((e: Error) => onError(e.message))} aria-label={t("common.retry")}><RefreshIcon /></IconButton>}
         <IconButton onClick={() => void remove()} aria-label={t("imports.remove")}><DeleteIcon /></IconButton>
       </Stack>
       {downloading && <LinearProgress variant="determinate" value={torrent.progress * 100} sx={{ my: 1 }} />}

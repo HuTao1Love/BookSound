@@ -14,7 +14,6 @@ import com.zyagodin.booksound.api.UploadKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -50,10 +49,18 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
         .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
-    private val refreshLock = Mutex()
     private val json = "application/json".toMediaType()
 
     val account get() = store.current
+
+    /** The same account over one network (e.g. a watch's Wi-Fi), without binding the whole app to it. */
+    fun over(network: android.net.Network): ServerClient = ServerClient(
+        http.newBuilder()
+            .socketFactory(network.socketFactory)
+            .dns { host -> network.getAllByName(host).toList() }
+            .build(),
+        store,
+    )
 
     /** The server's status at [url], without signing in; used to check an address before logging in. */
     suspend fun status(url: String = account?.url ?: throw IOException("Not signed in")): StatusDto =
@@ -207,7 +214,7 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     private suspend fun accessToken(forceRefresh: Boolean = false): String {
         val current = account ?: throw SignedOutException()
         if (!forceRefresh && current.accessToken != null && current.accessExpiresAt > System.currentTimeMillis() + 60_000) return current.accessToken
-        return refreshLock.withLock {
+        return store.refreshLock.withLock {
             val latest = account ?: throw SignedOutException()
             // Another call refreshed meanwhile.
             if (latest.accessToken != current.accessToken && latest.accessToken != null && latest.accessExpiresAt > System.currentTimeMillis()) {

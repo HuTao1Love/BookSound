@@ -129,29 +129,34 @@ fun Route.importRoutes(ctx: ServerContext) {
             call.respond(HttpStatusCode.Created, t.toDto(io { t.addFile(bytes, auto, p.userId) }))
         }
         put("${ApiPaths.TORRENTS}/{id}/books/{book}") {
-            call.user
+            val p = call.user
             val t = torrents ?: throw notFound()
+            t.checkAccess(call.parameters["id"]!!, p)
             val body = call.receive<TorrentReviewRequest>()
             io { t.review(call.parameters["id"]!!, call.parameters["book"]!!, body, null) }
             call.respond(t.toDto(t.get(call.parameters["id"]!!) ?: throw notFound()))
         }
         put("${ApiPaths.TORRENTS}/{id}/books/{book}/cover") {
-            call.user
+            val p = call.user
             val t = torrents ?: throw notFound()
+            t.checkAccess(call.parameters["id"]!!, p)
             val bytes = call.receiveLimited(15L * 1024 * 1024)
             com.zyagodin.booksound.server.library.Covers.normalize(bytes) ?: throw LibraryException(ErrorCodes.UNSUPPORTED, "Not an image")
             io { t.setCover(call.parameters["id"]!!, call.parameters["book"]!!, bytes) }
             call.respond(HttpStatusCode.NoContent)
         }
         post("${ApiPaths.TORRENTS}/{id}/retry") {
-            call.user
+            val p = call.user
             val t = torrents ?: throw notFound()
+            t.checkAccess(call.parameters["id"]!!, p)
             io { t.retry(call.parameters["id"]!!) }
             call.respond(HttpStatusCode.NoContent)
         }
         delete("${ApiPaths.TORRENTS}/{id}") {
-            call.user
-            io { torrents?.remove(call.parameters["id"]!!) }
+            val p = call.user
+            val t = torrents ?: throw notFound()
+            t.checkAccess(call.parameters["id"]!!, p)
+            io { t.remove(call.parameters["id"]!!) }
             call.respond(HttpStatusCode.NoContent)
         }
     }

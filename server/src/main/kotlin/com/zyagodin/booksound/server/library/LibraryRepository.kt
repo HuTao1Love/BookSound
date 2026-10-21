@@ -64,6 +64,18 @@ class LibraryRepository(private val db: Database) {
 
     fun chapters(bookId: String): List<ChapterDto> = db.tx { chaptersOf(bookId) }
 
+    /** Chapters of [bookIds] only. */
+    fun chaptersOf(bookIds: Collection<String>): Map<String, List<ChapterDto>> {
+        if (bookIds.isEmpty()) return emptyMap()
+        return bookIds.chunked(500).flatMap { ids ->
+            db.tx {
+                query("SELECT * FROM chapters WHERE book_id IN (${ids.joinToString(",") { "?" }}) ORDER BY book_id, idx", *ids.toTypedArray()) {
+                    it.str("book_id")!! to chapterRow(it)
+                }
+            }
+        }.groupBy({ it.first }, { it.second })
+    }
+
     fun allChapters(): Map<String, List<ChapterDto>> = db.tx {
         query("SELECT * FROM chapters ORDER BY book_id, idx") { it.str("book_id")!! to chapterRow(it) }
     }.groupBy({ it.first }, { it.second })

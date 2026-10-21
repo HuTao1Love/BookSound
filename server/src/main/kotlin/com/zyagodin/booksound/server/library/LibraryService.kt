@@ -93,8 +93,11 @@ class LibraryService(
         repo.saveBook(row, chapters.map { it.toDto() }).also { notify(bookId) }
     }
 
-    /** Takes a finished BookSound M4B (uploaded from a phone) into the library. */
-    fun adoptUploadedBook(file: File, uploaderId: String, deviceId: String): BookRow {
+    /**
+     * Takes a finished BookSound M4B (uploaded from a phone) into the library. A book already in the shared library
+     * is replaced only by whoever added it, or an admin.
+     */
+    fun adoptUploadedBook(file: File, uploaderId: String, isAdmin: Boolean, deviceId: String): BookRow {
         val parsed = files.open(file).use { src ->
             try {
                 AudioProbe.probe(src, file.name)
@@ -107,9 +110,13 @@ class LibraryService(
         }
         val bookId = parsed.bookId ?: throw LibraryException("bad_request", "The file has no BookSound id")
         val sha = files.open(file).use { sha256(it) }
-        repo.book(bookId)?.takeIf { it.sha256 == sha && !it.deleted }?.let {
+        val existing = repo.book(bookId)?.takeIf { !it.deleted }
+        if (existing != null && existing.sha256 == sha) {
             file.delete()
-            return it
+            return existing
+        }
+        if (existing != null && !isAdmin && existing.addedBy != uploaderId) {
+            throw LibraryException("forbidden", "This book is in the library already; only whoever added it or an admin can replace its file")
         }
         val metadata = AdoptedFile.metadata(parsed, file.name, emptyList())
         val chapters = AdoptedFile.chapters(parsed, file.name, file.name, metadata.title)

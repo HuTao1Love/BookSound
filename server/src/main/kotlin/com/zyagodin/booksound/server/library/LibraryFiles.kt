@@ -6,7 +6,6 @@ import com.zyagodin.booksound.core.io.RandomAccessSource
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagSpec
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagWriter
 import com.zyagodin.booksound.core.model.BookMetadata
-import com.zyagodin.booksound.core.naming.FileNameSanitizer
 import com.zyagodin.booksound.core.naming.LibraryLayout
 import com.zyagodin.booksound.core.io.CancellationSignal
 import java.io.File
@@ -36,19 +35,13 @@ class LibraryFiles(val root: File) {
     fun targetFor(metadata: BookMetadata, fallbackTitle: String?, own: File?): File {
         val path = LibraryLayout.pathFor(metadata, fallbackTitle)
         val dir = path.directories.fold(root) { d, name -> File(d, name) }
-        val ownCanonical = own?.canonicalFile
-        val siblings = dir.listFiles()?.filter { it.isFile && it.canonicalFile != ownCanonical }?.map { it.name }.orEmpty()
-        val wanted = FileNameSanitizer.collisionKey(path.fileName)
-        val name = if (siblings.none { FileNameSanitizer.collisionKey(it) == wanted }) path.fileName else LibraryLayout.uniqueFileName(path.fileName, siblings)
-        return File(dir, name)
+        return stillFree(File(dir, path.fileName), own)
     }
 
     /** [target], or "Title (2).m4b" beside it when another file took that name meanwhile; [own] may be replaced. */
     fun stillFree(target: File, own: File?): File {
         val ownCanonical = own?.canonicalFile
         val siblings = target.parentFile.listFiles()?.filter { it.isFile && it.canonicalFile != ownCanonical }?.map { it.name }.orEmpty()
-        val wanted = FileNameSanitizer.collisionKey(target.name)
-        if (siblings.none { FileNameSanitizer.collisionKey(it) == wanted }) return target
         return File(target.parentFile, LibraryLayout.uniqueFileName(target.name, siblings))
     }
 
