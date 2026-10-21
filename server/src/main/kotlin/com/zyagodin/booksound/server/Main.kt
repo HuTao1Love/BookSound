@@ -20,6 +20,7 @@ import com.zyagodin.booksound.server.library.LibraryService
 import com.zyagodin.booksound.server.settings.SettingsStore
 import com.zyagodin.booksound.server.sync.SyncService
 import com.zyagodin.booksound.server.torrent.TorrentService
+import com.zyagodin.booksound.server.update.UpdateService
 import com.zyagodin.booksound.server.watch.WatchVariants
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
@@ -47,6 +48,7 @@ class ServerContext(val config: ServerConfig) : AutoCloseable {
     val imports = ImportService(db, library, settings, ffmpeg, events, config.workDir, scope)
     val uploads = UploadService(db, config.uploadsDir, library, imports)
     val watch = WatchVariants(library, settings, ffmpeg, imports, config.derivedDir, scope)
+    val updates = UpdateService(config)
     val torrents: TorrentService? = if (config.torrentsEnabled) TorrentService.create(db, config.torrentsDir, library, imports, settings, events, scope) else null
 
     val features: List<String> get() = buildList {

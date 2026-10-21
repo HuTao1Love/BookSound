@@ -39,6 +39,7 @@ object ApiPaths {
     const val ADMIN_USERS = "/api/admin/users"
     const val ADMIN_SETTINGS = "/api/admin/settings"
     const val ADMIN_RESCAN = "/api/admin/rescan"
+    const val ADMIN_UPDATE = "/api/admin/update"
     const val WATCH_PROFILES = "/api/watch-profiles"
     const val PREFERENCES = "/api/preferences"
 
@@ -411,6 +412,33 @@ data class PasswordChangeRequest(val currentPassword: String, val newPassword: S
 
 @Serializable
 data class RescanResultDto(val added: Int, val relinked: Int, val missing: Int)
+
+/** How this server installs a newer release. */
+enum class UpdateMethod {
+    /** A root systemd unit next to the server installs it (the LXC install). */
+    SYSTEMD,
+    /** Watchtower pulls the new image and restarts the container. */
+    WATCHTOWER,
+    /** Nothing here can: [ServerUpdateDto.command] is what to run on the host. */
+    MANUAL,
+}
+
+enum class UpdateStage { IDLE, REQUESTED, INSTALLING, FAILED }
+
+/** The server's version against the latest release, on [ApiPaths.ADMIN_UPDATE]; a POST there installs it. */
+@Serializable
+data class ServerUpdateDto(
+    val currentVersion: String,
+    /** Null when GitHub could not be asked. */
+    val latestVersion: String? = null,
+    val available: Boolean,
+    val method: UpdateMethod,
+    val stage: UpdateStage,
+    /** Why the last attempt failed, or what to do next. */
+    val message: String? = null,
+    /** The command that updates the server by hand. */
+    val command: String? = null,
+)
 
 /** One server-sent event on [ApiPaths.EVENTS]; the SSE event name is [type]. */
 @Serializable
