@@ -622,4 +622,10 @@
     <string name="server_channel">Передача с сервером</string>
     <string name="server_upload_started">Загрузка на сервер</string>
     <string name="action_upload_to_server">Загрузить на сервер</string>
+    <string name="transfers_section">Передача</string>
+    <string name="transfer_to_server">На сервер</string>
+    <string name="transfer_from_server">С сервера</string>
+    <string name="transfer_to_watch">На часы</string>
+    <string name="transfer_no_watch">Часы не подключены</string>
+    <string name="transfer_no_space">На часах не хватает места</string>
 </resources>

@@ -174,6 +174,9 @@ class ServerTest {
         val half = bytes.size / 2
         val first = client.put(ApiPaths.upload(upload.id)) { bearer(tokens); header(HttpHeaders.ContentRange, "bytes 0-${half - 1}/${bytes.size}"); setBody(bytes.copyOfRange(0, half)) }
         assertEquals(HttpStatusCode.OK, first.status)
+        // Under way: listed for every device with who sends it and how far it got.
+        val underWay = client.get(ApiPaths.UPLOADS) { bearer(tokens) }.bodyAsText()
+        assertTrue(underWay, underWay.contains("\"from\":\"admin · Pixel\"") && underWay.contains("\"receivedBytes\":$half"))
         // A chunk that doesn't continue where the server is gets told where to resume.
         val wrong = client.put(ApiPaths.upload(upload.id)) { bearer(tokens); header(HttpHeaders.ContentRange, "bytes 0-9/${bytes.size}"); setBody(bytes.copyOfRange(0, 10)) }
         assertEquals(HttpStatusCode.Conflict, wrong.status)

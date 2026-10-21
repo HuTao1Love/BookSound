@@ -84,10 +84,15 @@ fun Route.adminRoutes(ctx: ServerContext) {
         }
 
         // Live progress for the web app. Events carry no secrets beyond what the other endpoints show any user.
+        // Proxies (the router's among them) close long responses; the web app then polls instead.
         sse(ApiPaths.EVENTS) {
             heartbeat { period = 20.seconds }
-            ctx.events.events.collect { event ->
-                send(ServerSentEvent(data = ApiJson.encodeToString(EventDto.serializer(), event), event = event.type))
+            try {
+                ctx.events.events.collect { event ->
+                    send(ServerSentEvent(data = ApiJson.encodeToString(EventDto.serializer(), event), event = event.type))
+                }
+            } catch (e: java.io.IOException) {
+                // The client or a proxy went away (ClosedWriteChannelException is one): not an error.
             }
         }
     }
