@@ -36,7 +36,9 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
@@ -89,6 +91,7 @@ import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.data.library.LocationFilter
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.server.ServerInfo
@@ -134,13 +137,14 @@ fun LibraryScreen(navigator: AppNavigator) {
     val gridState = rememberLazyGridState()
 
     // A name tapped on another screen (an author on a book's page): show the books it finds,
-    // whatever the progress filter.
+    // whatever the filters.
     LaunchedEffect(navigator.pendingSearch) {
         val text = navigator.pendingSearch ?: return@LaunchedEffect
         searchText = text
         searching = true
         vm.setQuery(text)
         if (state.filter != ProgressFilter.ALL) vm.setFilter(ProgressFilter.ALL)
+        if (state.location != LocationFilter.ALL) vm.setLocation(LocationFilter.ALL)
         gridState.scrollToItem(0)
         navigator.pendingSearch = null
     }
@@ -191,6 +195,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onTextChange = { searchText = it },
                         onSearch = vm::setQuery,
                         onFilter = vm::setFilter,
+                        onLocation = vm::setLocation,
                         onSort = vm::setSort,
                         onSettings = navigator::openSettings,
                         onDownloads = { navigator.openImports() },
@@ -227,7 +232,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                             modifier = Modifier.heightIn(min = 320.dp),
                         )
                     }
-                    else -> items(state.groups, key = { "series:" + (it.series ?: "") }) { section ->
+                    else -> items(state.groups, key = { it.key }) { section ->
                         SeriesSectionView(
                             section = section,
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
@@ -336,6 +341,7 @@ private fun LibraryHeader(
     onTextChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onFilter: (ProgressFilter) -> Unit,
+    onLocation: (LocationFilter) -> Unit,
     onSort: (SortField) -> Unit,
     onSettings: () -> Unit,
     onDownloads: () -> Unit,
@@ -405,7 +411,7 @@ private fun LibraryHeader(
         }
         if (state.totalCount > 0) {
             Spacer(Modifier.height(Spacing.md))
-            FilterRow(state, onFilter, onSort)
+            FilterRow(state, onFilter, onLocation, onSort)
             Spacer(Modifier.height(Spacing.sm))
         }
     }
@@ -441,7 +447,7 @@ private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit, onSort: (SortField) -> Unit) {
+private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit, onLocation: (LocationFilter) -> Unit, onSort: (SortField) -> Unit) {
     var filterMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -461,6 +467,10 @@ private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit,
                     )
                 }
             }
+        }
+        // Shown while it filters too, so it can be turned off after the server's books are gone.
+        if (state.hasServerBooks || state.location != LocationFilter.ALL) {
+            LocationButton(state.location, onClick = { onLocation(state.location.next()) })
         }
         Spacer(Modifier.weight(1f))
         Box {
@@ -486,6 +496,24 @@ private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit,
                 }
             }
         }
+    }
+}
+
+/** Where the shown books are: a grey cloud for all of them, a crossed-out one for the phone's, a bright one for the server's. */
+@Composable
+private fun LocationButton(location: LocationFilter, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.padding(start = Spacing.xs)) {
+        Icon(
+            if (location == LocationFilter.PHONE) Icons.Rounded.CloudOff else Icons.Rounded.Cloud,
+            contentDescription = stringResource(
+                when (location) {
+                    LocationFilter.ALL -> R.string.location_filter_all
+                    LocationFilter.PHONE -> R.string.location_filter_phone
+                    LocationFilter.SERVER -> R.string.location_filter_server
+                },
+            ),
+            tint = if (location == LocationFilter.ALL) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+        )
     }
 }
 

@@ -12,6 +12,7 @@ import com.zyagodin.booksound.core.library.SeriesGroup
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.library.defaultDescending
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.data.library.LocationFilter
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
@@ -40,6 +41,9 @@ data class LibraryUiState(
     val sort: SortField = SortField.RECENT,
     val descending: Boolean = true,
     val filter: ProgressFilter = ProgressFilter.ALL,
+    val location: LocationFilter = LocationFilter.ALL,
+    /** Some books of the library are only on the server, so filtering by where they are means something. */
+    val hasServerBooks: Boolean = false,
     val activeImports: List<ImportJob> = emptyList(),
     /** Torrents still downloading, waiting for review or being converted. */
     val activeTorrents: List<TorrentItem> = emptyList(),
@@ -50,7 +54,13 @@ data class LibraryUiState(
 )
 
 /** One section of the series view; [series] is null for books without a series. */
-data class SeriesSection(val series: String?, val items: List<LibraryItem>, val group: SeriesGroup)
+data class SeriesSection(val series: String?, val items: List<LibraryItem>, val group: SeriesGroup) {
+    /** Every book of the section is only on the server. */
+    val onServerOnly: Boolean get() = items.isNotEmpty() && items.all { it.onServerOnly }
+
+    /** Books without a series make two sections when some are only on the server, hence their own key. */
+    val key: String get() = if (series == null && onServerOnly) "standalone:server" else "series:" + series.orEmpty()
+}
 
 sealed interface LibraryEvent {
     data class ScanFinished(val result: ScanResult) : LibraryEvent
@@ -81,10 +91,22 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     ) { items, q, settings, (jobs, torrents, transfers), scanning ->
         val libraryQuery = LibraryQuery(q, settings.librarySort, settings.libraryDescending, settings.libraryFilter)
         val byId = items.associateBy { it.id }
-        val ordered = LibrarySearch.apply(items.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
-        val groups = LibrarySearch.groupBySeries(ordered.map { it.entry }).map { g ->
-            SeriesSection(g.series, g.entries.mapNotNull { byId[it.book.id.value] }, g)
-        }
+        // Books on the phone come first, then the ones only on the server, each part in the chosen order.
+        val shown = items.filter { settings.libraryLocation.matches(it) }
+        val (here, there) = LibrarySearch.apply(shown.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
+            .partition { !it.onServerOnly }
+        val ordered = here + there
+        // Likewise the sections: a series with a book on the phone stays among the phone's ones; the books
+        // without a series split in two carousels.
+        val groups = LibrarySearch.groupBySeries(ordered.map { it.entry }).flatMap { g ->
+            val books = g.entries.mapNotNull { byId[it.book.id.value] }
+            if (g.series != null) {
+                listOf(SeriesSection(g.series, books, g))
+            } else {
+                books.partition { !it.onServerOnly }.toList().filter { it.isNotEmpty() }
+                    .map { part -> SeriesSection(null, part, SeriesGroup(null, part.map { it.entry })) }
+            }
+        }.sortedBy { it.onServerOnly }
         LibraryUiState(
             loading = false,
             items = ordered,
@@ -93,6 +115,8 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             sort = settings.librarySort,
             descending = settings.libraryDescending,
             filter = settings.libraryFilter,
+            location = settings.libraryLocation,
+            hasServerBooks = items.any { it.onServerOnly },
             // Torrent conversions are shown in the downloads.
             activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
             activeTorrents = torrents.filter { it.record.isActive },
@@ -131,6 +155,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun setFilter(filter: ProgressFilter) = viewModelScope.launch { container.settings.setLibraryFilter(filter) }
+    fun setLocation(location: LocationFilter) = viewModelScope.launch { container.settings.setLibraryLocation(location) }
 
 
     fun refresh() = viewModelScope.launch {

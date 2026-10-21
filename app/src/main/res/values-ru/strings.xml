@@ -96,6 +96,9 @@
     <string name="filter_in_progress">Слушаю</string>
     <string name="filter_not_started">Не начаты</string>
     <string name="filter_finished">Прослушаны</string>
+    <string name="location_filter_all">Все книги: на телефоне и на сервере. Нажмите, чтобы показать только книги телефона</string>
+    <string name="location_filter_phone">Только книги на телефоне. Нажмите, чтобы показать только книги сервера</string>
+    <string name="location_filter_server">Только книги на сервере. Нажмите, чтобы показать все</string>
     <string name="sort_recent">Недавние</string>
     <string name="sort_added">Дата добавления</string>
     <string name="sort_title">Название</string>
