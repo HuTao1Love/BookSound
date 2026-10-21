@@ -15,8 +15,6 @@ private val roots: List<KSerializer<*>> = listOf(
     serializer<StatusDto>(), serializer<ErrorDto>(),
     serializer<SetupRequest>(), serializer<LoginRequest>(), serializer<TokenResponse>(), serializer<RefreshRequest>(),
     serializer<WebLoginRequest>(), serializer<SessionDto>(), serializer<DeviceDto>(), serializer<WatchDeviceRequest>(),
-    serializer<DeviceCodeStartRequest>(), serializer<DeviceCodeResponse>(), serializer<DeviceCodePollRequest>(),
-    serializer<DeviceCodeApproveRequest>(),
     serializer<BookDto>(), serializer<PlaybackDto>(), serializer<PreferencesDto>(), serializer<LibraryEntryDto>(),
     serializer<MetadataPatch>(), serializer<PullResponse>(), serializer<PushRequest>(), serializer<PushResponse>(),
     serializer<UploadCreateRequest>(), serializer<UploadDto>(), serializer<UploadResultDto>(),

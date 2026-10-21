@@ -69,7 +69,6 @@ export const paths = {
   logout: "/api/auth/logout",
   me: "/api/auth/me",
   password: "/api/auth/password",
-  approveCode: "/api/auth/device-code/approve",
   devices: "/api/devices",
   books: "/api/books",
   book: (id: string) => `/api/books/${id}`,

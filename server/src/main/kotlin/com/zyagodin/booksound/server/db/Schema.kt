@@ -38,15 +38,6 @@ object Schema {
         );
         CREATE INDEX tokens_device ON tokens(device_id);
 
-        CREATE TABLE device_codes (
-            user_code TEXT PRIMARY KEY,
-            poll_hash TEXT NOT NULL UNIQUE,
-            device_name TEXT NOT NULL,
-            device_kind TEXT NOT NULL,
-            sync_id TEXT,
-            expires_at INTEGER NOT NULL,
-            approved_by TEXT REFERENCES users(id) ON DELETE CASCADE
-        );
 
         CREATE TABLE books (
             id TEXT PRIMARY KEY,

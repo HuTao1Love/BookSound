@@ -27,9 +27,6 @@ object ApiPaths {
     const val REFRESH = "/api/auth/refresh"
     const val LOGOUT = "/api/auth/logout"
     const val ME = "/api/auth/me"
-    const val DEVICE_CODE = "/api/auth/device-code"
-    const val DEVICE_CODE_POLL = "/api/auth/device-code/poll"
-    const val DEVICE_CODE_APPROVE = "/api/auth/device-code/approve"
     const val DEVICES = "/api/devices"
     const val WATCH_DEVICE = "/api/devices/watch"
     const val SYNC_PULL = "/api/sync/pull"
@@ -151,25 +148,6 @@ data class WatchDeviceRequest(val deviceName: String, val deviceId: String? = nu
 /** Sent from the phone to its watch over the Wear Data Layer: the server and the watch's own tokens. */
 @Serializable
 data class WatchServerLogin(val url: String, val tokens: TokenResponse, val watchProfileId: String? = null)
-
-@Serializable
-data class DeviceCodeStartRequest(val deviceName: String, val deviceKind: DeviceKind, val deviceId: String? = null)
-
-@Serializable
-data class DeviceCodeResponse(
-    /** Short code shown on the device and typed in on the web or the phone, e.g. "K7QX-2M4P". */
-    val userCode: String,
-    /** Secret the device polls with. */
-    val pollToken: String,
-    val expiresAt: Long,
-    val intervalSeconds: Int,
-)
-
-@Serializable
-data class DeviceCodePollRequest(val pollToken: String)
-
-@Serializable
-data class DeviceCodeApproveRequest(val userCode: String)
 
 // ------------------------------------------------------------------------------------------ library
 

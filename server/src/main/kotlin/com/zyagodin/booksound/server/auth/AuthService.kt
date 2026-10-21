@@ -1,6 +1,5 @@
 package com.zyagodin.booksound.server.auth
 
-import com.zyagodin.booksound.api.DeviceCodeResponse
 import com.zyagodin.booksound.api.DeviceDto
 import com.zyagodin.booksound.api.DeviceKind
 import com.zyagodin.booksound.api.TokenResponse
@@ -271,56 +270,10 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         ids.filter { it != keep }.forEach(::revokeDevice)
     }
 
-    // ------------------------------------------------------------------------------- device codes
-
-    /** A device without a keyboard (a watch) shows [DeviceCodeResponse.userCode]; a signed-in user approves it. */
-    fun startDeviceCode(name: String, kind: DeviceKind, syncId: String?): DeviceCodeResponse {
-        val code = Secrets.userCode()
-        val poll = Secrets.token()
-        val expires = clock() + DEVICE_CODE_TTL_MS
-        db.tx {
-            update("DELETE FROM device_codes WHERE expires_at < ?", clock())
-            update(
-                "INSERT INTO device_codes (user_code, poll_hash, device_name, device_kind, sync_id, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-                code, Secrets.tokenHash(poll), name.take(80), kind, syncId, expires,
-            )
-        }
-        return DeviceCodeResponse(code, poll, expires, DEVICE_CODE_POLL_SECONDS)
-    }
-
-    fun approveDeviceCode(principal: Principal, userCode: String) {
-        val normalized = userCode.uppercase().filter { it.isLetterOrDigit() }.let { if (it.length == 8) it.take(4) + "-" + it.drop(4) else it }
-        val changed = db.tx {
-            update("UPDATE device_codes SET approved_by = ? WHERE user_code = ? AND expires_at > ? AND approved_by IS NULL", principal.userId, normalized, clock())
-        }
-        if (changed == 0) throw AuthException("not_found", "Unknown or expired code")
-    }
-
-    /** Tokens once the code is approved; [AuthException] "pending" before, "expired" after it ran out. */
-    fun pollDeviceCode(pollToken: String): TokenResponse {
-        data class Row(val code: String, val name: String, val kind: DeviceKind, val syncId: String?, val expires: Long, val approvedBy: String?)
-        val row = db.tx {
-            queryOne("SELECT * FROM device_codes WHERE poll_hash = ?", Secrets.tokenHash(pollToken)) {
-                Row(it.str("user_code")!!, it.str("device_name")!!, DeviceKind.valueOf(it.str("device_kind")!!), it.str("sync_id"), it.long("expires_at")!!, it.str("approved_by"))
-            }
-        } ?: throw AuthException("expired")
-        if (row.approvedBy == null) {
-            if (row.expires < clock()) throw AuthException("expired")
-            throw AuthException("pending")
-        }
-        val user = db.tx {
-            update("DELETE FROM device_codes WHERE user_code = ?", row.code)
-            queryOne("SELECT id, name, is_admin FROM users WHERE id = ?", row.approvedBy) { UserDto(it.str("id")!!, it.str("name")!!, it.bool("is_admin")) }
-        } ?: throw AuthException("expired")
-        return issueTokens(createDevice(user.id, row.name, row.kind, row.syncId), user)
-    }
-
     companion object {
         const val ACCESS_TTL_MS = 60 * 60 * 1000L
         const val REFRESH_TTL_MS = 180L * 24 * 60 * 60 * 1000
         const val SESSION_TTL_MS = 30L * 24 * 60 * 60 * 1000
-        const val DEVICE_CODE_TTL_MS = 10 * 60 * 1000L
-        const val DEVICE_CODE_POLL_SECONDS = 5
         private const val FREE_ATTEMPTS = 5
         private const val CACHE_MS = 30_000L
     }

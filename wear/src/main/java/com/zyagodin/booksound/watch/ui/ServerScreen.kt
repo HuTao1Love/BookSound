@@ -1,18 +1,13 @@
 package com.zyagodin.booksound.watch.ui
 
-import android.app.Activity
-import android.app.RemoteInput
-import android.content.Intent
 import android.text.format.Formatter
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Login
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,10 +32,10 @@ import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
-import com.zyagodin.booksound.api.DeviceCodeResponse
 import com.zyagodin.booksound.api.LibraryEntryDto
 import com.zyagodin.booksound.watch.R
 import com.zyagodin.booksound.watch.WatchContainer
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -53,7 +48,6 @@ fun ServerScreen(container: WatchContainer) {
     val downloads by server.downloads.collectAsStateWithLifecycle()
     var catalog by remember { mutableStateOf<List<LibraryEntryDto>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var code by remember { mutableStateOf<DeviceCodeResponse?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val listState = rememberTransformingLazyColumnState()
@@ -64,46 +58,45 @@ fun ServerScreen(container: WatchContainer) {
         catalog = runCatching { server.catalog() }.onFailure { error = it.message ?: "" }.getOrNull()
     }
 
-    // The server's address typed in with the watch's keyboard or voice, for signing in with a code.
-    val askAddress = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val url = result.data?.let { RemoteInput.getResultsFromIntent(it) }?.getCharSequence(KEY_ADDRESS)?.toString()?.trim().orEmpty()
-        if (url.isEmpty()) return@rememberLauncherForActivityResult
+    // Ask the phone right away: it answers with its account, or with nothing when it isn't signed in.
+    var asking by remember { mutableStateOf(false) }
+    var phoneMissing by remember { mutableStateOf(false) }
+    val ask: () -> Unit = {
         scope.launch {
-            try {
-                val started = server.startDeviceCode(url)
-                code = started
-                if (!server.awaitDeviceCode(started)) error = context.getString(R.string.server_code_expired)
-            } catch (e: Exception) {
-                error = e.message ?: ""
-            } finally {
-                code = null
-            }
+            asking = true
+            phoneMissing = !server.requestFromPhone()
+            delay(8_000)
+            asking = false
         }
     }
+    LaunchedEffect(Unit) { if (account == null) ask() }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(state = listState, contentPadding = contentPadding) {
             item { ListHeader { Text(stringResource(R.string.server_title)) } }
             if (account == null) {
-                val pending = code
                 item {
                     Text(
-                        if (pending != null) stringResource(R.string.server_code, pending.userCode) else stringResource(R.string.server_not_connected),
+                        stringResource(
+                            when {
+                                phoneMissing -> R.string.server_phone_missing
+                                asking -> R.string.server_asking_phone
+                                else -> R.string.server_not_connected
+                            },
+                        ),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                         textAlign = TextAlign.Center,
-                        style = if (pending != null) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                if (pending == null) {
-                    item {
-                        Button(
-                            onClick = { askAddress.launch(addressInput(context.getString(R.string.server_address))) },
-                            modifier = Modifier.fillMaxWidth(),
-                            icon = { Icon(Icons.Rounded.Login, contentDescription = null) },
-                            label = { Text(stringResource(R.string.server_sign_in_code)) },
-                        )
-                    }
+                item {
+                    Button(
+                        onClick = ask,
+                        enabled = !asking,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(Icons.Rounded.PhoneAndroid, contentDescription = null) },
+                        label = { Text(stringResource(R.string.server_sign_in_phone)) },
+                    )
                 }
             } else {
                 items(downloads, key = { "dl-" + it.bookId }) { d ->
@@ -155,16 +148,5 @@ fun ServerScreen(container: WatchContainer) {
                 }
             }
         }
-    }
-}
-
-private const val KEY_ADDRESS = "address"
-
-/** The system's text input on Wear OS (keyboard, voice, phone), as RemoteInputIntentHelper builds it. */
-private fun addressInput(label: String): Intent {
-    val input = RemoteInput.Builder(KEY_ADDRESS).setLabel(label).build()
-    return Intent("android.support.wearable.input.action.REMOTE_INPUT").apply {
-        putExtra("android.support.wearable.input.extra.REMOTE_INPUTS", arrayOf(input))
-        putExtra("android.support.wearable.input.extra.TITLE", label)
     }
 }

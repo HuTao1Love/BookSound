@@ -73,20 +73,6 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
         return accountOf(base, tokens).also(store::save)
     }
 
-    /**
-     * A request that needs no login (device codes). A 202 answer ("not yet") comes back as a
-     * [ServerException] with status 202.
-     */
-    suspend fun <B, T> postAnonymous(url: String, path: String, body: B, bodySerializer: KSerializer<B>, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(endpoint(url, path)).post(ApiJson.encodeToString(bodySerializer, body).toRequestBody(json)).build()
-        val response = execute(request)
-        if (response.code == 202) {
-            response.close()
-            throw ServerException(202, "pending", null)
-        }
-        decode(serializer, response)
-    }
-
     /** Takes over a login handed over by the phone (a watch's own device and tokens). */
     fun adopt(url: String, tokens: TokenResponse) = store.save(accountOf(normalizeUrl(url), tokens))
 

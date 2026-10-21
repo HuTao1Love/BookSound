@@ -129,6 +129,17 @@ class ServerManager(
         client.login(url, user, password, name, DeviceKind.PHONE, library.device().value)
         store.clear()
         requestSync()
+        // The watch uses this account too; a watch out of reach asks again when it opens its server screen.
+        scope.launch { runCatching { connectWatch(settings.current().serverWatchProfile) } }
+    }
+
+    /** The watch asked to use this phone's account: sign it in, or tell it there is none. */
+    fun onWatchAsksToSignIn() {
+        scope.launch {
+            runCatching {
+                if (accounts.current != null) connectWatch(settings.current().serverWatchProfile) else sendToWatch(ByteArray(0))
+            }.onFailure { Log.w(TAG, "Can't sign the watch in", it) }
+        }
     }
 
     suspend fun signOut() {
@@ -306,8 +317,8 @@ class ServerManager(
     // ----------------------------------------------------------------------------------- watch
 
     /**
-     * Signs the watch in with a device and tokens of its own and sends them over the Data Layer, so the watch
-     * reaches the server by itself over Wi-Fi or LTE.
+     * Signs the watch in with the phone's account: it gets a device and tokens of its own on the server, sent over
+     * the Data Layer, so it reaches the server by itself over Wi-Fi or LTE.
      */
     suspend fun connectWatch(watchProfileId: String?): Boolean {
         val tokens = client.post(

@@ -58,11 +58,4 @@ object Secrets {
     /** Tokens are stored only as hashes, so a copy of the database grants no access. */
     fun tokenHash(token: String): String =
         MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it) }
-
-    /** A code to type in by hand: no 0/O, 1/I/L; e.g. "K7QX-2M4P". */
-    fun userCode(): String {
-        val alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-        val chars = CharArray(8) { alphabet[random.nextInt(alphabet.length)] }
-        return String(chars, 0, 4) + "-" + String(chars, 4, 4)
-    }
 }

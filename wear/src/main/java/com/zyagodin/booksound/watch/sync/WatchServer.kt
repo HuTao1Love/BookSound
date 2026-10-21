@@ -11,12 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.zyagodin.booksound.api.ApiJson
 import com.zyagodin.booksound.api.ApiPaths
-import com.zyagodin.booksound.api.DeviceCodePollRequest
-import com.zyagodin.booksound.api.DeviceCodeResponse
-import com.zyagodin.booksound.api.DeviceCodeStartRequest
-import com.zyagodin.booksound.api.DeviceKind
 import com.zyagodin.booksound.api.LibraryEntryDto
-import com.zyagodin.booksound.api.TokenResponse
 import com.zyagodin.booksound.api.WatchFileStatusDto
 import com.zyagodin.booksound.api.WatchServerLogin
 import com.zyagodin.booksound.api.toModel
@@ -24,9 +19,12 @@ import com.zyagodin.booksound.core.model.BookId
 import com.zyagodin.booksound.core.sync.ChangeSet
 import com.zyagodin.booksound.core.sync.PlaybackRecord
 import com.zyagodin.booksound.core.wear.WatchBookHeader
+import com.zyagodin.booksound.core.wear.WatchPaths
+import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.tasks.await
 import com.zyagodin.booksound.shared.server.ServerAccountStore
 import com.zyagodin.booksound.shared.server.ServerClient
-import com.zyagodin.booksound.shared.server.ServerException
 import com.zyagodin.booksound.shared.server.ServerSyncBackend
 import com.zyagodin.booksound.watch.data.WatchLibrary
 import com.zyagodin.booksound.watch.data.WatchSettings
@@ -51,9 +49,9 @@ data class ServerDownload(val bookId: String, val title: String, val progress: F
 }
 
 /**
- * The watch's own link to the BookSound server, over Wi-Fi or LTE. The phone hands over a login (the watch gets
- * a device of its own); without a phone the watch can show a code to approve in the web app. Positions saved
- * here go to the server as well as to the phone, and books can be downloaded from the server's library.
+ * The watch's own link to the BookSound server, over Wi-Fi or LTE. It uses the phone's account: the phone hands
+ * over a login (the watch gets a device of its own on the server). Positions saved here go to the server as well
+ * as to the phone, and books can be downloaded from the server's library.
  */
 class WatchServer(
     private val context: Context,
@@ -91,32 +89,23 @@ class WatchServer(
         pull()
     }
 
-    suspend fun startDeviceCode(url: String): DeviceCodeResponse {
-        val base = ServerClient.normalizeUrl(url)
-        prefs.edit { putString("pending_url", base) }
-        return client.postAnonymous(base, ApiPaths.DEVICE_CODE, DeviceCodeStartRequest("Watch", DeviceKind.WATCH, settings.deviceId.value),
-            DeviceCodeStartRequest.serializer(), DeviceCodeResponse.serializer())
-    }
-
-    /** Polls until the code is approved (true), runs out (false) or the caller is cancelled. */
-    suspend fun awaitDeviceCode(code: DeviceCodeResponse): Boolean {
-        val base = prefs.getString("pending_url", null) ?: return false
-        while (System.currentTimeMillis() < code.expiresAt) {
-            delay(code.intervalSeconds * 1000L)
-            try {
-                val tokens = client.postAnonymous(base, ApiPaths.DEVICE_CODE_POLL, DeviceCodePollRequest(code.pollToken),
-                    DeviceCodePollRequest.serializer(), TokenResponse.serializer())
-                client.adopt(base, tokens)
-                pull()
-                return true
-            } catch (e: ServerException) {
-                if (e.status == 410) return false
-                // 202 "pending" arrives as an error without a body we can decode: keep waiting.
-            } catch (e: IOException) {
-                // offline for a moment
-            }
+    /**
+     * Asks the phone to sign the watch in with its account; the login arrives in [onLogin]. False when no phone with
+     * BookSound is in reach.
+     */
+    suspend fun requestFromPhone(): Boolean = try {
+        val node = Wearable.getCapabilityClient(context)
+            .getCapability(WatchPaths.PHONE_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
+            .nodes.sortedByDescending { it.isNearby }.firstOrNull()
+        if (node == null) false
+        else {
+            Wearable.getMessageClient(context).sendMessage(node.id, WatchPaths.SERVER_AUTH_REQUEST_PATH, ByteArray(0)).await()
+            true
         }
-        return false
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        Log.w(TAG, "Can't reach the phone", e)
+        false
     }
 
     fun signOut() = scope.launch { client.logout() }

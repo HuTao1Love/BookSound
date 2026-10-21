@@ -72,27 +72,6 @@ export interface WatchDeviceRequest {
   deviceId?: string | null;
 }
 
-export interface DeviceCodeStartRequest {
-  deviceName: string;
-  deviceKind: DeviceKind;
-  deviceId?: string | null;
-}
-
-export interface DeviceCodeResponse {
-  userCode: string;
-  pollToken: string;
-  expiresAt: number;
-  intervalSeconds: number;
-}
-
-export interface DeviceCodePollRequest {
-  pollToken: string;
-}
-
-export interface DeviceCodeApproveRequest {
-  userCode: string;
-}
-
 export interface BookDto {
   id: string;
   metadata: MetadataDto;
