@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.Wearable
+import com.zyagodin.booksound.api.API_VERSION
 import com.zyagodin.booksound.api.ApiJson
 import com.zyagodin.booksound.api.ApiPaths
 import com.zyagodin.booksound.api.BookDto
@@ -90,6 +91,15 @@ data class ServerTransfer(
     val progress: Float? get() = if (totalBytes > 0) (doneBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else null
 }
 
+/** What the server said about itself in the last sync round. */
+data class ServerInfo(val version: String, val apiVersion: Int) {
+    /** It speaks another API than this app: nothing syncs until the older side is updated. */
+    val incompatible: Boolean get() = apiVersion != API_VERSION
+
+    /** The server is the older side of an [incompatible] pair. */
+    val serverOutdated: Boolean get() = apiVersion < API_VERSION
+}
+
 /** A book of the server's library that is not on this phone. */
 data class ServerOnlyBook(val entity: ServerBookEntity, val positionMs: Long?, val finished: Boolean)
 
@@ -114,10 +124,23 @@ class ServerManager(
     /** False when the last attempt to reach the server failed; the app then works from what it has. */
     val reachable: StateFlow<Boolean> = _reachable
 
+    private val _info = MutableStateFlow<ServerInfo?>(null)
+    /** The server's version and API, once a sync round reached it; null before that and without an account. */
+    val info: StateFlow<ServerInfo?> = _info
+
     private val backend = ServerSyncBackend(client)
     val syncTarget = SyncTarget(
         object : SyncBackend by backend {
-            override suspend fun status() = backend.status().also { _reachable.value = it != BackendStatus.Unreachable }
+            override suspend fun status() = backend.status().also { status ->
+                _reachable.value = status != BackendStatus.Unreachable
+                when (status) {
+                    is BackendStatus.Available -> _info.value = ServerInfo(status.serverVersion, API_VERSION)
+                    is BackendStatus.Incompatible -> _info.value = ServerInfo(status.serverVersion, status.serverApi)
+                    BackendStatus.NotConfigured -> _info.value = null
+                    // Offline or signed out: what it said last still holds.
+                    BackendStatus.Unreachable, is BackendStatus.Unauthorized -> Unit
+                }
+            }
         },
         store,
     )
@@ -160,6 +183,7 @@ class ServerManager(
         val name = listOfNotNull(Build.MANUFACTURER.replaceFirstChar { it.uppercase() }, Build.MODEL).distinct().joinToString(" ")
         client.login(url, user, password, name, DeviceKind.PHONE, library.device().value)
         store.clear()
+        _info.value = null
         requestSync()
         // The watch uses this account too; a watch out of reach asks again when it opens its server screen.
         scope.launch { runCatching { connectWatch(settings.current().serverWatchProfile) } }
@@ -178,6 +202,7 @@ class ServerManager(
         _transfers.value.filter { it.isActive }.forEach { cancel(it.bookId, it.direction) }
         client.logout()
         store.clear()
+        _info.value = null
         runCatching { sendToWatch(ByteArray(0)) }
     }
 

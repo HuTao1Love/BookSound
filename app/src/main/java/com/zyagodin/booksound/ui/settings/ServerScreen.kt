@@ -69,6 +69,7 @@ fun ServerScreen(navigator: AppNavigator) {
     val server = container.server
     val account by server.account.collectAsStateWithLifecycle()
     val reachable by server.reachable.collectAsStateWithLifecycle()
+    val info by server.info.collectAsStateWithLifecycle()
     val settings by container.settings.state.collectAsStateWithLifecycle()
     val transfers by server.transfers.collectAsStateWithLifecycle()
     val serverBooks by remember { server.serverOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
@@ -121,8 +122,20 @@ fun ServerScreen(navigator: AppNavigator) {
                             Column(Modifier.padding(Spacing.lg)) {
                                 Text(current.userName, style = MaterialTheme.typography.titleMedium)
                                 Text(current.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                info?.let { Text(stringResource(R.string.server_version, it.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 if (!reachable) {
                                     Text(stringResource(R.string.server_offline), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Spacing.sm))
+                                }
+                                info?.takeIf { it.incompatible }?.let {
+                                    Text(
+                                        stringResource(if (it.serverOutdated) R.string.server_api_outdated else R.string.server_api_app_outdated),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(top = Spacing.sm),
+                                    )
+                                    if (!it.serverOutdated) {
+                                        TextButton(onClick = container.updates::check) { Text(stringResource(R.string.update_check)) }
+                                    }
                                 }
                                 Row(Modifier.padding(top = Spacing.md), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                     OutlinedButton(onClick = { container.sync.requestSync() }) { Text(stringResource(R.string.server_sync_now)) }

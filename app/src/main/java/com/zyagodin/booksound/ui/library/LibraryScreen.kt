@@ -91,6 +91,7 @@ import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.server.ServerInfo
 import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.AppNavigator
@@ -117,6 +118,7 @@ fun LibraryScreen(navigator: AppNavigator) {
     val state by vm.state.collectAsStateWithLifecycle()
     val lowStorage by vm.lowStorage.collectAsStateWithLifecycle()
     val transfers by vm.transfers.collectAsStateWithLifecycle()
+    val serverInfo by vm.serverInfo.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -193,6 +195,11 @@ fun LibraryScreen(navigator: AppNavigator) {
                 }
                 lowStorage?.let { free ->
                     item(span = { GridItemSpan(maxLineSpan) }, key = "low-storage") { LowStorageNotice(free) }
+                }
+                serverInfo?.takeIf { it.incompatible }?.let { info ->
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "server-api") {
+                        ServerApiNotice(info, onUpdateApp = vm::checkUpdates)
+                    }
                 }
                 when {
                     state.loading -> item(span = { GridItemSpan(maxLineSpan) }, key = "loading") {
@@ -548,6 +555,37 @@ internal fun BookActionsSheet(
             SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
         }
         Spacer(Modifier.height(Spacing.lg))
+    }
+}
+
+/**
+ * The server speaks another API than this app, so nothing syncs: shown above the books until the older side
+ * is updated. Newer releases of the same API work together, so a plain version difference shows nothing.
+ */
+@Composable
+private fun ServerApiNotice(info: ServerInfo, onUpdateApp: () -> Unit) {
+    Surface(
+        onClick = onUpdateApp,
+        // The app updates from here; the server only from its web app.
+        enabled = !info.serverOutdated,
+        shape = Radii.card,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.sm),
+    ) {
+        Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Warning, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(if (info.serverOutdated) R.string.server_api_outdated else R.string.server_api_app_outdated),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (!info.serverOutdated) {
+                    Text(stringResource(R.string.update_check), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = Spacing.xs))
+                }
+            }
+        }
     }
 }
 

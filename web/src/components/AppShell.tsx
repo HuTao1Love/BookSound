@@ -1,12 +1,14 @@
 import AddCircleRoundedIcon from "@mui/icons-material/AddCircleRounded";
 import DnsRoundedIcon from "@mui/icons-material/DnsRounded";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
-import { alpha, Avatar, Badge, Box, ButtonBase, Typography, useMediaQuery, useTheme } from "@mui/material";
-import type { ReactNode } from "react";
+import { Alert, alpha, Avatar, Badge, Box, Button, ButtonBase, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
+import { useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useImports, useTorrents, useUploads } from "../api/hooks";
-import type { SessionDto } from "../api/types.gen";
+import { api, paths } from "../api/client";
+import { keys, useImports, useTorrents, useUploads } from "../api/hooks";
+import { API_VERSION, type SessionDto, type StatusDto } from "../api/types.gen";
 import MiniPlayer from "./MiniPlayer";
 import { Logo, SIDEBAR_WIDTH } from "./Ui";
 
@@ -97,6 +99,7 @@ export default function AppShell({ session, children }: { session: SessionDto; f
         }}
       >
         <Box sx={{ position: "relative", zIndex: 1, maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3, md: 5 }, pt: { xs: 2.5, md: 5 } }}>
+          <ServerUpdatedBanner />
           {children}
         </Box>
       </Box>
@@ -131,6 +134,33 @@ export default function AppShell({ session, children }: { session: SessionDto; f
         </Box>
       )}
     </Box>
+  );
+}
+
+const STATUS_CHECK_MS = 5 * 60 * 1000;
+
+/**
+ * The web app comes from the server itself, so the two differ only when the server was updated while this page
+ * stayed open: then the page asks to be reloaded. Its old code mostly keeps working with a newer release of the
+ * same API, so it says so quietly; with another API it can't, and the banner turns red.
+ */
+function ServerUpdatedBanner() {
+  const { t } = useTranslation();
+  const status = useQuery({ queryKey: keys.status, queryFn: () => api.get<StatusDto>(paths.status), refetchInterval: STATUS_CHECK_MS });
+  const loadedWith = useRef<string | null>(null);
+  const data = status.data;
+  if (!data) return null;
+  loadedWith.current ??= data.serverVersion;
+  const incompatible = data.apiVersion !== API_VERSION;
+  if (data.serverVersion === loadedWith.current && !incompatible) return null;
+  return (
+    <Alert
+      severity={incompatible ? "error" : "info"}
+      action={<Button color="inherit" size="small" onClick={() => window.location.reload()}>{t("serverUpdated.reload")}</Button>}
+      sx={{ mb: 2 }}
+    >
+      {t(incompatible ? "serverUpdated.incompatible" : "serverUpdated.message", { version: data.serverVersion })}
+    </Alert>
   );
 }
 
