@@ -76,9 +76,6 @@ class LibraryRepository(private val db: Database) {
         }.groupBy({ it.first }, { it.second })
     }
 
-    fun allChapters(): Map<String, List<ChapterDto>> = db.tx {
-        query("SELECT * FROM chapters ORDER BY book_id, idx") { it.str("book_id")!! to chapterRow(it) }
-    }.groupBy({ it.first }, { it.second })
 
     fun dto(id: String): BookDto? = book(id)?.toDto(chapters(id))
 

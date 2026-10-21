@@ -2,3 +2,5 @@
 /dist
 /.gradle
 /build
+# tsc -b incremental build cache
+*.tsbuildinfo

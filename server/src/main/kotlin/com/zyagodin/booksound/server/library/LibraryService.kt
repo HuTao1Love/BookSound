@@ -178,15 +178,12 @@ class LibraryService(
      * Brings the database in line with the library folder: finds books copied in by hand (by their embedded
      * id, or one derived from their content like the phone does), follows moved files and marks missing ones.
      */
-    fun scan(): RescanResultDto = synchronized(writeLock) {
+    fun scan(): RescanResultDto {
         val now = clock()
-        val known = repo.books(includeDeleted = true)
-        val byPath = known.associateBy { it.relativePath }
-        val byId = known.associateBy { it.id }
-        val seen = HashSet<String>()
-        var added = 0
-        var relinked = 0
-
+        // Reading and hashing new files can take minutes for a big folder: it happens without the lock, so imports
+        // finishing meanwhile aren't held up. Only recording what was found takes the lock.
+        val known = repo.books(includeDeleted = true).associateBy { it.relativePath }
+        val found = mutableListOf<FoundFile>()
         files.root.walkTopDown().onEnter { !it.name.startsWith(".") || it == files.root }.filter { it.isFile }.forEach { file ->
             if (LibraryLayout.isTemporaryName(file.name)) {
                 if (now - file.lastModified() > STALE_TEMP_MS) file.delete()
@@ -194,33 +191,67 @@ class LibraryService(
             }
             if (file.extension.lowercase() !in AdoptedFile.EXTENSIONS) return@forEach
             val relativePath = files.relativePathOf(file)
-            val existing = byPath[relativePath]
-            if (existing != null && existing.fileSize == file.length() && existing.fileModified == file.lastModified()) {
-                seen += existing.id
-                if (existing.missingSince != null) repo.setLocation(existing.id, relativePath, file.length(), file.lastModified())
+            val size = file.length()
+            val modified = file.lastModified()
+            val existing = known[relativePath]
+            if (existing != null && existing.fileSize == size && existing.fileModified == modified) {
+                found += FoundFile(file, relativePath, size, modified, existing.id, parsed = null, cover = null)
                 return@forEach
             }
             try {
                 val parsed = files.open(file).use { AudioProbe.probe(it, file.name) }
                 if (parsed.container != AudioContainer.MP4) return@forEach
                 val id = parsed.bookId ?: files.open(file).use { ContentId.of(it) }
-                val knownBook = byId[id]
-                if (knownBook != null) {
-                    seen += id
-                    // A second copy of a book whose own file still exists is left alone.
-                    val ownFile = runCatching { fileOf(knownBook) }.getOrNull()
-                    if (knownBook.relativePath == relativePath || ownFile?.isFile != true) {
-                        repo.setLocation(id, relativePath, file.length(), file.lastModified())
-                        if (knownBook.relativePath != relativePath) relinked++
-                        notify(id)
-                    }
-                    return@forEach
-                }
-                adopt(file, parsed, id, relativePath, now)
-                seen += id
-                added++
+                found += FoundFile(file, relativePath, size, modified, id, parsed, parsed.cover?.let { Covers.normalize(it.bytes) })
             } catch (e: Exception) {
                 log.warn("Skipping {}: {}", relativePath, e.message)
+            }
+        }
+        return synchronized(writeLock) { record(found, now) }
+    }
+
+    private class FoundFile(
+        val file: File,
+        val relativePath: String,
+        val size: Long,
+        val modified: Long,
+        val id: String,
+        /** Null when the file is the one already recorded at this path, unchanged. */
+        val parsed: ParsedAudioFile?,
+        val cover: EmbeddedPicture?,
+    )
+
+    /** Brings the books in line with what a scan found; the database is read again, as it may have changed meanwhile. */
+    private fun record(found: List<FoundFile>, now: Long): RescanResultDto {
+        val known = repo.books(includeDeleted = true)
+        val byId = known.associateBy { it.id }
+        val seen = HashSet<String>()
+        var added = 0
+        var relinked = 0
+        for (f in found) {
+            val knownBook = byId[f.id]
+            if (f.parsed == null) {
+                seen += f.id
+                if (knownBook?.missingSince != null) repo.setLocation(f.id, f.relativePath, f.size, f.modified)
+                continue
+            }
+            if (knownBook != null) {
+                seen += f.id
+                // A second copy of a book whose own file still exists is left alone.
+                val ownFile = runCatching { fileOf(knownBook) }.getOrNull()
+                if (knownBook.relativePath == f.relativePath || ownFile?.isFile != true) {
+                    repo.setLocation(f.id, f.relativePath, f.size, f.modified)
+                    if (knownBook.relativePath != f.relativePath) relinked++
+                    notify(f.id)
+                }
+                continue
+            }
+            try {
+                adopt(f.file, f.parsed, f.cover, f.id, f.relativePath, now)
+                seen += f.id
+                added++
+            } catch (e: Exception) {
+                log.warn("Skipping {}: {}", f.relativePath, e.message)
             }
         }
 
@@ -234,14 +265,13 @@ class LibraryService(
             }
             missing++
         }
-        RescanResultDto(added, relinked, missing)
+        return RescanResultDto(added, relinked, missing)
     }
 
-    private fun adopt(file: File, parsed: ParsedAudioFile, id: String, relativePath: String, now: Long) {
+    private fun adopt(file: File, parsed: ParsedAudioFile, cover: EmbeddedPicture?, id: String, relativePath: String, now: Long) {
         val folders = relativePath.split('/').dropLast(1)
         val metadata = AdoptedFile.metadata(parsed, file.name, folders)
         val chapters = AdoptedFile.chapters(parsed, relativePath, file.name, metadata.title)
-        val cover = parsed.cover?.let { Covers.normalize(it.bytes) }
         cover?.let { covers.save(id, it) }
         val row = BookRow(
             id = id,

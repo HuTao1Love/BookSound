@@ -157,7 +157,9 @@ class WatchServer(
         _downloads.update { list -> list.filterNot { it.bookId == bookId } }
     }
 
-    private suspend fun downloadBook(entry: LibraryEntryDto) {
+    private suspend fun downloadBook(listed: LibraryEntryDto) {
+        // The library list leaves chapters out; the book's own entry has them and the latest position.
+        val entry = client.get(ApiPaths.book(listed.book.id), LibraryEntryDto.serializer())
         val book = entry.book
         val profile = profileId
         if (library.freeBytes() < book.sizeBytes / (if (profile != null) 4 else 1) + RESERVE_BYTES) throw IOException("Not enough space on the watch")

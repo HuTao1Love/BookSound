@@ -36,12 +36,13 @@ fun Route.libraryRoutes(ctx: ServerContext) {
     val repo = library.repo
 
     authenticate(AUTH) {
+        // The whole library with the caller's progress, without chapters (GET /books/{id} has them): a large
+        // library has tens of thousands, and lists don't show them.
         get(ApiPaths.BOOKS) {
             val p = call.user
             val entries = io {
-                val chapters = repo.allChapters()
                 val positions = repo.playbackOf(p.userId)
-                repo.books().map { LibraryEntryDto(it.toDto(chapters[it.id].orEmpty()), positions[it.id]) }
+                repo.books().map { LibraryEntryDto(it.toDto(emptyList()), positions[it.id]) }
             }
             call.respond(entries)
         }
