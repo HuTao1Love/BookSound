@@ -38,11 +38,14 @@ import com.zyagodin.booksound.wear.WatchSender
 import com.zyagodin.booksound.wear.WatchSyncBackend
 import android.util.Log
 import com.zyagodin.booksound.data.library.BookDetails
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -72,6 +75,10 @@ class BookSoundApp : Application(), ImageLoaderFactory {
         }
         // Positions saved on the watch while the app wasn't running.
         container.sync.requestSync()
+        // Back online: what was listened to offline goes to the server.
+        container.appScope.launch {
+            container.network.online.drop(1).filter { it }.collect { container.sync.requestSync() }
+        }
         // So the watch can resume the last book even before the player ran.
         container.watchRemote.restore()
         // Just updated: the watch app goes next.
@@ -91,7 +98,13 @@ class BookSoundApp : Application(), ImageLoaderFactory {
 
 /** Manual dependency graph; one instance per process. */
 class AppContainer(app: Application) {
-    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Background work of the whole app. A job that fails (a server that is down, a network gone) is logged and ends
+     * alone: it never takes the app down, which works offline as it does without a server.
+     */
+    val appScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> Log.e("BookSoundApp", "Background work failed", e) },
+    )
 
     /** The app's own storage on the phone, whose free space the library warns about. */
     val dataDir: java.io.File = app.filesDir

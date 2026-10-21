@@ -109,6 +109,10 @@ class UpdateManager(
             } catch (e: IOException) {
                 Log.w(TAG, "Update check failed", e)
                 UpdateState.Failed(UpdateState.Reason.NETWORK)
+            } catch (e: org.json.JSONException) {
+                // Not GitHub's JSON: a captive portal or a proxy's page answered.
+                Log.w(TAG, "Update check failed", e)
+                UpdateState.Failed(UpdateState.Reason.NETWORK)
             }
         }
     }
