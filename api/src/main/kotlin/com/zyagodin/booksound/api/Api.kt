@@ -263,7 +263,15 @@ data class UploadCreateRequest(
 )
 
 @Serializable
-data class UploadDto(val id: String, val fileName: String, val sizeBytes: Long, val receivedBytes: Long, val kind: UploadKind)
+data class UploadDto(
+    val id: String,
+    val fileName: String,
+    val sizeBytes: Long,
+    val receivedBytes: Long,
+    val kind: UploadKind,
+    /** Who sends it, e.g. "anna · Pixel 8"; in the list of uploads under way. */
+    val from: String? = null,
+)
 
 /** Result of completing a [UploadKind.BOOK] upload. */
 @Serializable

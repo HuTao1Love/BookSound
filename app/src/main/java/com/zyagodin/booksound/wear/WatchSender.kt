@@ -102,6 +102,9 @@ class WatchSender(
         WatchTransferService.start(context)
     }
 
+    /** Forgets the books that are no longer on their way. */
+    fun dismissFinished() = _transfers.update { list -> list.filter { it.isActive } }
+
     fun cancel(bookId: String) {
         val transfer = _transfers.value.firstOrNull { it.bookId == bookId && it.isActive } ?: return
         if (transfer.stage == WatchTransfer.Stage.QUEUED) setStage(bookId, WatchTransfer.Stage.CANCELLED)

@@ -40,6 +40,8 @@ data class LibraryUiState(
     val activeImports: List<ImportJob> = emptyList(),
     /** Torrents still downloading, waiting for review or being converted. */
     val activeTorrents: List<TorrentItem> = emptyList(),
+    /** Books on their way to or from the server, or to the watch. */
+    val activeTransfers: Int = 0,
     val scanning: Boolean = false,
     val groups: List<SeriesSection> = emptyList(),
 )
@@ -58,6 +60,8 @@ sealed interface LibraryEvent {
     }
 }
 
+private data class Downloads(val jobs: List<ImportJob>, val torrents: List<TorrentItem>, val transfers: Int)
+
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     private val query = MutableStateFlow("")
     private val _events = MutableSharedFlow<LibraryEvent>(extraBufferCapacity = 4)
@@ -67,9 +71,11 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         container.library.library,
         query,
         container.settings.state,
-        combine(container.importManager.jobs, container.torrents.items) { jobs, torrents -> jobs to torrents },
+        combine(container.importManager.jobs, container.torrents.items, container.server.transfers, container.watchSender.transfers) { jobs, torrents, server, watch ->
+            Downloads(jobs, torrents, server.count { it.isActive } + watch.count { it.isActive })
+        },
         container.scanner.scanning,
-    ) { items, q, settings, (jobs, torrents), scanning ->
+    ) { items, q, settings, (jobs, torrents, transfers), scanning ->
         val libraryQuery = LibraryQuery(q, settings.librarySort, settings.libraryDescending, settings.libraryFilter)
         val byId = items.associateBy { it.id }
         val ordered = LibrarySearch.apply(items.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
@@ -87,6 +93,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             // Torrent conversions are shown in the downloads.
             activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
             activeTorrents = torrents.filter { it.record.isActive },
+            activeTransfers = transfers,
             scanning = scanning,
             groups = groups,
         )

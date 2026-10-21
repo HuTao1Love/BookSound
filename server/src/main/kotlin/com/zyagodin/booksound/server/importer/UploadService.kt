@@ -42,13 +42,33 @@ class UploadService(
         val id = UUID.randomUUID().toString()
         db.tx {
             update(
-                "INSERT INTO uploads (id, user_id, file_name, size_bytes, kind, sha256, relative_dir, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                id, principal.userId, name, request.sizeBytes, request.kind, request.sha256?.lowercase(), folders.joinToString("/"), System.currentTimeMillis(),
+                "INSERT INTO uploads (id, user_id, device_id, file_name, size_bytes, kind, sha256, relative_dir, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                id, principal.userId, principal.deviceId, name, request.sizeBytes, request.kind, request.sha256?.lowercase(), folders.joinToString("/"),
+                System.currentTimeMillis(),
             )
         }
         partFile(id).createNewFile()
         return UploadDto(id, name, request.sizeBytes, 0, request.kind)
     }
+
+    /** Uploads under way from every device, newest first, with who sends them. */
+    fun active(): List<UploadDto> = db.tx {
+        query(
+            """SELECT up.*, u.name AS user_name, d.name AS device_name FROM uploads up
+               JOIN users u ON u.id = up.user_id LEFT JOIN devices d ON d.id = up.device_id
+               ORDER BY up.created_at DESC""",
+        ) {
+            val id = it.str("id")!!
+            UploadDto(
+                id = id,
+                fileName = it.str("file_name")!!,
+                sizeBytes = it.long("size_bytes")!!,
+                receivedBytes = 0,
+                kind = UploadKind.valueOf(it.str("kind")!!),
+                from = listOfNotNull(it.str("user_name"), it.str("device_name")).joinToString(" · "),
+            )
+        }
+    }.map { it.copy(receivedBytes = partFile(it.id).length()) }
 
     fun status(principal: Principal, id: String): UploadDto {
         val row = row(principal, id)
