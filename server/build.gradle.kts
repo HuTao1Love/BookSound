@@ -75,6 +75,15 @@ tasks.named<JavaExec>("run") {
     environment("BOOKSOUND_PORT", providers.gradleProperty("port").getOrElse("8080"))
 }
 
+// Jars come from the Gradle cache with its permissions (0600 on CI runners): in the Docker image the
+// server's user couldn't read them. Everything is readable; the start scripts keep their 0755.
+distributions.named("main") {
+    contents {
+        filePermissions { unix("rw-r--r--") }
+        dirPermissions { unix("rwxr-xr-x") }
+    }
+}
+
 // The release archive for LXC/bare-metal installs: bin/booksound-server, lib/*.jar.
 tasks.named<Tar>("distTar") {
     compression = Compression.GZIP
