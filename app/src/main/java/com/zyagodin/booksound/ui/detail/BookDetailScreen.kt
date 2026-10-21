@@ -176,7 +176,7 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
             val details = s.details
             val finished = details.item.entry.finished
             val title = details.item.metadata.title
-            val actions = remember(vm, navigator, finished, watchConnected, title) {
+            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title) {
                 DetailActions(
                     onBack = navigator::back,
                     onPlay = {
