@@ -656,4 +656,7 @@
     <string name="server_only_hint">Книга на сервере. Скачайте её, чтобы слушать на телефоне.</string>
     <string name="server_bulk_upload">Отправить все книги на сервер (%1$d)</string>
     <string name="server_bulk_download">Скачать все с сервера (%1$d · %2$s)</string>
+    <string name="server_version">Сервер %1$s</string>
+    <string name="server_api_outdated">Сервер слишком старый для этой версии приложения, синхронизация остановлена. Обновите его в веб-приложении: Сервер → Установить обновление.</string>
+    <string name="server_api_app_outdated">Приложение слишком старое для этого сервера, синхронизация остановлена. Обновите приложение.</string>
 </resources>

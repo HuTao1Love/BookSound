@@ -76,6 +76,8 @@ sealed interface BackendStatus {
     data object Unreachable : BackendStatus
     data class Available(val serverVersion: String) : BackendStatus
     data class Unauthorized(val message: String) : BackendStatus
+    /** The backend speaks another version of the protocol: nothing is exchanged until the older side is updated. */
+    data class Incompatible(val serverVersion: String, val serverApi: Int, val clientApi: Int) : BackendStatus
 }
 
 /** Destination for downloaded file bytes (a temp file on Android). */
@@ -143,6 +145,7 @@ class DefaultSyncEngine(
         when (val status = backend.status()) {
             BackendStatus.NotConfigured, BackendStatus.Unreachable -> return SyncReport.Skipped
             is BackendStatus.Unauthorized -> return SyncReport.Failed(status.message)
+            is BackendStatus.Incompatible -> return SyncReport.Failed("Server API ${status.serverApi}, this app speaks ${status.clientApi}")
             is BackendStatus.Available -> Unit
         }
         return try {
