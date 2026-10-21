@@ -102,6 +102,10 @@ class ImportService(
     /** Called on a background thread after a job ends (done, failed or cancelled). */
     val finishedListeners = mutableListOf<(JobRecord) -> Unit>()
 
+    /** Set while the server shuts down: jobs cut short then are left as they are stored, to run again on start. */
+    @Volatile
+    private var stopping = false
+
     /** Runs a watch job; set by the watch copies service. */
     var watchRunner: (suspend (WatchSpec, File, (Float) -> Unit) -> Unit)? = null
 
@@ -155,7 +159,19 @@ class ImportService(
         db.tx { update("DELETE FROM import_jobs WHERE id = ?", id) }
     }
 
+    /**
+     * Stops running jobs for a shutdown and waits a little for them to let go of files and the database. They stay
+     * queued in the database (only finished jobs are stored with their outcome) and start over on the next start.
+     */
+    fun stop(timeoutMs: Long = 10_000) {
+        stopping = true
+        val active = synchronized(lock) { running.values.toList() }
+        active.forEach { it.cancel() }
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { active.forEach { it.join() } } }
+    }
+
     private fun pump() {
+        if (stopping) return
         val toStart = synchronized(lock) {
             val limit = settings.current.parallelImports
             val free = limit - running.size
@@ -198,8 +214,11 @@ class ImportService(
             }
             finish(job.copy(stage = ImportStage.DONE, progress = 1f, bookId = bookId, finishedAt = System.currentTimeMillis()))
         } catch (e: CancellationException) {
+            if (stopping) return
             finish(job.copy(stage = ImportStage.CANCELLED, progress = null, finishedAt = System.currentTimeMillis()))
         } catch (e: Throwable) {
+            // ffmpeg killed by the shutdown, files closed under the job: not the job's fault.
+            if (stopping) return
             log.warn("Job {} ({}) failed", job.id, job.title, e)
             val message = when (e) {
                 is ImportFailure, is FfmpegException -> e.message

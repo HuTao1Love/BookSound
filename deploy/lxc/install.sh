@@ -19,12 +19,28 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "Installing Java and ffmpeg..."
+export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-JAVA=openjdk-21-jre-headless
-for candidate in openjdk-25-jre-headless openjdk-21-jre-headless; do
+apt-get install -y -qq ffmpeg curl ca-certificates gnupg >/dev/null
+# The server needs Java 21 or newer. Distributions without it (Debian 12 ships 17) get Eclipse Temurin.
+JAVA=
+for candidate in openjdk-25-jre-headless openjdk-21-jre-headless temurin-25-jre temurin-21-jre; do
     if apt-cache show "$candidate" >/dev/null 2>&1; then JAVA=$candidate; break; fi
 done
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$JAVA" ffmpeg curl ca-certificates >/dev/null
+if [ -z "$JAVA" ]; then
+    echo "Adding the Eclipse Temurin repository (packages.adoptium.net)..."
+    CODENAME=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
+    if [ -z "$CODENAME" ]; then
+        echo "Can't tell the distribution release; install Java 21+ and run this again." >&2
+        exit 1
+    fi
+    curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor --yes -o /usr/share/keyrings/adoptium.gpg
+    echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $CODENAME main" \
+        > /etc/apt/sources.list.d/adoptium.list
+    apt-get update -qq
+    JAVA=temurin-21-jre
+fi
+apt-get install -y -qq "$JAVA" >/dev/null
 
 if ! id booksound >/dev/null 2>&1; then
     useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin booksound

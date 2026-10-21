@@ -43,6 +43,15 @@ class LibraryFiles(val root: File) {
         return File(dir, name)
     }
 
+    /** [target], or "Title (2).m4b" beside it when another file took that name meanwhile; [own] may be replaced. */
+    fun stillFree(target: File, own: File?): File {
+        val ownCanonical = own?.canonicalFile
+        val siblings = target.parentFile.listFiles()?.filter { it.isFile && it.canonicalFile != ownCanonical }?.map { it.name }.orEmpty()
+        val wanted = FileNameSanitizer.collisionKey(target.name)
+        if (siblings.none { FileNameSanitizer.collisionKey(it) == wanted }) return target
+        return File(target.parentFile, LibraryLayout.uniqueFileName(target.name, siblings))
+    }
+
     /** A hidden temporary file next to where the book will go, renamed into place once verified. */
     fun partialFor(target: File, jobId: String): File {
         target.parentFile.mkdirs()

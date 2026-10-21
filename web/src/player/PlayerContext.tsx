@@ -86,7 +86,9 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
   const save = useCallback(
     async (patch?: Partial<PlaybackDto>) => {
       const book = stateRef.current.book;
-      if (!book) return;
+      // While a book loads the element is not at its position yet (and switching books fires a "pause" for the
+      // old file): saving now would store the start of the book over the real position.
+      if (!book || pendingSeek.current !== null) return;
       const now = Date.now();
       const previous = playback.current;
       const record: PlaybackDto = {

@@ -37,9 +37,11 @@ class ServerLocalStore(
 
     override suspend fun dirtyChanges(): ChangeSet {
         val known = server.playback().associateBy { it.bookId }
+        // Compared by content, not revision: revisions are counted separately here and on the server, and a
+        // position that won a merge here keeps the local revision, which would otherwise be sent back forever.
         val playback = db.playback().all().filter { local ->
             val remote = known[local.bookId]
-            remote == null || remote.revision != local.revision || remote.updatedAt != local.updatedAt || remote.positionMs != local.positionMs ||
+            remote == null || remote.updatedAt != local.updatedAt || remote.positionMs != local.positionMs ||
                 remote.finished != local.finished || remote.speed != local.speed
         }.filter { server.book(it.bookId) != null }
 
