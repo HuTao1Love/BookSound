@@ -76,6 +76,7 @@ import com.zyagodin.booksound.ui.navigation.ImportEditorKey
 import com.zyagodin.booksound.ui.navigation.ImportsKey
 import com.zyagodin.booksound.ui.navigation.LibraryKey
 import com.zyagodin.booksound.ui.navigation.RemovedBooksKey
+import com.zyagodin.booksound.ui.navigation.ServerKey
 import com.zyagodin.booksound.ui.navigation.SeriesKey
 import com.zyagodin.booksound.ui.navigation.SettingsKey
 import com.zyagodin.booksound.ui.onboarding.OnboardingScreen
@@ -83,6 +84,7 @@ import com.zyagodin.booksound.ui.player.PlayerScreen
 import com.zyagodin.booksound.ui.player.PlayerSheetState
 import com.zyagodin.booksound.ui.player.rememberPlayerSheetState
 import com.zyagodin.booksound.ui.settings.RemovedBooksScreen
+import com.zyagodin.booksound.ui.settings.ServerScreen
 import com.zyagodin.booksound.ui.settings.SettingsScreen
 import com.zyagodin.booksound.ui.settings.UpdateDialog
 import com.zyagodin.booksound.update.UpdateState
@@ -155,6 +157,7 @@ class AppNavigator(
 
     fun openSettings() = backStack.add(SettingsKey)
     fun openRemovedBooks() = backStack.add(RemovedBooksKey)
+    fun openServer() = backStack.add(ServerKey)
     fun back() {
         if (backStack.size > 1) backStack.removeLastOrNull()
     }
@@ -273,6 +276,7 @@ private fun MainNavigation(container: AppContainer, intents: Flow<String>) {
                     entry<ImportsKey> { ImportsScreen(navigator) }
                     entry<SettingsKey> { SettingsScreen(navigator) }
                     entry<RemovedBooksKey> { RemovedBooksScreen(navigator) }
+                    entry<ServerKey> { ServerScreen(navigator) }
                 },
             )
         }

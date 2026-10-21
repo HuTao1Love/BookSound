@@ -24,6 +24,7 @@
     <application
         android:name=".BookSoundApp"
         android:allowBackup="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
@@ -106,6 +107,11 @@
 
         <!-- Sends books to the watch app while the phone app is in the background. -->
         <service
+            android:name=".server.ServerTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
             android:name=".wear.WatchTransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
@@ -128,6 +134,11 @@
                 <data
                     android:host="*"
                     android:pathPrefix="/booksound/phone-command/"
+                    android:scheme="wear" />
+                <!-- The watch asks to be signed in to the server with the phone's account. -->
+                <data
+                    android:host="*"
+                    android:pathPrefix="/booksound/server-auth-request"
                     android:scheme="wear" />
             </intent-filter>
         </service>

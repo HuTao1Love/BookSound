@@ -90,6 +90,9 @@ interface BookDao {
 
 @Dao
 interface PlaybackDao {
+    @Query("SELECT * FROM playback_state")
+    suspend fun all(): List<PlaybackStateEntity>
+
     @Query("SELECT * FROM playback_state WHERE book_id = :bookId")
     suspend fun get(bookId: String): PlaybackStateEntity?
 

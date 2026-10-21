@@ -581,8 +581,9 @@ class TorrentManager(
         pendingAdds.remove(r.downloadKey)
         val status = engine.status(r.infoHash) ?: return null
         if (status.paused) engine.resume(r.infoHash)
-        if (status.error != null) {
-            books.forEach { onEngineError(it.id, status.error, outOfSpace = false) }
+        val error = status.error
+        if (error != null) {
+            books.forEach { onEngineError(it.id, error, outOfSpace = false) }
             return null
         }
         if (status.isComplete) {

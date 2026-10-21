@@ -12,10 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-/** A file that was found but cannot be imported, shown to the user with the reason. */
-data class SkippedFile(val name: String, val reason: SkipReason, val detail: String? = null)
-
-enum class SkipReason { UNSUPPORTED, CORRUPTED, UNREADABLE }
+typealias SkippedFile = com.zyagodin.booksound.core.organize.SkippedFile
+typealias SkipReason = com.zyagodin.booksound.core.organize.SkipReason
 
 sealed interface AnalysisState {
     data class Analyzing(val done: Int, val total: Int, val currentName: String?) : AnalysisState

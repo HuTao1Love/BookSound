@@ -1,0 +1,31 @@
+{
+  "name": "booksound-web",
+  "private": true,
+  "version": "1.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@mui/icons-material": "7.3.2",
+    "@mui/material": "7.3.2",
+    "@tanstack/react-query": "5.87.4",
+    "i18next": "25.5.2",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-i18next": "15.7.3",
+    "react-router-dom": "7.9.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.2",
+    "typescript": "5.9.2",
+    "vite": "7.1.5",
+    "vite-plugin-pwa": "1.0.3"
+  }
+}

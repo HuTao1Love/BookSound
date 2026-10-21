@@ -9,6 +9,7 @@ import com.zyagodin.booksound.watch.surfaces.WatchSurfaces
 import com.zyagodin.booksound.watch.sync.BookReceiver
 import com.zyagodin.booksound.watch.sync.PhoneRemote
 import com.zyagodin.booksound.watch.sync.PositionSync
+import com.zyagodin.booksound.watch.sync.WatchServer
 import com.zyagodin.booksound.watch.sync.WatchUpdates
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,7 @@ class WatchApp : Application() {
             runCatching { container.library.recoverOrphans() }.onFailure { Log.w(TAG, "Recovering books failed", it) }
             // After the recovery, so recovered books get their positions too.
             container.positions.pullAll()
+            container.server.pull()
         }
         container.updates.publishVersion()
     }
@@ -50,7 +52,9 @@ class WatchContainer(app: Application) {
     val settings = WatchSettings(app)
     val library = WatchLibrary(app) { settings.deviceId }
     val receiver = BookReceiver(app, scope, library)
-    val positions = PositionSync(app, scope, library)
+    /** The user's BookSound server, when the phone signed the watch in with its account. */
+    val server = WatchServer(app, scope, library, settings)
+    val positions = PositionSync(app, scope, library, server)
     val player = WatchPlayer(app)
     val updates = WatchUpdates(app, scope)
     val phone = PhoneRemote(app)

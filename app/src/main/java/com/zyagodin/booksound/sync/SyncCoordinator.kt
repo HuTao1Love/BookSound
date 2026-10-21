@@ -4,13 +4,11 @@ import androidx.room.withTransaction
 import com.zyagodin.booksound.core.model.BookId
 import com.zyagodin.booksound.core.model.DeviceId
 import com.zyagodin.booksound.core.model.SyncStamp
-import com.zyagodin.booksound.core.sync.BackendStatus
 import com.zyagodin.booksound.core.sync.BookRecord
 import com.zyagodin.booksound.core.sync.ChangeSet
 import com.zyagodin.booksound.core.sync.ChapterListRecord
 import com.zyagodin.booksound.core.sync.DefaultSyncEngine
 import com.zyagodin.booksound.core.sync.FileDescriptorRecord
-import com.zyagodin.booksound.core.sync.NoBackend
 import com.zyagodin.booksound.core.sync.PlaybackConflictResolver
 import com.zyagodin.booksound.core.sync.PlaybackRecord
 import com.zyagodin.booksound.core.sync.SyncBackend
@@ -29,27 +27,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/** One place positions are synced with, and the local records it is synced from. */
+class SyncTarget(val backend: SyncBackend, val store: SyncLocalStore)
+
 /**
- * Entry point for synchronization. Today the backend is [NoBackend], so every request is a no-op;
- * plugging in a real [SyncBackend] (e.g. a home server) requires no changes to the player,
- * library or import code, which only mark records dirty.
+ * Entry point for synchronization: one round with every target in turn (the watch, the server when signed in).
+ * The player, library and import code only mark records dirty and ask for a round.
  */
 class SyncCoordinator(
     private val scope: CoroutineScope,
-    private val localStore: SyncLocalStore,
+    private val targets: List<SyncTarget>,
     private val device: suspend () -> DeviceId,
-    private val backend: SyncBackend = NoBackend,
 ) {
     private val _lastReport = MutableStateFlow<SyncReport>(SyncReport.Skipped)
+    /** Report of the last round with the last target that took part. */
     val lastReport: StateFlow<SyncReport> = _lastReport
     private val mutex = Mutex()
-
-    suspend fun status(): BackendStatus = backend.status()
 
     fun requestSync() {
         scope.launch {
             mutex.withLock {
-                _lastReport.value = DefaultSyncEngine(backend, localStore, device()).sync()
+                val id = device()
+                for (target in targets) {
+                    val report = DefaultSyncEngine(target.backend, target.store, id).sync()
+                    if (report != SyncReport.Skipped) _lastReport.value = report
+                }
             }
         }
     }
