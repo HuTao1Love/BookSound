@@ -96,6 +96,9 @@
     <string name="filter_in_progress">In progress</string>
     <string name="filter_not_started">Not started</string>
     <string name="filter_finished">Finished</string>
+    <string name="location_filter_all">All books, on the phone and on the server. Tap to show the phone\'s only</string>
+    <string name="location_filter_phone">Books on the phone only. Tap to show the server\'s only</string>
+    <string name="location_filter_server">Books on the server only. Tap to show all</string>
     <string name="sort_recent">Recent</string>
     <string name="sort_added">Date added</string>
     <string name="sort_title">Title</string>
