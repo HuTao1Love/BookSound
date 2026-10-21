@@ -19,6 +19,10 @@ import com.zyagodin.booksound.api.WatchFileStatusDto
 import com.zyagodin.booksound.api.WatchProfileDto
 import com.zyagodin.booksound.api.WatchServerLogin
 import com.zyagodin.booksound.api.toModel
+import com.zyagodin.booksound.core.model.Audiobook
+import com.zyagodin.booksound.core.model.BookFile
+import com.zyagodin.booksound.core.model.BookId
+import com.zyagodin.booksound.core.model.LibraryEntry
 import com.zyagodin.booksound.core.metadata.AudioProbe
 import com.zyagodin.booksound.core.sync.BackendStatus
 import com.zyagodin.booksound.core.sync.SyncBackend
@@ -31,6 +35,10 @@ import com.zyagodin.booksound.data.db.AppDatabase
 import com.zyagodin.booksound.data.db.BookEntity
 import com.zyagodin.booksound.data.db.PlaybackStateEntity
 import com.zyagodin.booksound.data.db.ServerBookEntity
+import com.zyagodin.booksound.data.db.ServerPlaybackEntity
+import com.zyagodin.booksound.data.library.BookDetails
+import com.zyagodin.booksound.data.library.BookLocation
+import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.LibraryRepository
 import com.zyagodin.booksound.data.settings.SettingsRepository
 import com.zyagodin.booksound.shared.server.ServerAccountStore
@@ -42,13 +50,17 @@ import com.zyagodin.booksound.storage.DocumentStore
 import com.zyagodin.booksound.sync.SyncTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -119,10 +131,16 @@ class ServerManager(
 
     private val workDir = File(context.cacheDir, "server").apply { mkdirs() }
 
+    /** Covers of the server's books that are not on the phone, shown in the library; named "<id>-<sha>". */
+    private val coverDir = File(context.filesDir, "server-covers").apply { mkdirs() }
+    /** Raised when a cover lands in [coverDir], so the library shows it. */
+    private val coversChanged = MutableStateFlow(0)
+
     /** Called to start a sync round after the account or the catalog changed. */
     var requestSync: () -> Unit = {}
 
     init {
+        scope.launch(Dispatchers.IO) { keepServerCovers() }
         scope.launch {
             for (key in queue) {
                 val transfer = _transfers.value.firstOrNull { it.key == key && it.stage == ServerTransfer.Stage.QUEUED } ?: continue
@@ -176,6 +194,84 @@ class ServerManager(
         local.map { it.book }.filter { it.id !in there && it.missingSince == null }
     }
 
+    /**
+     * The library as the phone shows it: its own books, each saying whether the server has it, and the server's
+     * books that are not on the phone. Without an account it is just the phone's library.
+     */
+    fun libraryWithServer(): Flow<List<LibraryItem>> = combine(
+        library.library, db.server().observeBooks(), db.server().observePlayback(), account, coversChanged,
+    ) { local, remote, playback, account, _ ->
+        if (account == null) return@combine local
+        val there = remote.map { it.id }.toSet()
+        val here = local.map { it.id }.toSet()
+        val positions = playback.associateBy { it.bookId }
+        local.map { it.copy(location = if (it.id in there) BookLocation.SYNCED else BookLocation.PHONE_ONLY) } +
+            remote.filter { it.id !in here }.mapNotNull { serverItem(it, positions[it.id])?.first }
+    }.flowOn(Dispatchers.IO)
+
+    /** The page of a book that is only on the server, or null when the server doesn't have it. */
+    fun serverDetails(bookId: String): Flow<BookDetails?> = combine(
+        db.server().observeBooks(), db.server().observePlayback(), account, coversChanged,
+    ) { remote, playback, account, _ ->
+        val book = remote.firstOrNull { it.id == bookId }?.takeIf { account != null } ?: return@combine null
+        val position = playback.firstOrNull { it.bookId == bookId }
+        val (item, dto) = serverItem(book, position) ?: return@combine null
+        BookDetails(
+            item = item,
+            chapters = item.entry.book.chapters,
+            relativePath = dto.relativePath.orEmpty(),
+            fileUri = Uri.EMPTY,
+            fileSize = dto.sizeBytes,
+            speed = position?.speed,
+        )
+    }.flowOn(Dispatchers.IO)
+
+    private fun serverItem(book: ServerBookEntity, playback: ServerPlaybackEntity?): Pair<LibraryItem, BookDto>? {
+        val dto = runCatching { ApiJson.decodeFromString(BookDto.serializer(), book.body) }.getOrNull() ?: return null
+        val audiobook = Audiobook(
+            id = BookId(dto.id),
+            metadata = dto.metadata.toModel(),
+            durationMs = dto.durationMs,
+            chapters = dto.chapters.map { it.toModel() },
+            file = BookFile("", dto.sizeBytes, dto.sha256, dto.fileRevision),
+            addedAt = dto.addedAt,
+            sync = dto.stamp.toModel(),
+        )
+        val item = LibraryItem(
+            entry = LibraryEntry(audiobook, playback?.positionMs ?: 0L, playback?.finished == true, playback?.lastPlayedAt),
+            coverPath = coverFile(book)?.takeIf { it.exists() }?.absolutePath,
+            isMissing = false,
+            chapterCount = dto.chapters.size,
+            location = BookLocation.SERVER_ONLY,
+        )
+        return item to dto
+    }
+
+    private fun coverFile(book: ServerBookEntity): File? = book.coverSha256?.let { File(coverDir, "${book.id}-${it.take(16)}") }
+
+    /** Downloads the covers of the server's books the phone lacks, and drops the ones no longer needed. */
+    private suspend fun keepServerCovers() {
+        combine(db.server().observeBooks(), db.books().observeLibrary().map { rows -> rows.map { it.book.id }.toSet() }) { remote, here ->
+            remote.filter { it.id !in here }
+        }.distinctUntilChanged().collectLatest { books ->
+            val wanted = books.mapNotNull { book -> coverFile(book)?.let { book to it } }
+            val keep = wanted.map { it.second.name }.toSet()
+            coverDir.listFiles()?.filter { it.name !in keep }?.forEach { it.delete() }
+            for ((book, file) in wanted) {
+                if (file.exists() || accounts.current == null) continue
+                val picture = try {
+                    downloadCover(book.id)
+                } catch (e: IOException) {
+                    // Offline or signed out: the next change of the server's books tries again.
+                    return@collectLatest
+                } ?: continue
+                val part = File(coverDir, "${file.name}.part")
+                part.writeBytes(picture.bytes)
+                if (part.renameTo(file)) coversChanged.update { it + 1 } else part.delete()
+            }
+        }
+    }
+
     /** Ids of the books the server has. */
     fun serverBookIds(): Flow<Set<String>> = db.server().observeBooks().map { list -> list.map { it.id }.toSet() }
 
@@ -185,6 +281,11 @@ class ServerManager(
     // ------------------------------------------------------------------------------- transfers
 
     fun download(book: ServerBookEntity) = enqueue(ServerTransfer(book.id, book.title, ServerTransfer.Direction.DOWNLOAD, totalBytes = book.sizeBytes))
+
+    /** Downloads a book of the server by its id; nothing happens when the server no longer has it. */
+    suspend fun download(bookId: String) {
+        db.server().book(bookId)?.let { download(it) }
+    }
 
     fun upload(bookId: String, title: String) = enqueue(ServerTransfer(bookId, title, ServerTransfer.Direction.UPLOAD))
 

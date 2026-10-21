@@ -65,6 +65,9 @@ interface ServerDao {
     @Query("SELECT * FROM server_playback")
     suspend fun playback(): List<ServerPlaybackEntity>
 
+    @Query("SELECT * FROM server_playback")
+    fun observePlayback(): Flow<List<ServerPlaybackEntity>>
+
     @Query("SELECT * FROM server_playback WHERE book_id = :bookId")
     suspend fun playback(bookId: String): ServerPlaybackEntity?
 

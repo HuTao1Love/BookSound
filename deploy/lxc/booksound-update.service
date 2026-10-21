@@ -1,0 +1,11 @@
+# Installs the latest BookSound release when the server asks for it (see booksound-update.path). It runs as root
+# because the server runs as a user that can't replace its own program; the server only leaves a request file.
+[Unit]
+Description=BookSound server update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/booksound/update.sh
+TimeoutStartSec=30min

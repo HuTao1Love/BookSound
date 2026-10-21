@@ -24,15 +24,31 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+/** Where a book is, as far as the BookSound server goes. */
+enum class BookLocation {
+    /** Not signed in to a server. */
+    PHONE,
+    /** On the phone and on the server. */
+    SYNCED,
+    /** On the phone; the server doesn't have it yet. */
+    PHONE_ONLY,
+    /** On the server only: shown dimmed, downloading it makes it a phone book. */
+    SERVER_ONLY,
+}
+
 /** A library row ready for display. */
 data class LibraryItem(
     val entry: LibraryEntry,
     val coverPath: String?,
     val isMissing: Boolean,
     val chapterCount: Int,
+    val location: BookLocation = BookLocation.PHONE,
 ) {
     val id: String get() = entry.book.id.value
     val metadata: BookMetadata get() = entry.book.metadata
+
+    /** The book's file is not on the phone: it can be downloaded, not played. */
+    val onServerOnly: Boolean get() = location == BookLocation.SERVER_ONLY
 }
 
 data class BookDetails(

@@ -2,12 +2,15 @@ package com.zyagodin.booksound.server.http
 
 import com.zyagodin.booksound.api.ApiJson
 import com.zyagodin.booksound.api.ApiPaths
+import com.zyagodin.booksound.api.ErrorCodes
+import com.zyagodin.booksound.api.ErrorDto
 import com.zyagodin.booksound.api.EventDto
 import com.zyagodin.booksound.api.ServerSettingsDto
 import com.zyagodin.booksound.api.UserCreateRequest
 import com.zyagodin.booksound.api.UserUpdateRequest
 import com.zyagodin.booksound.api.WatchProfileDto
 import com.zyagodin.booksound.server.ServerContext
+import com.zyagodin.booksound.server.update.UpdateNotPossibleException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -66,6 +69,19 @@ fun Route.adminRoutes(ctx: ServerContext) {
         post(ApiPaths.ADMIN_RESCAN) {
             call.requireAdmin()
             call.respond(io { ctx.library.scan() })
+        }
+
+        get(ApiPaths.ADMIN_UPDATE) {
+            call.requireAdmin()
+            call.respond(io { ctx.updates.check(refresh = call.request.queryParameters["refresh"] == "1") })
+        }
+        post(ApiPaths.ADMIN_UPDATE) {
+            call.requireAdmin()
+            try {
+                call.respond(io { ctx.updates.install() })
+            } catch (e: UpdateNotPossibleException) {
+                call.respond(HttpStatusCode.Conflict, ErrorDto(ErrorCodes.CONFLICT, e.message))
+            }
         }
 
         post(ApiPaths.WATCH_PROFILES) {
