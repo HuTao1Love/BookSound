@@ -15,6 +15,7 @@ import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.server.ServerInfo
 import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.torrent.TorrentItem
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,9 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
+    /** The server's version and API, for the warning shown when they don't fit this app. */
+    val serverInfo: StateFlow<ServerInfo?> = container.server.info
+
     /** Books moving to or from the server, by id; apart from [state] since progress changes many times a second. */
     val transfers: StateFlow<Map<String, ServerTransfer>> = activeServerTransfers(container)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
@@ -139,11 +143,20 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         container.library.setFinished(item.id, finished)
     }
 
+    fun checkUpdates() = container.updates.check()
+
     fun download(item: LibraryItem) = downloadFromServer(container, item)
     fun upload(item: LibraryItem) = container.server.upload(item.id, item.metadata.title)
     fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
 
-    fun remove(item: LibraryItem, deleteFile: Boolean) = viewModelScope.launch {
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun deleteFromServer(item: LibraryItem) = container.server.deleteFromServer(item.id)
+
+    fun remove(item: LibraryItem, deleteFile: Boolean, deleteFromServer: Boolean) = viewModelScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
         _events.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
