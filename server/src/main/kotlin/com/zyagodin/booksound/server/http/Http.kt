@@ -150,6 +150,7 @@ fun Application.installHttp(auth: AuthService, trustedProxies: Set<InetAddress>)
         exception<LibraryException> { call, e ->
             val status = when (e.code) {
                 ErrorCodes.NOT_FOUND -> HttpStatusCode.NotFound
+                ErrorCodes.FORBIDDEN -> HttpStatusCode.Forbidden
                 ErrorCodes.CONFLICT -> HttpStatusCode.Conflict
                 ErrorCodes.INSUFFICIENT_STORAGE -> HttpStatusCode.InsufficientStorage
                 else -> HttpStatusCode.UnprocessableEntity

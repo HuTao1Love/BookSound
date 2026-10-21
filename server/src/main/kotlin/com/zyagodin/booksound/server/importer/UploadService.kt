@@ -88,7 +88,7 @@ class UploadService(
         if (row.kind != UploadKind.BOOK) throw LibraryException(ErrorCodes.BAD_REQUEST, "Not a book upload")
         val file = checkComplete(row)
         val book = try {
-            library.adoptUploadedBook(file, principal.userId, principal.deviceId)
+            library.adoptUploadedBook(file, principal.userId, principal.isAdmin, principal.deviceId)
         } finally {
             forget(id)
         }

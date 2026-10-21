@@ -206,6 +206,13 @@ class ServerTest {
         assertTrue(guestPull.changes.playback.isEmpty())
         assertEquals(HttpStatusCode.Forbidden, client.get(ApiPaths.ADMIN_USERS) { bearer(guest) }.status)
 
+        // Someone else's book in the shared library can't be replaced by an upload.
+        val other = bookFile(id, "Hijacked")
+        val guestUpload = client.post(ApiPaths.UPLOADS) { bearer(guest); json(UploadCreateRequest.serializer(), UploadCreateRequest("x.m4b", other.size.toLong(), UploadKind.BOOK)) }
+            .body(UploadDto.serializer())
+        client.put(ApiPaths.upload(guestUpload.id)) { bearer(guest); header(HttpHeaders.ContentRange, "bytes 0-${other.size - 1}/${other.size}"); setBody(other) }
+        assertEquals(HttpStatusCode.Forbidden, client.post(ApiPaths.uploadComplete(guestUpload.id)) { bearer(guest) }.status)
+
         // A metadata edit is written into the file, which moves to its new place.
         val entry = client.get(ApiPaths.book(id)) { bearer(tokens) }.body(LibraryEntryDto.serializer())
         val patched = client.patch(ApiPaths.book(id)) {

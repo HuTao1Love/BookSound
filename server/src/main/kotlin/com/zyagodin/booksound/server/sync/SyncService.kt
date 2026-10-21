@@ -42,10 +42,11 @@ class SyncService(
         val taken = all.take(size)
         val cursor = taken.lastOrNull() ?: since
         val hasMore = all.size > size
-        val chapters = repo.allChapters()
+        val pageBooks = books.filter { it.first <= cursor }.map { it.second }
+        val chapters = repo.chaptersOf(pageBooks.map { it.id })
         return PullResponse(
             changes = ChangeSetDto(
-                books = books.filter { it.first <= cursor }.map { (_, b) -> b.toDto(chapters[b.id].orEmpty()) },
+                books = pageBooks.map { b -> b.toDto(chapters[b.id].orEmpty()) },
                 playback = playback.filter { it.first <= cursor }.map { it.second.dto },
                 preferences = prefs?.takeIf { it.second <= cursor }?.first,
             ),

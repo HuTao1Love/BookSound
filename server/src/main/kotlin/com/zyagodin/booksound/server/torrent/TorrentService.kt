@@ -18,6 +18,7 @@ import com.zyagodin.booksound.core.torrent.TorrentContentValidator
 import com.zyagodin.booksound.core.torrent.TorrentLink
 import com.zyagodin.booksound.core.torrent.TorrentLinks
 import com.zyagodin.booksound.core.torrent.TorrentSuggestions
+import com.zyagodin.booksound.server.auth.Principal
 import com.zyagodin.booksound.server.db.Database
 import com.zyagodin.booksound.server.db.str
 import com.zyagodin.booksound.server.events.Events
@@ -141,6 +142,14 @@ class TorrentService private constructor(
     }
 
     fun list(): List<TorrentEntry> = synchronized(lock) { entries.values.toList() }
+
+    /** Everyone sees the torrents; only whoever added one, or an admin, changes or removes it. */
+    fun checkAccess(torrentId: String, principal: Principal) {
+        val entry = get(torrentId) ?: throw LibraryException(ErrorCodes.NOT_FOUND, "No such torrent")
+        if (!principal.isAdmin && entry.addedBy != principal.userId) {
+            throw LibraryException(ErrorCodes.FORBIDDEN, "Only whoever added this torrent or an admin can change it")
+        }
+    }
 
     fun get(id: String): TorrentEntry? = synchronized(lock) { entries[id] }
 
@@ -325,7 +334,8 @@ class TorrentService private constructor(
                 }
                 maybeImport(entry.id)
             } else {
-                update(entry.id, notify = true) { changed }
+                // Progress is shown live and worked out again after a restart: not worth a database write every poll.
+                update(entry.id, persist = false) { changed }
             }
         }
     }
@@ -422,13 +432,13 @@ class TorrentService private constructor(
         events.emit(EventDto(EventTypes.TORRENT, torrent = toDto(entry)))
     }
 
-    private fun update(id: String, notify: Boolean = true, change: (TorrentEntry) -> TorrentEntry) {
+    private fun update(id: String, persist: Boolean = true, change: (TorrentEntry) -> TorrentEntry) {
         val updated = synchronized(lock) {
             val current = entries[id] ?: return
             change(current).also { entries[id] = it }
         }
-        persist(updated)
-        if (notify) events.emit(EventDto(EventTypes.TORRENT, torrent = toDto(updated)))
+        if (persist) persist(updated)
+        events.emit(EventDto(EventTypes.TORRENT, torrent = toDto(updated)))
     }
 
     private fun persist(entry: TorrentEntry) = db.tx {

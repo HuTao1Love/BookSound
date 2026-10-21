@@ -172,7 +172,7 @@ class WatchServer(
         val book = entry.book
         val profile = profileId
         if (library.freeBytes() < book.sizeBytes / (if (profile != null) 4 else 1) + RESERVE_BYTES) throw IOException("Not enough space on the watch")
-        onFastNetwork {
+        onFastNetwork { client ->
             val path = if (profile != null) {
                 // The server makes the smaller copy first; that can take a few minutes.
                 var status = client.get("${ApiPaths.bookWatchFile(book.id, profile)}&status=1", WatchFileStatusDto.serializer())
@@ -214,32 +214,32 @@ class WatchServer(
     }
 
     /**
-     * Runs [block] over Wi-Fi when the watch can get it: through the phone's Bluetooth link a book would take
-     * hours. Without Wi-Fi in reach it uses whatever network there is (LTE, Bluetooth).
+     * Runs [block] with a client on Wi-Fi when the watch can get it: through the phone's Bluetooth link a book would
+     * take hours. Without Wi-Fi in reach it uses whatever network there is (LTE, Bluetooth). Each download asks for
+     * Wi-Fi on its own, so one finishing doesn't take the network away from another.
      */
-    private suspend fun <T> onFastNetwork(block: suspend () -> T): T {
+    private suspend fun <T> onFastNetwork(block: suspend (ServerClient) -> T): T {
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         var callback: ConnectivityManager.NetworkCallback? = null
-        val network = withTimeoutOrNull(WIFI_WAIT_MS) {
-            suspendCancellableCoroutine<Network> { cont ->
-                val cb = object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        if (cont.isActive) cont.resume(network)
-                    }
-                }
-                callback = cb
-                val request = NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build()
-                connectivity.requestNetwork(request, cb)
-            }
-        }
-        if (network != null) connectivity.bindProcessToNetwork(network)
         try {
-            return block()
+            val network = withTimeoutOrNull(WIFI_WAIT_MS) {
+                suspendCancellableCoroutine<Network> { cont ->
+                    val cb = object : ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: Network) {
+                            if (cont.isActive) cont.resume(network)
+                        }
+                    }
+                    callback = cb
+                    val request = NetworkRequest.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build()
+                    connectivity.requestNetwork(request, cb)
+                }
+            }
+            return block(network?.let(client::over) ?: client)
         } finally {
-            connectivity.bindProcessToNetwork(null)
+            // Keeps Wi-Fi up while the download runs; released when it ends.
             callback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }
         }
     }

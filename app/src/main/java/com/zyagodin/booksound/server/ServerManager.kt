@@ -21,7 +21,6 @@ import com.zyagodin.booksound.api.WatchServerLogin
 import com.zyagodin.booksound.api.toModel
 import com.zyagodin.booksound.core.metadata.AudioProbe
 import com.zyagodin.booksound.core.model.EmbeddedPicture
-import com.zyagodin.booksound.core.naming.FileNameSanitizer
 import com.zyagodin.booksound.core.naming.LibraryLayout
 import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.cover.CoverImages
@@ -220,9 +219,7 @@ class ServerManager(
         val path = LibraryLayout.pathFor(metadata, metadata.title)
         var dir = documents.rootDocumentId(treeUri)
         for (name in path.directories) dir = documents.ensureDirectory(treeUri, dir, name)
-        val siblings = documents.children(treeUri, dir).map { it.name }
-        val wanted = FileNameSanitizer.collisionKey(path.fileName)
-        val name = if (siblings.none { FileNameSanitizer.collisionKey(it) == wanted }) path.fileName else LibraryLayout.uniqueFileName(path.fileName, siblings)
+        val name = LibraryLayout.uniqueFileName(path.fileName, documents.children(treeUri, dir).map { it.name })
         val partialName = "${LibraryLayout.PARTIAL_PREFIX}server-$bookId.m4b"
         val target = documents.createFile(treeUri, dir, partialName, "application/octet-stream")
         try {

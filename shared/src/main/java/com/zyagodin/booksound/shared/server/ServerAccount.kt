@@ -3,6 +3,7 @@ package com.zyagodin.booksound.shared.server
 import android.content.Context
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.flow.StateFlow
 
 /** The signed-in BookSound server of this device. [deviceId] is the device's id on the server. */
@@ -26,6 +27,12 @@ class ServerAccountStore(context: Context) {
     val account: StateFlow<ServerAccount?> = _account
 
     val current: ServerAccount? get() = _account.value
+
+    /**
+     * Held while tokens are refreshed. Shared by every client of the account: a refresh token works once, and the
+     * server takes a second use of it as theft and signs the device out.
+     */
+    val refreshLock = Mutex()
 
     private fun load(): ServerAccount? {
         val url = prefs.getString("url", null) ?: return null
