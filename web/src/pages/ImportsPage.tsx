@@ -8,11 +8,11 @@ import {
   LinearProgress, List, ListItem, ListItemText, Stack, Switch, TextField, Typography,
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api, paths, request } from "../api/client";
-import { keys, useImports, useTorrents } from "../api/hooks";
+import { keys, useImports, useTorrents, useUploads } from "../api/hooks";
 import type { ImportJobDto, MetadataDto, TorrentBookDto, TorrentDto, UploadDto } from "../api/types.gen";
 import { uploadFile } from "../api/upload";
 import { formatBytes } from "../library";
@@ -281,13 +281,32 @@ function ReviewDialog({ torrent, book, onClose }: { torrent: TorrentDto; book: T
 function JobsCard() {
   const { t } = useTranslation();
   const jobs = useImports();
+  const uploads = useUploads();
   const client = useQueryClient();
+  // A job that finished since the last poll brings a new book: refresh the library.
+  const done = jobs.data?.filter((j) => j.stage === "DONE").length ?? 0;
+  useEffect(() => {
+    if (done > 0) void client.invalidateQueries({ queryKey: keys.books });
+  }, [done, client]);
   const navigate = useNavigate();
   return (
     <Card variant="outlined">
       <CardContent>
         <Typography variant="h6" sx={{ mb: 1 }}>{t("imports.jobs")}</Typography>
-        {(jobs.data?.length ?? 0) === 0 ? (
+        {(uploads.data?.length ?? 0) > 0 && (
+          <List disablePadding sx={{ mb: 1 }}>
+            {uploads.data!.map((u) => (
+              <ListItem key={u.id} disableGutters sx={{ display: "block" }}>
+                <Typography noWrap>{u.fileName}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {t("imports.incoming", { from: u.from ?? "?" })} · {formatBytes(u.receivedBytes)} / {formatBytes(u.sizeBytes)}
+                </Typography>
+                <LinearProgress variant="determinate" value={u.sizeBytes ? (u.receivedBytes / u.sizeBytes) * 100 : 0} sx={{ mt: 0.5 }} />
+              </ListItem>
+            ))}
+          </List>
+        )}
+        {(jobs.data?.length ?? 0) === 0 && (uploads.data?.length ?? 0) === 0 ? (
           <Typography color="text.secondary">{t("imports.noJobs")}</Typography>
         ) : (
           <List disablePadding>

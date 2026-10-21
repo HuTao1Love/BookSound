@@ -85,6 +85,11 @@ fun ImportsScreen(navigator: AppNavigator) {
     // Conversions started by a torrent are shown on the torrent's card.
     val jobs = allJobs.filter { it.request.torrentId == null }
     val torrents by container.torrents.items.collectAsStateWithLifecycle()
+    // Books moving to or from the server and to the watch: shown here next to what is downloaded and converted.
+    val serverTransfers by container.server.transfers.collectAsStateWithLifecycle()
+    val watchTransfers by container.watchSender.transfers.collectAsStateWithLifecycle()
+    val transfers = serverTransfers.map { t -> t.toRow { container.server.cancel(t.bookId, t.direction) } } +
+        watchTransfers.map { t -> t.toRow { container.watchSender.cancel(t.bookId) } }
     var cancelJob by remember { mutableStateOf<String?>(null) }
     var removeTorrent by remember { mutableStateOf<TorrentItem?>(null) }
     var showImportSheet by rememberSaveable { mutableStateOf(false) }
@@ -112,14 +117,16 @@ fun ImportsScreen(navigator: AppNavigator) {
             ) {
                 IconButton(onClick = navigator::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back)) }
                 Text(stringResource(R.string.imports_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = Spacing.sm))
-                if (jobs.any { !it.isActive } || torrents.any { it.record.phase == TorrentPhase.COMPLETED }) {
+                if (jobs.any { !it.isActive } || torrents.any { it.record.phase == TorrentPhase.COMPLETED } || transfers.any { !it.active }) {
                     QuietButton(stringResource(R.string.action_clear_finished), {
                         manager.dismissFinished()
                         container.torrents.dismissFinished()
+                        container.server.clearFinished()
+                        container.watchSender.dismissFinished()
                     })
                 }
             }
-            if (jobs.isEmpty() && torrents.isEmpty()) {
+            if (jobs.isEmpty() && torrents.isEmpty() && transfers.isEmpty()) {
                 // Scrolls so that the button stays reachable above the mini player in landscape.
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     MessageState(
@@ -139,6 +146,14 @@ fun ImportsScreen(navigator: AppNavigator) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    if (transfers.isNotEmpty()) {
+                        item(key = "transfers-header") {
+                            SectionHeader(stringResource(R.string.transfers_section), Modifier.widthIn(max = 720.dp).fillMaxWidth())
+                        }
+                        items(transfers, key = { it.key }) { row ->
+                            TransferCard(row, Modifier.widthIn(max = 720.dp).animateItem())
+                        }
+                    }
                     if (torrents.isNotEmpty()) {
                         item(key = "torrents-header") {
                             SectionHeader(stringResource(R.string.torrents_section), Modifier.widthIn(max = 720.dp).fillMaxWidth())
@@ -146,10 +161,10 @@ fun ImportsScreen(navigator: AppNavigator) {
                         items(torrents, key = { "torrent:" + it.id }) { item ->
                             TorrentCard(item, torrentActions, Modifier.widthIn(max = 720.dp).animateItem())
                         }
-                        if (jobs.isNotEmpty()) {
-                            item(key = "imports-header") {
-                                SectionHeader(stringResource(R.string.imports_title), Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = Spacing.md))
-                            }
+                    }
+                    if (jobs.isNotEmpty() && (torrents.isNotEmpty() || transfers.isNotEmpty())) {
+                        item(key = "imports-header") {
+                            SectionHeader(stringResource(R.string.imports_title), Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = Spacing.md))
                         }
                     }
                     items(jobs.reversed(), key = { it.id }) { job ->
@@ -171,7 +186,7 @@ fun ImportsScreen(navigator: AppNavigator) {
                 }
             }
         }
-        if (jobs.isNotEmpty() || torrents.isNotEmpty()) {
+        if (jobs.isNotEmpty() || torrents.isNotEmpty() || transfers.isNotEmpty()) {
             GradientCircleButton(
                 onClick = { showImportSheet = true },
                 size = 56.dp,

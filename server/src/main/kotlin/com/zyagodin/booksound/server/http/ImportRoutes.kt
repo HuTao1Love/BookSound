@@ -32,6 +32,10 @@ private val CONTENT_RANGE = Regex("""bytes (\d+)-(\d+)/(\d+)""")
 fun Route.importRoutes(ctx: ServerContext) {
     authenticate(AUTH) {
         // ------------------------------------------------------------------------------ uploads
+        get(ApiPaths.UPLOADS) {
+            call.user
+            call.respond(io { ctx.uploads.active() })
+        }
         post(ApiPaths.UPLOADS) {
             val p = call.user
             val body = call.receive<UploadCreateRequest>()

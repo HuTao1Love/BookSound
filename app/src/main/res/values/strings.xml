@@ -614,4 +614,10 @@
     <string name="server_channel">Server transfers</string>
     <string name="server_upload_started">Uploading to the server</string>
     <string name="action_upload_to_server">Upload to the server</string>
+    <string name="transfers_section">Transfers</string>
+    <string name="transfer_to_server">To the server</string>
+    <string name="transfer_from_server">From the server</string>
+    <string name="transfer_to_watch">To the watch</string>
+    <string name="transfer_no_watch">No watch connected</string>
+    <string name="transfer_no_space">Not enough space on the watch</string>
 </resources>

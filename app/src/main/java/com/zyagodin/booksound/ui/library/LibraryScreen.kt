@@ -366,13 +366,14 @@ private fun LibraryHeader(
 
 /**
  * Opens the downloads. Like an app icon's notification count, the badge counts what is in progress:
- * torrents (the books of one torrent count once) and imports. It turns to the accent colour when a
+ * torrents (the books of one torrent count once), imports, and books moving to or from the server or to
+ * the watch. It turns to the accent colour when a
  * torrent waits for its details to be reviewed.
  */
 @Composable
 private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
     val torrents = state.activeTorrents
-    val downloads = torrents.distinctBy { it.record.downloadKey }.size + state.activeImports.size
+    val downloads = torrents.distinctBy { it.record.downloadKey }.size + state.activeImports.size + state.activeTransfers
     val needsReview = torrents.any {
         !it.record.reviewed && (it.record.phase == TorrentPhase.DOWNLOADING || it.record.phase == TorrentPhase.DOWNLOADED)
     }

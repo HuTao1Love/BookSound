@@ -43,6 +43,7 @@ const en = {
     stage: { QUEUED: "Waiting", PREPARING: "Reading files", CONVERTING: "Converting", WRITING: "Writing", VERIFYING: "Checking", FINISHING: "Finishing", DONE: "Done", FAILED: "Failed", CANCELLED: "Cancelled" },
     phase: { FETCHING_METADATA: "Getting file list", AWAITING_REVIEW: "Waiting for review", DOWNLOADING: "Downloading", DOWNLOADED: "Downloaded", VERIFYING: "Checking", CONVERTING: "Converting", COMPLETED: "In the library", FAILED: "Failed", PAUSED: "Paused" },
     torrentsUnavailable: "Torrents are not available on this server.",
+    incoming: "Arriving from {{from}}",
   },
   account: {
     devices: "Signed-in devices", thisDevice: "this device", signOut: "Sign out", revoke: "Sign out device", password: "Change password",
@@ -103,6 +104,7 @@ const ru: typeof en = {
     stage: { QUEUED: "В очереди", PREPARING: "Чтение файлов", CONVERTING: "Конвертация", WRITING: "Запись", VERIFYING: "Проверка", FINISHING: "Завершение", DONE: "Готово", FAILED: "Ошибка", CANCELLED: "Отменено" },
     phase: { FETCHING_METADATA: "Получение списка файлов", AWAITING_REVIEW: "Ждёт проверки", DOWNLOADING: "Скачивается", DOWNLOADED: "Скачан", VERIFYING: "Проверка", CONVERTING: "Конвертация", COMPLETED: "В библиотеке", FAILED: "Ошибка", PAUSED: "Пауза" },
     torrentsUnavailable: "Торренты на этом сервере недоступны.",
+    incoming: "Загружается с {{from}}",
   },
   account: {
     devices: "Устройства", thisDevice: "это устройство", signOut: "Выйти", revoke: "Отключить устройство", password: "Сменить пароль",
