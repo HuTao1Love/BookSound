@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -40,9 +41,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.BookProgressBar
 import com.zyagodin.booksound.ui.components.CoverBackdrop
+import com.zyagodin.booksound.ui.components.ServerMark
+import com.zyagodin.booksound.ui.components.coverAlpha
 import com.zyagodin.booksound.ui.components.remainingLabel
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
@@ -57,15 +61,16 @@ import com.zyagodin.booksound.util.formatDuration
 fun SeriesSectionView(
     section: SeriesSection,
     coverSize: Dp,
+    transfers: Map<String, ServerTransfer>,
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
     onOpenSeries: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (section.series == null) {
-        Carousel(section.items, numbered = false, coverSize, onOpen, onLongClick, PaddingValues(horizontal = 0.dp), modifier.fillMaxWidth().padding(vertical = Spacing.sm))
+        Carousel(section.items, numbered = false, coverSize, transfers, onOpen, onLongClick, PaddingValues(horizontal = 0.dp), modifier.fillMaxWidth().padding(vertical = Spacing.sm))
     } else {
-        SeriesCard(section, coverSize, onOpen, onLongClick, { onOpenSeries(section.series) }, modifier)
+        SeriesCard(section, coverSize, transfers, onOpen, onLongClick, { onOpenSeries(section.series) }, modifier)
     }
 }
 
@@ -73,6 +78,7 @@ fun SeriesSectionView(
 private fun SeriesCard(
     section: SeriesSection,
     coverSize: Dp,
+    transfers: Map<String, ServerTransfer>,
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
     onOpenSeries: () -> Unit,
@@ -130,7 +136,7 @@ private fun SeriesCard(
                     BookProgressBar(group.progress, Modifier.padding(horizontal = Spacing.lg).padding(top = Spacing.md), height = 3.dp)
                 }
                 Spacer(Modifier.height(Spacing.lg))
-                Carousel(section.items, numbered = true, coverSize, onOpen, onLongClick, PaddingValues(horizontal = Spacing.lg))
+                Carousel(section.items, numbered = true, coverSize, transfers, onOpen, onLongClick, PaddingValues(horizontal = Spacing.lg))
             }
         }
     }
@@ -145,7 +151,7 @@ internal fun StackedCovers(items: List<LibraryItem>, size: Dp = 52.dp) {
             val i = items.size - 1 - reverseIndex
             BookCover(
                 item.coverPath, item.metadata.title, null,
-                Modifier.size(size).offset(x = step * i),
+                Modifier.size(size).offset(x = step * i).alpha(coverAlpha(item, null)),
                 shape = RoundedCornerShape(size * 0.23f),
                 elevation = 4.dp,
             )
@@ -158,6 +164,7 @@ private fun Carousel(
     items: List<LibraryItem>,
     numbered: Boolean,
     coverSize: Dp,
+    transfers: Map<String, ServerTransfer>,
     onOpen: (LibraryItem) -> Unit,
     onLongClick: (LibraryItem) -> Unit,
     padding: PaddingValues,
@@ -174,14 +181,14 @@ private fun Carousel(
     }
     LazyRow(modifier, state = state, contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
         items(items, key = { it.id }) { item ->
-            CarouselCard(item, numbered, coverSize, { onOpen(item) }, { onLongClick(item) })
+            CarouselCard(item, numbered, coverSize, transfers[item.id], { onOpen(item) }, { onLongClick(item) })
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CarouselCard(item: LibraryItem, numbered: Boolean, coverSize: Dp, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun CarouselCard(item: LibraryItem, numbered: Boolean, coverSize: Dp, transfer: ServerTransfer?, onClick: () -> Unit, onLongClick: () -> Unit) {
     Column(
         Modifier
             .width(coverSize)
@@ -190,7 +197,8 @@ private fun CarouselCard(item: LibraryItem, numbered: Boolean, coverSize: Dp, on
             .padding(bottom = Spacing.sm),
     ) {
         Box {
-            BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(coverSize), elevation = 6.dp)
+            BookCover(item.coverPath, item.metadata.title, item.metadata.author, Modifier.size(coverSize).alpha(coverAlpha(item, transfer)), elevation = 6.dp)
+            ServerMark(item, transfer, Modifier.align(Alignment.TopEnd).padding(8.dp))
             val number = item.metadata.seriesIndex
             if (numbered && number != null) {
                 Surface(
@@ -212,12 +220,14 @@ private fun CarouselCard(item: LibraryItem, numbered: Boolean, coverSize: Dp, on
             }
         }
         Spacer(Modifier.height(Spacing.sm))
-        Text(item.metadata.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (!numbered) {
-            item.metadata.author?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.alpha(if (item.onServerOnly) 0.7f else 1f)) {
+            Text(item.metadata.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!numbered) {
+                item.metadata.author?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
+            Text(remainingLabel(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 1)
         }
-        Text(remainingLabel(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 1)
     }
 }
