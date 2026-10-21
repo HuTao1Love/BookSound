@@ -161,14 +161,15 @@ class ImportPipeline(
             withContext(NonCancellable) {
                 target.existing?.let { existing ->
                     val asideName = "${LibraryLayout.REPLACED_PREFIX}${request.jobId}.m4b"
+                    // Recorded first: after a crash during the rename the book is found by this name.
+                    journal.recordAside(request.jobId, treeUri, target.directoryId, asideName, existing.name)
                     tx.aside = documents.rename(existing.uri, asideName)
                     tx.asideName = existing.name
-                    journal.recordAside(request.jobId, tx.aside!!, existing.name)
                 }
                 val finalUri = documents.rename(tx.partial!!, target.fileName)
                 tx.committed = finalUri
                 tx.partial = null
-                journal.clearPartial(request.jobId)
+                journal.recordCommitted(request.jobId, finalUri)
                 val finalName = documents.entry(treeUri, finalUri)?.name ?: target.fileName
 
                 val coverFile = request.cover?.let { covers.save(request.bookId, it) }
@@ -187,6 +188,9 @@ class ImportPipeline(
                     keepAddedAt = request.isEdit,
                 )
                 tx.dbWritten = true
+                // From here a crash keeps the new book. Not recording it only matters if the app dies
+                // right now too, so a failure doesn't fail the import that just succeeded.
+                runCatching { journal.recordSaved(request.jobId) }.onFailure { Log.w(TAG, "Journal not updated", it) }
 
                 // The new book is in place; now discard what it replaced.
                 tx.aside?.let { documents.delete(it) }

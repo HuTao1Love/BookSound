@@ -20,6 +20,7 @@
     <string name="playback_error">Can\'t play this book</string>
     <string name="listen">Listen</string>
     <string name="delete_from_watch">Delete from watch</string>
+    <string name="delete_failed">Couldn\'t delete the book</string>
     <string name="update_install">Install update</string>
     <string name="update_channel">App updates</string>
     <string name="update_ready">BookSound %1$s is ready</string>

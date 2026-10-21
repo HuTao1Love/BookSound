@@ -81,8 +81,11 @@ class LibraryScanner(
         for ((entry, path) in files) {
             coroutineContext.ensureActive()
             if (LibraryLayout.isTemporaryName(entry.name)) {
-                // Leftover of an interrupted import (the app was killed). Never touch running jobs.
-                if (active.none { entry.name.contains(it) } && now - entry.lastModified > STALE_TEMP_MS) {
+                // Leftover of an interrupted import (the app was killed). Never touch running jobs, nor
+                // a book moved aside: it may be the only copy left, and ImportJournal.recover puts it back.
+                if (entry.name.startsWith(LibraryLayout.PARTIAL_PREFIX) &&
+                    active.none { entry.name.contains(it) } && now - entry.lastModified > STALE_TEMP_MS
+                ) {
                     documents.delete(entry.uri)
                 }
                 continue

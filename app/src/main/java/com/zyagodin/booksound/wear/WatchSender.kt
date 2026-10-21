@@ -20,6 +20,7 @@ import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.core.wear.WatchResult
 import com.zyagodin.booksound.data.library.LibraryRepository
 import com.zyagodin.booksound.data.library.metadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -130,10 +131,11 @@ class WatchSender(
         val id = transfer.bookId
         val stage = try {
             send(id)
-        } catch (e: IOException) {
-            Log.w(TAG, "Sending $id failed", e)
-            WatchTransfer.Stage.FAILED
-        } catch (e: ApiException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // IOException and ApiException, but also e.g. SecurityException when the library folder
+            // is no longer readable: anything else would end the worker with the book stuck "sending".
             Log.w(TAG, "Sending $id failed", e)
             WatchTransfer.Stage.FAILED
         } finally {

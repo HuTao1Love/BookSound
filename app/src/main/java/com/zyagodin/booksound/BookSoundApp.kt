@@ -93,6 +93,9 @@ class BookSoundApp : Application(), ImageLoaderFactory {
 class AppContainer(app: Application) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** The app's own storage on the phone, whose free space the library warns about. */
+    val dataDir: java.io.File = app.filesDir
+
     /** True while an activity is started; used to decide whether to post result notifications. */
     @Volatile var appVisible: Boolean = false
 

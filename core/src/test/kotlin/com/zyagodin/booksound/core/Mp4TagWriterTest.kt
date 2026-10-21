@@ -6,6 +6,7 @@ import com.zyagodin.booksound.core.io.readFully
 import com.zyagodin.booksound.core.metadata.AudioContainer
 import com.zyagodin.booksound.core.metadata.AudioProbe
 import com.zyagodin.booksound.core.metadata.CorruptedFileException
+import com.zyagodin.booksound.core.metadata.mp4.Mp4Boxes
 import com.zyagodin.booksound.core.metadata.mp4.Mp4Reader
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagSpec
 import com.zyagodin.booksound.core.metadata.mp4.Mp4TagWriter
@@ -126,6 +127,24 @@ class Mp4TagWriterTest {
     fun `truncated file is reported as corrupted`() {
         val input = TestMedia.aacMp4(moovFirst = false)
         AudioProbe.probe(ByteArraySource(input.copyOf(input.size - 100)), "broken.m4b")
+    }
+
+    @Test
+    fun `a damaged chapter track's chunk count falls back to the Nero chapters`() {
+        val output = rewrite(TestMedia.aacMp4())
+        val doc = Mp4Reader.load(ByteArraySource(output))
+        val chapterTrack = doc.tracks.first { Mp4Boxes.handlerType(it) == "text" }
+        val stco = chapterTrack.find("mdia/minf/stbl/stco")!!
+        stco.payload = stco.payload!!.copyOf().also { p -> p[4] = 0x7F; p[5] = 0xFF.toByte(); p[6] = 0xFF.toByte(); p[7] = 0xF0.toByte() }
+        // Same size: the media data stays where it was.
+        val moovBox = doc.topLevel.first { it.type == "moov" }
+        val moov = doc.moov.toByteArray()
+        assertEquals(moovBox.size, moov.size.toLong())
+        val damaged = output.copyOf().also { moov.copyInto(it, moovBox.offset.toInt()) }
+
+        val parsed = AudioProbe.probe(ByteArraySource(damaged), "book.m4b")
+        assertEquals(spec.chapters.map { it.title }, parsed.chapters.map { it.title })
+        assertTrue(parsed.warnings.any { it.startsWith("Chapters unreadable") })
     }
 
     @Test

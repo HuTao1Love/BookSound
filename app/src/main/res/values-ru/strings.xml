@@ -107,6 +107,7 @@
     <string name="sort_descending">По убыванию</string>
     <string name="scan_result">Библиотека обновлена: добавлено %1$d, не найдено %2$d</string>
     <string name="scan_permission_lost">Нет доступа к папке библиотеки. Выберите её снова в настройках.</string>
+    <string name="low_storage_warning">На телефоне свободно всего %1$s. Импорт, загрузки и сохранение позиции могут перестать работать: освободите место.</string>
 
     <string name="remove_title">Убрать из библиотеки?</string>
     <string name="remove_message">«%1$s» и прогресс прослушивания будут убраны из BookSound.</string>
@@ -466,10 +467,10 @@
     <!-- Таймер сна -->
     <string name="sleep_end_of_book">До конца книги</string>
     <string name="sleep_end_of_book_short">Конец книги</string>
-    <string name="sleep_shake_hint">Встряхните телефон, чтобы запустить таймер заново.</string>
-    <string name="sleep_shake_hint_chapter">Встряхните телефон, чтобы дослушать ещё одну главу.</string>
+    <string name="sleep_shake_hint">Когда звук начнёт затихать, встряхните телефон, чтобы запустить таймер заново.</string>
+    <string name="sleep_shake_hint_chapter">Когда звук начнёт затихать, встряхните телефон, чтобы дослушать ещё одну главу.</string>
     <string name="settings_shake">Встряхнуть для сброса</string>
-    <string name="settings_shake_hint">Встряхните телефон, пока идёт таймер, чтобы запустить его заново, или вскоре после паузы, чтобы слушать дальше</string>
+    <string name="settings_shake_hint">Встряхните телефон, когда звук затихает перед паузой, чтобы запустить таймер заново, или вскоре после паузы, чтобы слушать дальше</string>
     <string name="settings_sleep_repeat">Сохранять таймер сна</string>
     <string name="settings_sleep_repeat_hint">Сработавший таймер включится снова, как только вы продолжите слушать</string>
     <string name="settings_sleep_auto_night">Таймер сна ночью</string>

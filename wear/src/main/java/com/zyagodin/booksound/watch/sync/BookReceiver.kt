@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /** A book on its way from the phone. */
 data class IncomingBook(val id: String, val title: String, val receivedBytes: Long, val totalBytes: Long) {
@@ -38,6 +39,8 @@ class BookReceiver(
     private val channels = Wearable.getChannelClient(context)
     private val messages = Wearable.getMessageClient(context)
     private val mutex = Mutex()
+    /** Books refused for lack of space: their audio still arriving is thrown away, not kept for a day. */
+    private val refused: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private fun header(id: String) = File(dir, "$id.header")
     private fun part(id: String) = File(dir, "$id.part")
@@ -61,9 +64,13 @@ class BookReceiver(
         val oldFile = library.audioFile(id).takeIf { it.exists() }?.length() ?: 0L
         if (library.freeBytes() + oldFile < header.fileSize + RESERVE_BYTES) {
             Log.w(TAG, "No space for $id: ${header.fileSize} bytes")
+            refused += id
+            // Whatever of the audio already arrived; the rest is dropped in onInputClosed().
+            scope.launch { discard(id) }
             reply(sourceNode, id, WatchResult.NoSpace)
             return
         }
+        refused -= id
         scope.launch {
             mutex.withLock { header(id).writeBytes(bytes) }
             finishIfComplete(id, sourceNode)
@@ -90,7 +97,10 @@ class BookReceiver(
     fun onInputClosed(channel: ChannelClient.Channel, closeReason: Int) {
         val id = WatchPaths.bookId(channel.path, WatchPaths.BOOK_PREFIX)?.value ?: return
         scope.launch {
-            if (closeReason == ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL) {
+            if (refused.remove(id)) {
+                Log.i(TAG, "Dropping $id, refused for lack of space")
+                discard(id)
+            } else if (closeReason == ChannelClient.ChannelCallback.CLOSE_REASON_NORMAL) {
                 mutex.withLock { done(id).createNewFile() }
                 finishIfComplete(id, channel.nodeId)
             } else {
