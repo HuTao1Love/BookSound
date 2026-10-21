@@ -20,7 +20,7 @@ const en = {
     nothingFound: "Nothing found", sort: "Sort", filter: "Show", series: "Series", booksInSeries_one: "{{count}} book", booksInSeries_few: "{{count}} books", booksInSeries_many: "{{count}} books", booksInSeries_other: "{{count}} books",
     sortBy: { RECENT: "Recently played", ADDED: "Recently added", TITLE: "Title", AUTHOR: "Author", SERIES: "Series", DURATION: "Length", PROGRESS: "Progress" },
     filters: { ALL: "All books", NOT_STARTED: "Not started", IN_PROGRESS: "In progress", FINISHED: "Finished" },
-    playNext: "Play next unfinished",
+    finishedOf: "{{finished}}/{{total}} done", openSeries: "Open series", upNext: "Up next: {{title}}", seriesEmpty: "No books in this series",
     continue: "Continue listening", all: "All books", count_one: "{{count}} book", count_few: "{{count}} books", count_many: "{{count}} books", count_other: "{{count}} books", hours: "{{h}} h of listening",
   },
   book: {
@@ -87,7 +87,7 @@ const ru: typeof en = {
     nothingFound: "Ничего не найдено", sort: "Сортировка", filter: "Показать", series: "Серия", booksInSeries_one: "{{count}} книга", booksInSeries_few: "{{count}} книги", booksInSeries_many: "{{count}} книг", booksInSeries_other: "{{count}} книги",
     sortBy: { RECENT: "Недавно слушали", ADDED: "Недавно добавленные", TITLE: "Название", AUTHOR: "Автор", SERIES: "Серия", DURATION: "Длительность", PROGRESS: "Прогресс" },
     filters: { ALL: "Все книги", NOT_STARTED: "Не начатые", IN_PROGRESS: "Слушаю", FINISHED: "Прослушанные" },
-    playNext: "Следующая непрослушанная",
+    finishedOf: "{{finished}}/{{total}} прослушано", openSeries: "Открыть серию", upNext: "Далее: {{title}}", seriesEmpty: "В серии нет книг",
     continue: "Продолжить", all: "Все книги", count_one: "{{count}} книга", count_few: "{{count}} книги", count_many: "{{count}} книг", count_other: "{{count}} книги", hours: "{{h}} ч прослушивания",
   },
   book: {
