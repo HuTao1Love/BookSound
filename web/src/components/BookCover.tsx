@@ -66,16 +66,21 @@ export default function BookCover({ book, size = 256, radius = 2, progress, shad
   );
 }
 
-/** The cover, blurred and fading into the page: behind the book and the player. */
-export function CoverBackdrop({ book }: { book: BookDto }) {
+/** The cover, blurred and fading into the page: behind the book and the player, or (contained) behind a series card. */
+export function CoverBackdrop({ book, contained, intensity = 1 }: { book: BookDto; contained?: boolean; intensity?: number }) {
   const theme = useTheme();
   const url = coverUrl(book, 256);
   const [light, dark] = paletteFor(book.metadata.title);
-  const bg = theme.palette.background.default;
+  const bg = contained ? theme.palette.surface.low : theme.palette.background.default;
   return (
-    <Box aria-hidden sx={{ position: "fixed", top: 0, right: 0, left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+    <Box
+      aria-hidden
+      sx={contained
+        ? { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit" }
+        : { position: "fixed", top: 0, right: 0, left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}
+    >
       {url ? (
-        <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: theme.palette.mode === "dark" ? 0.5 : 0.35 }} />
+        <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: (theme.palette.mode === "dark" ? 0.5 : 0.35) * intensity }} />
       ) : (
         <Box sx={{ position: "absolute", inset: 0, background: `radial-gradient(60% 80% at 30% 20%, ${light}55, transparent), radial-gradient(50% 70% at 80% 10%, ${dark}33, transparent)` }} />
       )}
