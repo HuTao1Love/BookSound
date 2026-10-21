@@ -258,35 +258,30 @@ fun SheetAction(icon: ImageVector, text: String, onClick: () -> Unit, color: Col
     }
 }
 
-/** Confirmation for removing a book, with the option to delete its file too. */
+/**
+ * Confirmation for removing a book. Its file goes too unless unticked. An admin of a server that has the book
+ * ([fromServerOption]) can delete it there as well, for every user, so that one starts unticked.
+ */
 @Composable
-fun RemoveBookDialog(title: String, filePath: String?, onConfirm: (deleteFile: Boolean) -> Unit, onDismiss: () -> Unit) {
-    var deleteFile by rememberSaveable { mutableStateOf(false) }
+fun RemoveBookDialog(
+    title: String,
+    filePath: String?,
+    onConfirm: (deleteFile: Boolean, deleteFromServer: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    fromServerOption: Boolean = false,
+) {
+    var deleteFile by rememberSaveable { mutableStateOf(true) }
+    var deleteFromServer by rememberSaveable { mutableStateOf(false) }
     ConfirmDialog(
         title = stringResource(R.string.remove_title),
         message = stringResource(R.string.remove_message, title),
         confirmText = stringResource(if (deleteFile) R.string.action_remove_and_delete else R.string.action_remove),
-        onConfirm = { onConfirm(deleteFile) },
+        onConfirm = { onConfirm(deleteFile, fromServerOption && deleteFromServer) },
         onDismiss = onDismiss,
         dismissText = stringResource(R.string.action_cancel),
         destructive = true,
         extraContent = {
-            Surface(
-                onClick = { deleteFile = !deleteFile },
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.padding(top = Spacing.lg).fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = deleteFile, onCheckedChange = { deleteFile = it })
-                    Column(Modifier.padding(end = Spacing.sm)) {
-                        Text(stringResource(R.string.remove_delete_file), style = MaterialTheme.typography.bodyMedium)
-                        if (filePath != null) {
-                            Text(filePath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
+            CheckRow(deleteFile, { deleteFile = it }, stringResource(R.string.remove_delete_file), filePath)
             if (!deleteFile) {
                 Text(
                     stringResource(R.string.remove_keep_file_hint),
@@ -295,6 +290,43 @@ fun RemoveBookDialog(title: String, filePath: String?, onConfirm: (deleteFile: B
                     modifier = Modifier.padding(top = Spacing.sm),
                 )
             }
+            if (fromServerOption) {
+                CheckRow(deleteFromServer, { deleteFromServer = it }, stringResource(R.string.remove_delete_from_server), stringResource(R.string.remove_server_hint))
+            }
         },
+    )
+}
+
+@Composable
+private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, text: String, detail: String?) {
+    Surface(
+        onClick = { onChange(!checked) },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.padding(top = Spacing.lg).fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = checked, onCheckedChange = onChange)
+            Column(Modifier.padding(end = Spacing.sm)) {
+                Text(text, style = MaterialTheme.typography.bodyMedium)
+                if (detail != null) {
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+/** Confirmation for deleting a book that is only on the server: it goes for every user. */
+@Composable
+fun DeleteFromServerDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    ConfirmDialog(
+        title = stringResource(R.string.delete_from_server_title),
+        message = stringResource(R.string.delete_from_server_message, title),
+        confirmText = stringResource(R.string.action_delete_from_server),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        dismissText = stringResource(R.string.action_cancel),
+        destructive = true,
     )
 }

@@ -149,7 +149,14 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun upload(item: LibraryItem) = container.server.upload(item.id, item.metadata.title)
     fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
 
-    fun remove(item: LibraryItem, deleteFile: Boolean) = viewModelScope.launch {
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun deleteFromServer(item: LibraryItem) = container.server.deleteFromServer(item.id)
+
+    fun remove(item: LibraryItem, deleteFile: Boolean, deleteFromServer: Boolean) = viewModelScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
         _events.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
