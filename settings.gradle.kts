@@ -31,11 +31,16 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BookSound"
-include(":app")
 include(":core")
-include(":shared")
-include(":wear")
 include(":api")
 include(":torrent")
 include(":server")
 include(":web")
+
+// `-PserverOnly=true` builds just the server and the web app, without the Android SDK (LXC and Docker
+// builds from source).
+if (providers.gradleProperty("serverOnly").orNull != "true") {
+    include(":app")
+    include(":shared")
+    include(":wear")
+}
