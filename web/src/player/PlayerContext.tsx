@@ -235,6 +235,14 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       audio.playbackRate = speed;
       equalizer.apply(preset);
       void audio.play();
+      // Books from the library list come without chapters: fetch them while the audio starts.
+      if (!book.chapters?.length) {
+        api.get<LibraryEntryDto>(paths.book(book.id)).then((full) => {
+          if (stateRef.current.book?.id !== book.id) return;
+          const chapters = full.book.chapters ?? [];
+          setState((s) => ({ ...s, book: full.book, chapterIndex: chapterAt(chapters, audio.currentTime * 1000) }));
+        }).catch(() => {});
+      }
     },
     [audio, equalizer, save],
   );

@@ -132,9 +132,12 @@ class ServerTest {
         assertEquals(HttpStatusCode.Unauthorized, client.get(ApiPaths.BOOKS) { bearer(tokens) }.status)
         assertEquals(HttpStatusCode.OK, client.get(ApiPaths.BOOKS) { bearer(refreshed) }.status)
 
-        // Using the replaced refresh token again means it leaked: the device is signed out.
-        assertEquals(HttpStatusCode.Unauthorized, client.post(ApiPaths.REFRESH) { json(RefreshRequest.serializer(), RefreshRequest(tokens.refreshToken)) }.status)
+        // Retrying the replaced token right away (the answer got lost) gives a new pair; the unseen one stops working.
+        val retried = client.post(ApiPaths.REFRESH) { json(RefreshRequest.serializer(), RefreshRequest(tokens.refreshToken)) }
+        assertEquals(HttpStatusCode.OK, retried.status)
+        val again = retried.body(TokenResponse.serializer())
         assertEquals(HttpStatusCode.Unauthorized, client.get(ApiPaths.BOOKS) { bearer(refreshed) }.status)
+        assertEquals(HttpStatusCode.OK, client.get(ApiPaths.BOOKS) { bearer(again) }.status)
     }
 
     @Test

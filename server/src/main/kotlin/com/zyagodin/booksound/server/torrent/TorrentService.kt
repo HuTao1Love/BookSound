@@ -320,22 +320,26 @@ class TorrentService private constructor(
             val hash = entry.infoHash ?: continue
             val status = engine.status(hash) ?: continue
             if (status.paused) engine.resume(hash)
-            val changed = entry.copy(progress = status.progress, downloadedBytes = status.wantedDoneBytes, sizeBytes = status.wantedBytes.takeIf { it > 0 } ?: entry.sizeBytes)
+            val sizeBytes = status.wantedBytes.takeIf { it > 0 }
             rates[entry.id] = status.downloadRate.toLong() to status.peers
+            // Changes are applied to the entry as it is now: a review saved since the snapshot above must stay.
             if (status.isComplete) {
                 engine.requestResumeData(hash)
                 // Downloaded: out of the session at once, so nothing is seeded.
                 engine.remove(hash, deleteFiles = false)
                 update(entry.id) {
-                    changed.copy(
-                        phase = TorrentPhase.DOWNLOADED, progress = 1f,
+                    if (it.phase != TorrentPhase.DOWNLOADING) return@update it
+                    it.copy(
+                        phase = TorrentPhase.DOWNLOADED, progress = 1f, downloadedBytes = status.wantedDoneBytes, sizeBytes = sizeBytes ?: it.sizeBytes,
                         books = it.books.map { b -> if (b.phase == TorrentPhase.DOWNLOADING) b.copy(phase = TorrentPhase.DOWNLOADED) else b },
                     )
                 }
                 maybeImport(entry.id)
             } else {
                 // Progress is shown live and worked out again after a restart: not worth a database write every poll.
-                update(entry.id, persist = false) { changed }
+                update(entry.id, persist = false) {
+                    it.copy(progress = status.progress, downloadedBytes = status.wantedDoneBytes, sizeBytes = sizeBytes ?: it.sizeBytes)
+                }
             }
         }
     }

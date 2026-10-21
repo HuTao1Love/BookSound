@@ -173,7 +173,11 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         return TokenResponse(access, expires, refresh, deviceId, user)
     }
 
-    /** Replaces a refresh token with a new pair. A token that was already replaced revokes the device: it leaked. */
+    /**
+     * Replaces a refresh token with a new pair. A token that was already replaced revokes the device (it leaked),
+     * except shortly after the replacement: then the answer most likely never reached the device (a watch on a
+     * flaky link) and it retries, so it gets a fresh pair and the one it never saw stops working.
+     */
     fun refresh(refreshToken: String): TokenResponse {
         val hash = Secrets.tokenHash(refreshToken)
         val now = clock()
@@ -186,15 +190,26 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
             ) { it.str("device_id")!! to UserDto(it.str("user_id")!!, it.str("name")!!, it.bool("is_admin")) }
         }
         if (found == null) {
-            val stolenFrom = db.tx { queryOne("SELECT id FROM devices WHERE previous_refresh_hash = ? AND revoked_at IS NULL", hash) { it.str("id") } }
-            if (stolenFrom != null) {
-                log.warn("A replaced refresh token was used again; revoking device {}", stolenFrom)
-                revokeDevice(stolenFrom)
+            data class Replaced(val deviceId: String, val refreshedAt: Long?, val user: UserDto)
+            val replaced = db.tx {
+                queryOne(
+                    """SELECT d.id AS device_id, d.refreshed_at, u.id AS user_id, u.name, u.is_admin FROM devices d
+                       JOIN users u ON u.id = d.user_id WHERE d.previous_refresh_hash = ? AND d.revoked_at IS NULL""",
+                    hash,
+                ) { Replaced(it.str("device_id")!!, it.long("refreshed_at"), UserDto(it.str("user_id")!!, it.str("name")!!, it.bool("is_admin"))) }
+            } ?: throw AuthException("unauthorized")
+            if (replaced.refreshedAt != null && now - replaced.refreshedAt <= LOST_REFRESH_GRACE_MS) {
+                // The window doesn't move: a token can be retried only within it of its first replacement.
+                return issueTokens(replaced.deviceId, replaced.user)
             }
+            log.warn("A replaced refresh token was used again; revoking device {}", replaced.deviceId)
+            revokeDevice(replaced.deviceId)
             throw AuthException("unauthorized")
         }
         val (deviceId, user) = found
-        db.tx { update("UPDATE devices SET previous_refresh_hash = ?, last_seen_at = ? WHERE id = ?", hash, now, deviceId) }
+        db.tx {
+            update("UPDATE devices SET previous_refresh_hash = ?, refreshed_at = ?, last_seen_at = ? WHERE id = ?", hash, now, now, deviceId)
+        }
         return issueTokens(deviceId, user)
     }
 
@@ -274,6 +289,8 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         const val ACCESS_TTL_MS = 60 * 60 * 1000L
         const val REFRESH_TTL_MS = 180L * 24 * 60 * 60 * 1000
         const val SESSION_TTL_MS = 30L * 24 * 60 * 60 * 1000
+        /** How long a replaced refresh token may be retried, for an answer lost on the way. */
+        const val LOST_REFRESH_GRACE_MS = 2 * 60 * 1000L
         private const val FREE_ATTEMPTS = 5
         private const val CACHE_MS = 30_000L
     }

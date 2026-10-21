@@ -133,5 +133,9 @@ object Schema {
             body TEXT NOT NULL
         );
         """,
+        // 2: when a device last replaced its refresh token, for retries of a refresh whose answer was lost.
+        """
+        ALTER TABLE devices ADD COLUMN refreshed_at INTEGER;
+        """,
     )
 }
