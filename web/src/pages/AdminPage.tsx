@@ -8,12 +8,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, paths } from "../api/client";
+import { PageHeader } from "../components/Ui";
 import { keys, useSettings, useUsers, useWatchProfiles } from "../api/hooks";
 import type { RescanResultDto, ServerSettingsDto, UserDto, WatchProfileDto, WatchProfileMode } from "../api/types.gen";
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   return (
     <Stack spacing={3}>
+      <PageHeader title={t("nav.admin")} subtitle={t("admin.subtitle")} />
       <UsersCard />
       <SettingsCard />
       <ProfilesCard />

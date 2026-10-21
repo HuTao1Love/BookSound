@@ -2,12 +2,16 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EditIcon from "@mui/icons-material/Edit";
 import ImageIcon from "@mui/icons-material/Image";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import GraphicEqRoundedIcon from "@mui/icons-material/GraphicEqRounded";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import ReplayIcon from "@mui/icons-material/Replay";
 import WatchIcon from "@mui/icons-material/Watch";
 import {
-  Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Grid, List, ListItemButton, ListItemText,
-  Menu, MenuItem, Stack, TextField, Typography,
+  Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItemButton, ListItemIcon, ListItemText,
+  Menu, MenuItem, Stack, TextField, Tooltip, Typography,
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -16,7 +20,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, paths, request } from "../api/client";
 import { keys, useBook, useMe, useWatchProfiles } from "../api/hooks";
 import type { BookDto, MetadataDto, WatchFileStatusDto } from "../api/types.gen";
-import BookCover from "../components/BookCover";
+import BookCover, { CoverBackdrop } from "../components/BookCover";
+import { ProgressLine, SectionTitle } from "../components/Ui";
 import { chapterAt, formatDuration, isStarted } from "../library";
 import { usePlayer } from "../player/PlayerContext";
 
@@ -30,6 +35,7 @@ export default function BookPage() {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [more, setMore] = useState<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
 
@@ -55,62 +61,103 @@ export default function BookPage() {
     }
   };
 
+  const progress = book.durationMs ? Math.min(1, position / book.durationMs) : 0;
+  const started = isStarted(playback) || isCurrent;
+  const facts = [
+    meta.narrator && t("book.narrator", { name: meta.narrator }),
+    formatDuration(book.durationMs, false),
+    meta.year,
+    meta.genre,
+    (book.chapters?.length ?? 0) > 1 && t("book.chapterCount", { count: book.chapters!.length }),
+  ].filter(Boolean) as string[];
+
   return (
-    <Stack spacing={3}>
-      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Box sx={{ maxWidth: 320, mx: "auto" }}>
-            <BookCover book={book} size={640} radius={2} />
+    <Box>
+      <CoverBackdrop book={book} />
+      <Box sx={{ position: "relative" }}>
+        <IconButton onClick={() => navigate(-1)} aria-label="back" sx={{ mb: 2, ml: -1, bgcolor: "action.hover" }}><ArrowBackRoundedIcon /></IconButton>
+        {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
+        <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 3, md: 5 }} sx={{ alignItems: { xs: "center", md: "flex-end" } }}>
+          <Box sx={{ width: { xs: "min(72vw, 300px)", md: 300 }, flexShrink: 0 }}>
+            <BookCover book={book} size={640} radius={3} shadow />
           </Box>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 8 }}>
-          <Stack spacing={1.5}>
-            <Typography variant="h4" sx={{ fontWeight: 600, fontSize: { xs: 26, md: 34 } }}>{meta.title}</Typography>
-            {meta.author && <Typography variant="h6" color="text.secondary">{meta.author}</Typography>}
+          <Stack spacing={1.25} sx={{ minWidth: 0, flex: 1, textAlign: { xs: "center", md: "left" }, alignItems: { xs: "center", md: "flex-start" } }}>
             {meta.series && (
-              <Typography sx={{ cursor: "pointer" }} color="primary" onClick={() => navigate(`/series/${encodeURIComponent(meta.series!)}`)}>
-                {meta.series}{meta.seriesIndex ? ` #${meta.seriesIndex}` : ""}
-              </Typography>
+              <Chip
+                size="small"
+                color="primary"
+                label={`${meta.series}${meta.seriesIndex ? ` · ${meta.seriesIndex}` : ""}`}
+                onClick={() => navigate(`/series/${encodeURIComponent(meta.series!)}`)}
+              />
             )}
-            {meta.narrator && <Typography color="text.secondary">{t("book.narrator", { name: meta.narrator })}</Typography>}
-            <Typography color="text.secondary">
-              {formatDuration(book.durationMs, false)}
-              {meta.year ? ` · ${meta.year}` : ""}
-              {playback?.finished ? ` · ${t("book.finished")}` : isStarted(playback) ? ` · ${t("book.left", { time: formatDuration(book.durationMs - position, false) })}` : ""}
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-              <Button variant="contained" size="large" startIcon={<PlayArrowIcon />} onClick={() => { player.play(entry.data!); navigate("/player"); }}>
-                {isStarted(playback) ? t("book.resume") : t("book.play")}
+            <Typography variant="h4" sx={{ fontSize: { xs: 28, md: 40 }, lineHeight: 1.1 }}>{meta.title}</Typography>
+            {meta.author && <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>{meta.author}</Typography>}
+            <Typography variant="body2" color="text.secondary">{facts.join(" · ")}</Typography>
+            {started && !playback?.finished && (
+              <Box sx={{ width: "100%", maxWidth: 420, pt: 0.5 }}>
+                <ProgressLine value={progress} />
+                <Typography variant="caption" color="text.secondary">
+                  {Math.round(progress * 100)}% · {t("book.left", { time: formatDuration(book.durationMs - position, false) })}
+                </Typography>
+              </Box>
+            )}
+            {playback?.finished && <Chip size="small" icon={<CheckCircleRoundedIcon />} label={t("book.finished")} sx={{ color: "secondary.main" }} />}
+            <Stack direction="row" spacing={1} sx={{ pt: 1.5, flexWrap: "wrap", gap: 1, justifyContent: { xs: "center", md: "flex-start" }, alignItems: "center" }}>
+              <Button variant="contained" size="large" startIcon={<PlayArrowRoundedIcon />} onClick={() => { player.play(entry.data!); navigate("/player"); }}>
+                {started ? t("book.resume") : t("book.play")}
               </Button>
-              {isStarted(playback) && (
-                <Button startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); navigate("/player"); }}>{t("book.restart")}</Button>
+              {started && (
+                <Button variant="outlined" size="large" startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); navigate("/player"); }}>{t("book.restart")}</Button>
               )}
-              <Button startIcon={<DownloadIcon />} href={`${paths.bookFile(id)}?download=1`}>{t("book.downloadFile")}</Button>
+              <Tooltip title={t("book.downloadFile")}>
+                <IconButton href={`${paths.bookFile(id)}?download=1`} sx={{ border: 1, borderColor: "divider" }}><DownloadIcon /></IconButton>
+              </Tooltip>
               <WatchCopyButton bookId={id} />
-              <Button startIcon={<EditIcon />} onClick={() => setEditing(true)}>{t("book.edit")}</Button>
-              <Button startIcon={<ImageIcon />} onClick={() => coverInput.current?.click()}>{t("book.cover")}</Button>
-              {me.data?.user.isAdmin && <Button color="error" startIcon={<DeleteIcon />} onClick={() => setDeleting(true)}>{t("common.delete")}</Button>}
+              <Tooltip title={t("common.more")}>
+                <IconButton onClick={(e) => setMore(e.currentTarget)} sx={{ border: 1, borderColor: "divider" }}><MoreHorizRoundedIcon /></IconButton>
+              </Tooltip>
+              <Menu open={!!more} anchorEl={more} onClose={() => setMore(null)}>
+                <MenuItem onClick={() => { setMore(null); setEditing(true); }}><ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>{t("book.edit")}</MenuItem>
+                <MenuItem onClick={() => { setMore(null); coverInput.current?.click(); }}><ListItemIcon><ImageIcon fontSize="small" /></ListItemIcon>{t("book.cover")}</MenuItem>
+                {me.data?.user.isAdmin && (
+                  <MenuItem onClick={() => { setMore(null); setDeleting(true); }} sx={{ color: "error.main" }}><ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>{t("common.delete")}</MenuItem>
+                )}
+              </Menu>
               <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && changeCover(e.target.files[0])} />
             </Stack>
-            {meta.description && <Typography sx={{ whiteSpace: "pre-line" }}>{meta.description}</Typography>}
           </Stack>
-        </Grid>
-      </Grid>
+        </Stack>
 
-      {(book.chapters?.length ?? 0) > 1 && (
-        <Box>
-          <Typography variant="h6" sx={{ mb: 1 }}>{t("book.chapters")}</Typography>
-          <List dense>
-            {book.chapters!.map((c, i) => (
-              <ListItemButton key={c.index} selected={(isCurrent || isStarted(playback)) && i === currentChapter} onClick={() => player.play(entry.data!, c.startMs)}>
-                <ListItemText primary={c.title} />
-                <Typography variant="body2" color="text.secondary">{formatDuration(c.startMs)}</Typography>
-              </ListItemButton>
-            ))}
-          </List>
+        <Box sx={{ display: "grid", gap: 3, mt: { xs: 4, md: 6 }, gridTemplateColumns: { xs: "1fr", lg: meta.description && (book.chapters?.length ?? 0) > 1 ? "minmax(0, 1fr) minmax(0, 1.2fr)" : "1fr" } }}>
+          {meta.description && (
+            <Box>
+              <SectionTitle>{t("book.description")}</SectionTitle>
+              <Typography sx={{ whiteSpace: "pre-line", lineHeight: 1.7, color: "text.secondary" }}>{meta.description}</Typography>
+            </Box>
+          )}
+          {(book.chapters?.length ?? 0) > 1 && (
+            <Box>
+              <SectionTitle>{t("book.chapters")}</SectionTitle>
+              <Card>
+                <List dense sx={{ p: 1 }}>
+                  {book.chapters!.map((c, i) => {
+                    const here = started && i === currentChapter;
+                    return (
+                      <ListItemButton key={c.index} selected={here} onClick={() => player.play(entry.data!, c.startMs)} sx={{ gap: 1.5 }}>
+                        <Typography variant="body2" sx={{ width: 28, color: here ? "primary.main" : "text.secondary", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                          {here ? <GraphicEqRoundedIcon fontSize="small" sx={{ verticalAlign: "middle" }} /> : i + 1}
+                        </Typography>
+                        <ListItemText primary={c.title} slotProps={{ primary: { sx: { fontWeight: here ? 800 : 500 } } }} />
+                        <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>{formatDuration(c.endMs - c.startMs)}</Typography>
+                      </ListItemButton>
+                    );
+                  })}
+                </List>
+              </Card>
+            </Box>
+          )}
         </Box>
-      )}
+      </Box>
 
       {editing && <EditDialog book={book} onClose={() => setEditing(false)} onSaved={(b) => { setEditing(false); refresh(b); }} />}
       <Dialog open={deleting} onClose={() => setDeleting(false)}>
@@ -118,10 +165,10 @@ export default function BookPage() {
         <DialogContent>{t("book.deleteText")}</DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleting(false)}>{t("common.cancel")}</Button>
-          <Button color="error" onClick={async () => { await api.delete(paths.book(id)); refresh(); navigate("/"); }}>{t("common.delete")}</Button>
+          <Button color="error" variant="contained" onClick={async () => { await api.delete(paths.book(id)); refresh(); navigate("/"); }}>{t("common.delete")}</Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </Box>
   );
 }
 
@@ -152,7 +199,7 @@ function WatchCopyButton({ bookId }: { bookId: string }) {
   if (!profiles.data?.length) return null;
   return (
     <>
-      <Button startIcon={preparing ? <CircularProgress size={16} /> : <WatchIcon />} disabled={preparing} onClick={(e) => setAnchor(e.currentTarget)}>
+      <Button variant="outlined" size="large" startIcon={preparing ? <CircularProgress size={16} /> : <WatchIcon />} disabled={preparing} onClick={(e) => setAnchor(e.currentTarget)}>
         {preparing ? t("book.watchPreparing") : t("book.watchCopy")}
       </Button>
       <Menu open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}>

@@ -620,4 +620,19 @@
     <string name="transfer_to_watch">To the watch</string>
     <string name="transfer_no_watch">No watch connected</string>
     <string name="transfer_no_space">Not enough space on the watch</string>
+    <string name="server_stage_finishing">Adding to the server library…</string>
+    <string name="server_group_everything">Whole library</string>
+    <string name="server_upload_all">Send this phone\'s books</string>
+    <string name="server_upload_all_none">The server has every book of this phone.</string>
+    <string name="server_upload_all_action">Send all</string>
+    <string name="server_download_all">Get the server\'s books</string>
+    <string name="server_download_all_action">Get all</string>
+    <plurals name="server_upload_all_count">
+        <item quantity="one">%d book is not on the server yet</item>
+        <item quantity="other">%d books are not on the server yet</item>
+    </plurals>
+    <plurals name="server_download_all_count">
+        <item quantity="one">%1$d book, %2$s</item>
+        <item quantity="other">%1$d books, %2$s</item>
+    </plurals>
 </resources>

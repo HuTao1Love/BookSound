@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -77,6 +78,7 @@ fun ServerScreen(navigator: AppNavigator) {
     val settings by container.settings.state.collectAsStateWithLifecycle()
     val transfers by server.transfers.collectAsStateWithLifecycle()
     val serverBooks by remember { server.serverOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
+    val phoneBooks by remember { server.phoneOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -129,6 +131,26 @@ fun ServerScreen(navigator: AppNavigator) {
                                     OutlinedButton(onClick = { container.sync.requestSync() }) { Text(stringResource(R.string.server_sync_now)) }
                                     TextButton(onClick = { scope.launch { server.signOut() } }) { Text(stringResource(R.string.server_sign_out)) }
                                 }
+                            }
+                        }
+                        SectionHeader(stringResource(R.string.server_group_everything), Modifier.padding(top = Spacing.xl, start = Spacing.xs))
+                        Card {
+                            Column {
+                                val moving = transfers.filter { it.isActive }
+                                BulkRow(
+                                    title = stringResource(R.string.server_upload_all),
+                                    subtitle = if (phoneBooks.isEmpty()) stringResource(R.string.server_upload_all_none)
+                                    else pluralStringResource(R.plurals.server_upload_all_count, phoneBooks.size, phoneBooks.size),
+                                    action = stringResource(R.string.server_upload_all_action),
+                                    enabled = phoneBooks.any { b -> moving.none { it.bookId == b.id && it.direction == ServerTransfer.Direction.UPLOAD } },
+                                ) { server.uploadAll(phoneBooks) }
+                                BulkRow(
+                                    title = stringResource(R.string.server_download_all),
+                                    subtitle = if (serverBooks.isEmpty()) stringResource(R.string.server_books_empty)
+                                    else pluralStringResource(R.plurals.server_download_all_count, serverBooks.size, serverBooks.size, formatSize(context, serverBooks.sumOf { it.entity.sizeBytes })),
+                                    action = stringResource(R.string.server_download_all_action),
+                                    enabled = serverBooks.any { b -> moving.none { it.bookId == b.entity.id && it.direction == ServerTransfer.Direction.DOWNLOAD } },
+                                ) { server.downloadAll(serverBooks) }
                             }
                         }
                         SectionHeader(stringResource(R.string.server_group_options), Modifier.padding(top = Spacing.xl, start = Spacing.xs))
@@ -216,6 +238,18 @@ private fun SignInForm(onSignIn: (String, String, String, (String?) -> Unit) -> 
 }
 
 @Composable
+private fun BulkRow(title: String, subtitle: String, action: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = Spacing.lg, vertical = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(Spacing.md))
+        OutlinedButton(onClick = onClick, enabled = enabled) { Text(action) }
+    }
+}
+
+@Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Surface(onClick = { onChange(!checked) }, color = androidx.compose.ui.graphics.Color.Transparent) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = Spacing.lg, vertical = Spacing.md), verticalAlignment = Alignment.CenterVertically) {
@@ -260,6 +294,7 @@ private fun TransferRow(transfer: ServerTransfer, onCancel: () -> Unit) {
                     ServerTransfer.Stage.RUNNING -> stringResource(
                         if (transfer.direction == ServerTransfer.Direction.UPLOAD) R.string.server_uploading else R.string.server_downloading,
                     ) + (transfer.progress?.let { " · ${(it * 100).toInt()}%" } ?: "")
+                    ServerTransfer.Stage.FINISHING -> stringResource(R.string.server_stage_finishing)
                     ServerTransfer.Stage.DONE -> stringResource(R.string.server_stage_done)
                     ServerTransfer.Stage.FAILED -> stringResource(R.string.server_stage_failed, transfer.error ?: "")
                     ServerTransfer.Stage.CANCELLED -> stringResource(R.string.server_stage_cancelled)
@@ -268,7 +303,9 @@ private fun TransferRow(transfer: ServerTransfer, onCancel: () -> Unit) {
             }
             if (transfer.isActive) IconButton(onClick = onCancel) { Icon(Icons.Rounded.Close, stringResource(R.string.action_cancel)) }
         }
-        if (transfer.stage == ServerTransfer.Stage.RUNNING) {
+        if (transfer.stage == ServerTransfer.Stage.FINISHING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        } else if (transfer.stage == ServerTransfer.Stage.RUNNING) {
             transfer.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) } ?: LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }

@@ -3,18 +3,17 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FastForwardIcon from "@mui/icons-material/FastForward";
 import FastRewindIcon from "@mui/icons-material/FastRewind";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
-import PauseCircleIcon from "@mui/icons-material/PauseCircle";
-import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import SpeedIcon from "@mui/icons-material/Speed";
 import {
-  Alert, Box, Button, Chip, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Slider, Stack, Typography,
+  Alert, Box, Button, Card, Chip, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Slider, Stack, Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import BookCover from "../components/BookCover";
+import BookCover, { CoverBackdrop } from "../components/BookCover";
+import { PlayButton } from "../components/Ui";
 import { formatDuration } from "../library";
 import { voicePresets } from "../player/equalizer";
 import { usePlayer } from "../player/PlayerContext";
@@ -56,11 +55,13 @@ export default function PlayerPage() {
   const sleepLeft = player.sleep.kind === "minutes" ? player.sleep.endsAt - Date.now() : 0;
 
   return (
-    <Stack spacing={2} sx={{ maxWidth: 560, mx: "auto", alignItems: "stretch" }}>
+    <Box>
+      <CoverBackdrop book={book} />
+    <Stack spacing={2.5} sx={{ position: "relative", maxWidth: 520, mx: "auto", alignItems: "stretch" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <IconButton onClick={() => navigate(-1)} aria-label="close"><ExpandMoreIcon /></IconButton>
-        <Typography variant="body2" color="text.secondary" noWrap sx={{ flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => navigate(`/book/${book.id}`)}>
-          {book.metadata.author}
+        <IconButton onClick={() => navigate(-1)} aria-label="close" sx={{ bgcolor: "action.hover" }}><ExpandMoreIcon /></IconButton>
+        <Typography variant="overline" color="text.secondary" noWrap sx={{ flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => navigate(`/book/${book.id}`)}>
+          {book.metadata.series ?? book.metadata.author}
         </Typography>
         <Box sx={{ width: 40 }} />
       </Box>
@@ -69,13 +70,14 @@ export default function PlayerPage() {
           {t("player.otherDevice", { time: formatDuration(player.remoteOffer.positionMs) })}
         </Alert>
       )}
-      <Box sx={{ width: "min(100%, 360px)", mx: "auto" }}>
-        <BookCover book={book} size={720} radius={3} />
+      <Box sx={{ width: "min(100%, 380px)", mx: "auto", pt: 1 }}>
+        <BookCover book={book} size={720} radius={4} shadow />
       </Box>
       <Box sx={{ textAlign: "center" }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>{book.metadata.title}</Typography>
+        <Typography variant="h5" sx={{ lineHeight: 1.2 }}>{book.metadata.title}</Typography>
+        {book.metadata.author && <Typography color="text.secondary" sx={{ fontWeight: 600, mt: 0.5 }}>{book.metadata.author}</Typography>}
         {chapter && chapters.length > 1 && (
-          <Typography color="text.secondary" sx={{ cursor: "pointer" }} onClick={() => setShowChapters(!showChapters)}>
+          <Typography variant="body2" color="primary" sx={{ cursor: "pointer", mt: 1, fontWeight: 700 }} onClick={() => setShowChapters(!showChapters)}>
             {chapter.title} · {t("player.chapter", { n: player.chapterIndex + 1, total: chapters.length })}
           </Typography>
         )}
@@ -99,9 +101,7 @@ export default function PlayerPage() {
       <Stack direction="row" sx={{ justifyContent: "center", alignItems: "center" }} spacing={1}>
         <IconButton onClick={() => player.goToChapter(player.chapterIndex - 1)} disabled={player.chapterIndex === 0} aria-label="previous chapter"><SkipPreviousIcon /></IconButton>
         <IconButton onClick={() => player.skip(-player.skipBack)} aria-label={t("player.back", { s: player.skipBack })} size="large"><FastRewindIcon fontSize="large" /></IconButton>
-        <IconButton onClick={player.toggle} color="primary" aria-label={player.playing ? "pause" : "play"} sx={{ p: 0 }}>
-          {player.playing ? <PauseCircleIcon sx={{ fontSize: 80 }} /> : <PlayCircleIcon sx={{ fontSize: 80 }} />}
-        </IconButton>
+        <PlayButton size={80} playing={player.playing} onClick={player.toggle} sx={{ mx: 1 }} />
         <IconButton onClick={() => player.skip(player.skipForward)} aria-label={t("player.forward", { s: player.skipForward })} size="large"><FastForwardIcon fontSize="large" /></IconButton>
         <IconButton onClick={() => player.goToChapter(player.chapterIndex + 1)} disabled={player.chapterIndex >= chapters.length - 1} aria-label="next chapter"><SkipNextIcon /></IconButton>
       </Stack>
@@ -140,7 +140,8 @@ export default function PlayerPage() {
       </Menu>
 
       {showChapters && chapters.length > 1 && (
-        <List dense>
+        <Card>
+        <List dense sx={{ p: 1 }}>
           {chapters.map((c, i) => (
             <ListItemButton key={c.index} selected={i === player.chapterIndex} onClick={() => player.goToChapter(i)}>
               <ListItemText primary={c.title} />
@@ -148,7 +149,9 @@ export default function PlayerPage() {
             </ListItemButton>
           ))}
         </List>
+        </Card>
       )}
     </Stack>
+    </Box>
   );
 }

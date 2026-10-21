@@ -628,4 +628,23 @@
     <string name="transfer_to_watch">На часы</string>
     <string name="transfer_no_watch">Часы не подключены</string>
     <string name="transfer_no_space">На часах не хватает места</string>
+    <string name="server_stage_finishing">Сервер добавляет книгу…</string>
+    <string name="server_group_everything">Вся библиотека</string>
+    <string name="server_upload_all">Отправить книги телефона</string>
+    <string name="server_upload_all_none">На сервере есть все книги этого телефона.</string>
+    <string name="server_upload_all_action">Отправить все</string>
+    <string name="server_download_all">Скачать книги сервера</string>
+    <string name="server_download_all_action">Скачать все</string>
+    <plurals name="server_upload_all_count">
+        <item quantity="one">%d книги ещё нет на сервере</item>
+        <item quantity="few">%d книг ещё нет на сервере</item>
+        <item quantity="many">%d книг ещё нет на сервере</item>
+        <item quantity="other">%d книги ещё нет на сервере</item>
+    </plurals>
+    <plurals name="server_download_all_count">
+        <item quantity="one">%1$d книга, %2$s</item>
+        <item quantity="few">%1$d книги, %2$s</item>
+        <item quantity="many">%1$d книг, %2$s</item>
+        <item quantity="other">%1$d книги, %2$s</item>
+    </plurals>
 </resources>

@@ -15,12 +15,14 @@ import { api, paths, request } from "../api/client";
 import { keys, useImports, useTorrents, useUploads } from "../api/hooks";
 import type { ImportJobDto, MetadataDto, TorrentBookDto, TorrentDto, UploadDto } from "../api/types.gen";
 import { uploadFile } from "../api/upload";
+import { PageHeader } from "../components/Ui";
 import { formatBytes } from "../library";
 
 export default function ImportsPage({ torrents }: { torrents: boolean }) {
   const { t } = useTranslation();
   return (
     <Stack spacing={3}>
+      <PageHeader title={t("nav.imports")} subtitle={t("imports.subtitle")} />
       <UploadCard />
       {torrents ? <TorrentsCard /> : <Alert severity="info">{t("imports.torrentsUnavailable")}</Alert>}
       <JobsCard />
