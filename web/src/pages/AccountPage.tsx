@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api, paths } from "../api/client";
 import { keys, useDevices } from "../api/hooks";
 import type { SessionDto } from "../api/types.gen";
+import { PageHeader } from "../components/Ui";
 
 export default function AccountPage({ session }: { session: SessionDto }) {
   const { t, i18n } = useTranslation();
@@ -23,14 +24,11 @@ export default function AccountPage({ session }: { session: SessionDto }) {
 
   return (
     <Stack spacing={3}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction="row" sx={{ alignItems: "center" }}>
-            <Typography variant="h6" sx={{ flex: 1 }}>{session.user.name}</Typography>
-            <Button startIcon={<LogoutIcon />} onClick={() => void signOut()}>{t("account.signOut")}</Button>
-          </Stack>
-        </CardContent>
-      </Card>
+      <PageHeader
+        title={session.user.name}
+        subtitle={session.user.isAdmin ? t("account.admin") : t("account.user")}
+        actions={<Button variant="outlined" startIcon={<LogoutIcon />} onClick={() => void signOut()}>{t("account.signOut")}</Button>}
+      />
 
       <Card variant="outlined">
         <CardContent>

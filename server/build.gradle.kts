@@ -25,6 +25,20 @@ application {
     applicationDefaultJvmArgs = listOf("-XX:+UseSerialGC", "-XX:MaxRAMPercentage=50", "--enable-native-access=ALL-UNNAMED")
 }
 
+// Book titles are seldom ASCII, and Java names files in the locale's charset: a service started without a
+// locale (systemd, a bare container) gets ASCII and can't create "Толстой/Война и мир.m4b".
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val script = unixScript
+        script.writeText(
+            script.readText().replaceFirst(
+                "\n",
+                "\ncase \"${'$'}{LC_ALL:-${'$'}{LC_CTYPE:-${'$'}LANG}}\" in *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;; *) export LC_ALL=C.UTF-8 ;; esac\n",
+            ),
+        )
+    }
+}
+
 val versionName = providers.gradleProperty("versionName").orElse(providers.gradleProperty("appVersion").map { "$it-dev" })
 
 dependencies {

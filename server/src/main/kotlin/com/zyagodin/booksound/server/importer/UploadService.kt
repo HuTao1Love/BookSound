@@ -102,16 +102,21 @@ class UploadService(
         return UploadDto(row.id, row.fileName, row.size, file.length(), row.kind)
     }
 
-    /** A complete [UploadKind.BOOK] upload goes into the library. */
+    /**
+     * A complete [UploadKind.BOOK] upload goes into the library. A file the library refuses is dropped; after any
+     * other failure (the server's own, or a full disk) the upload stays, so completing it again needs no new upload.
+     */
     fun completeBook(principal: Principal, id: String): UploadResultDto {
         val row = row(principal, id)
         if (row.kind != UploadKind.BOOK) throw LibraryException(ErrorCodes.BAD_REQUEST, "Not a book upload")
         val file = checkComplete(row)
         val book = try {
             library.adoptUploadedBook(file, principal.userId, principal.isAdmin, principal.deviceId)
-        } finally {
-            forget(id)
+        } catch (e: LibraryException) {
+            if (e.code != ErrorCodes.INSUFFICIENT_STORAGE) forget(id)
+            throw e
         }
+        forget(id)
         return UploadResultDto(book = book.toDto(library.repo.chapters(book.id)))
     }
 
