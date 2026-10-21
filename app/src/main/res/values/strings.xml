@@ -647,4 +647,10 @@
     <string name="server_version">Server %1$s</string>
     <string name="server_api_outdated">The server is too old for this app, so nothing syncs. Update it in the web app: Server → Install update.</string>
     <string name="server_api_app_outdated">This app is too old for the server, so nothing syncs. Update the app.</string>
+    <string name="remove_delete_from_server">Also delete from the server</string>
+    <string name="remove_server_hint">The book disappears from the server for every user.</string>
+    <string name="action_delete_from_server">Delete from the server</string>
+    <string name="delete_from_server_title">Delete from the server?</string>
+    <string name="delete_from_server_message">“%1$s” will be deleted from the server, with its file, for every user.</string>
+    <string name="server_delete_failed">Can\'t delete from the server: %1$s</string>
 </resources>

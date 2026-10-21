@@ -5,8 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.Wearable
+import com.zyagodin.booksound.R
 import com.zyagodin.booksound.api.API_VERSION
 import com.zyagodin.booksound.api.ApiJson
 import com.zyagodin.booksound.api.ApiPaths
@@ -66,6 +68,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.serializer
 import okhttp3.OkHttpClient
@@ -293,6 +296,29 @@ class ServerManager(
                 val part = File(coverDir, "${file.name}.part")
                 part.writeBytes(picture.bytes)
                 if (part.renameTo(file)) coversChanged.update { it + 1 } else part.delete()
+            }
+        }
+    }
+
+    /** The signed-in user is an admin of the server, who alone may delete its books. */
+    val canDeleteOnServer: Flow<Boolean> = account.map { it?.isAdmin == true }
+
+    /**
+     * Deletes a book from the server's library, for every user, with its file there. Runs on after the screen that
+     * asked is gone; a failure is told in a toast.
+     */
+    fun deleteFromServer(bookId: String) {
+        scope.launch {
+            _transfers.value.filter { it.bookId == bookId && it.isActive }.forEach { cancel(it.bookId, it.direction) }
+            try {
+                client.delete(ApiPaths.book(bookId))
+                db.server().deleteBook(bookId)
+                requestSync()
+            } catch (e: IOException) {
+                Log.w(TAG, "Can't delete $bookId from the server", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, context.getString(R.string.server_delete_failed, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

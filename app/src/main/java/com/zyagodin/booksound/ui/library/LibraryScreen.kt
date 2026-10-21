@@ -101,6 +101,7 @@ import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SheetAction
 import com.zyagodin.booksound.ui.components.titleWithSeries
@@ -118,6 +119,7 @@ fun LibraryScreen(navigator: AppNavigator) {
     val state by vm.state.collectAsStateWithLifecycle()
     val lowStorage by vm.lowStorage.collectAsStateWithLifecycle()
     val transfers by vm.transfers.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
     val serverInfo by vm.serverInfo.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     val context = LocalContext.current
@@ -125,6 +127,7 @@ fun LibraryScreen(navigator: AppNavigator) {
     var showImportSheet by rememberSaveable { mutableStateOf(false) }
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteOnServerFor by rememberSaveable { mutableStateOf<String?>(null) }
     // Search hides behind a button in the top bar; it stays open while it holds text.
     var searching by rememberSaveable { mutableStateOf(false) }
     var searchText by rememberSaveable { mutableStateOf(state.query) }
@@ -269,6 +272,12 @@ fun LibraryScreen(navigator: AppNavigator) {
                 actionsFor = null
                 vm.cancelTransfer(it)
             },
+            onDeleteFromServer = if (canDeleteOnServer) {
+                {
+                    actionsFor = null
+                    deleteOnServerFor = actionItem.id
+                }
+            } else null,
             onPlay = {
                 actionsFor = null
                 vm.play(actionItem)
@@ -297,11 +306,23 @@ fun LibraryScreen(navigator: AppNavigator) {
         RemoveBookDialog(
             title = removeItem.metadata.title,
             filePath = null,
-            onConfirm = { deleteFile ->
+            onConfirm = { deleteFile, deleteFromServer ->
                 removeFor = null
-                vm.remove(removeItem, deleteFile)
+                vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
+            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+        )
+    }
+    val serverItem = deleteOnServerFor?.let { id -> state.items.firstOrNull { it.id == id } }
+    if (serverItem != null) {
+        DeleteFromServerDialog(
+            title = serverItem.metadata.title,
+            onConfirm = {
+                deleteOnServerFor = null
+                vm.deleteFromServer(serverItem)
+            },
+            onDismiss = { deleteOnServerFor = null },
         )
     }
 }
@@ -513,6 +534,8 @@ internal fun BookActionsSheet(
     onDownload: () -> Unit,
     onUpload: () -> Unit,
     onCancelTransfer: (ServerTransfer) -> Unit,
+    /** Null unless the user may delete books from the server. */
+    onDeleteFromServer: (() -> Unit)?,
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     onEdit: () -> Unit,
@@ -540,6 +563,9 @@ internal fun BookActionsSheet(
                 SheetAction(Icons.Rounded.CloudDownload, stringResource(R.string.action_download_to_phone_size, formatSize(LocalContext.current, item.entry.book.file.sizeBytes)), onDownload)
             }
             SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
+            onDeleteFromServer?.let {
+                SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_delete_from_server), it, color = MaterialTheme.colorScheme.error)
+            }
         } else {
             SheetAction(Icons.Rounded.PlayArrow, stringResource(if (item.entry.positionMs > 0) R.string.action_resume else R.string.action_play), onPlay, enabled = !item.isMissing)
             SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)

@@ -95,6 +95,8 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     suspend fun <B, T> put(path: String, body: B, bodySerializer: KSerializer<B>, serializer: KSerializer<T>): T =
         decode(serializer, send("PUT", path, ApiJson.encodeToString(bodySerializer, body)))
 
+    suspend fun delete(path: String): Unit = withContext(Dispatchers.IO) { authorized(path) { it.delete() }.close() }
+
     private suspend fun send(method: String, path: String, body: String): Response = authorized(path) { it.method(method, body.toRequestBody(json)) }
 
     // Reading or closing a response touches the socket: everything here runs off the main thread.

@@ -89,6 +89,7 @@ import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.QuietButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.components.Tag
@@ -135,6 +136,14 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
         account != null && bookId !in ids
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** The server has this book. */
+    val onServer: StateFlow<Boolean> = container.server.serverBookIds().map { bookId in it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     init {
         container.watchSender.refreshWatch()
     }
@@ -149,7 +158,11 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     fun download() = viewModelScope.launch { container.server.download(bookId) }
     fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
 
-    fun remove(deleteFile: Boolean) = viewModelScope.launch {
+    fun deleteFromServer() = container.server.deleteFromServer(bookId)
+
+    // The app's scope: the page closes right away.
+    fun remove(deleteFile: Boolean, deleteFromServer: Boolean) = container.appScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(bookId)
         if (container.player.state.value.bookId == bookId) container.player.stop()
         container.library.remove(bookId, deleteFile)
     }
@@ -180,9 +193,12 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     val watchConnected by vm.watchConnected.collectAsStateWithLifecycle()
     val canUpload by vm.canUpload.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
+    val onServer by vm.onServer.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val live = remember(bookId, playerState) { LivePlayback(bookId, playerState) }
     var showRemove by rememberSaveable { mutableStateOf(false) }
+    var showDeleteOnServer by rememberSaveable { mutableStateOf(false) }
 
     when (val s = state) {
         DetailState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingDots() }
@@ -195,7 +211,7 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
             val finished = details.item.entry.finished
             val title = details.item.metadata.title
             val remote = details.item.onServerOnly
-            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title, remote) {
+            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title, remote, canDeleteOnServer) {
                 DetailActions(
                     onBack = navigator::back,
                     onPlay = {
@@ -222,6 +238,9 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                         }
                     } else null,
                     onDownload = vm::download,
+                    onDeleteFromServer = if (remote && canDeleteOnServer) {
+                        { showDeleteOnServer = true }
+                    } else null,
                     onCancelTransfer = vm::cancelTransfer,
                     onUploadToServer = if (canUpload && !remote) {
                         {
@@ -246,11 +265,25 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                 RemoveBookDialog(
                     title = details.item.metadata.title,
                     filePath = details.relativePath,
-                    onConfirm = { deleteFile ->
+                    onConfirm = { deleteFile, deleteFromServer ->
                         showRemove = false
-                        vm.remove(deleteFile)
+                        vm.remove(deleteFile, deleteFromServer)
+                        // A book kept on the server would turn this into its server page.
+                        navigator.back()
                     },
                     onDismiss = { showRemove = false },
+                    fromServerOption = canDeleteOnServer && onServer,
+                )
+            }
+            if (showDeleteOnServer) {
+                DeleteFromServerDialog(
+                    title = details.item.metadata.title,
+                    onConfirm = {
+                        showDeleteOnServer = false
+                        vm.deleteFromServer()
+                        navigator.back()
+                    },
+                    onDismiss = { showDeleteOnServer = false },
                 )
             }
         }
@@ -301,6 +334,8 @@ private class DetailActions(
     val onUploadToServer: (() -> Unit)? = null,
     /** Downloads a book that is only on the server. */
     val onDownload: () -> Unit = {},
+    /** Null unless the book is only on the server and the user may delete it there. */
+    val onDeleteFromServer: (() -> Unit)? = null,
     val onCancelTransfer: (ServerTransfer) -> Unit = {},
 )
 
@@ -371,8 +406,21 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
     ) {
         CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back), actions.onBack, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Spacer(Modifier.weight(1f))
-        // Editing, the watch and removal need the file on the phone.
-        if (!details.item.onServerOnly) {
+        // A book only on the server can only be deleted there, by an admin.
+        if (details.item.onServerOnly) {
+            actions.onDeleteFromServer?.let { delete ->
+                Box {
+                    CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_delete_from_server), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menu = false; delete() },
+                        )
+                    }
+                }
+            }
+        } else {
             Box {
                 CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {

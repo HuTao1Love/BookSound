@@ -50,6 +50,7 @@ import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.LibrarySearch
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.importer.ImportSelection
@@ -63,6 +64,7 @@ import com.zyagodin.booksound.ui.components.CoverBackdrop
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.numberedTitle
 import com.zyagodin.booksound.ui.navigation.appViewModel
@@ -111,7 +113,14 @@ class SeriesViewModel(private val container: AppContainer, series: String) : Vie
         container.library.setFinished(item.id, finished)
     }
 
-    fun remove(item: LibraryItem, deleteFile: Boolean) = viewModelScope.launch {
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun deleteFromServer(item: LibraryItem) = container.server.deleteFromServer(item.id)
+
+    fun remove(item: LibraryItem, deleteFile: Boolean, deleteFromServer: Boolean) = viewModelScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
         _removed.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
@@ -136,10 +145,12 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
     val vm = appViewModel(key = "series-$series") { SeriesViewModel(it, series) }
     val state by vm.state.collectAsStateWithLifecycle()
     val transfers by vm.transfers.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteOnServerFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(vm) {
         vm.removed.collect { snackbar.showSnackbar(it.message(context)) }
@@ -222,6 +233,12 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                 actionsFor = null
                 vm.cancelTransfer(it)
             },
+            onDeleteFromServer = if (canDeleteOnServer) {
+                {
+                    actionsFor = null
+                    deleteOnServerFor = actionItem.id
+                }
+            } else null,
             onPlay = {
                 actionsFor = null
                 vm.play(actionItem)
@@ -250,11 +267,23 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
         RemoveBookDialog(
             title = removeItem.metadata.title,
             filePath = null,
-            onConfirm = { deleteFile ->
+            onConfirm = { deleteFile, deleteFromServer ->
                 removeFor = null
-                vm.remove(removeItem, deleteFile)
+                vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
+            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+        )
+    }
+    val serverItem = deleteOnServerFor?.let { id -> items.firstOrNull { it.id == id } }
+    if (serverItem != null) {
+        DeleteFromServerDialog(
+            title = serverItem.metadata.title,
+            onConfirm = {
+                deleteOnServerFor = null
+                vm.deleteFromServer(serverItem)
+            },
+            onDismiss = { deleteOnServerFor = null },
         )
     }
 }
