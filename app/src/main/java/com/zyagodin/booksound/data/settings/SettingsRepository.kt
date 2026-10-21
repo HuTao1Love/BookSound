@@ -14,6 +14,7 @@ import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.model.DeviceId
 import com.zyagodin.booksound.core.organize.NameTemplate
+import com.zyagodin.booksound.data.library.LocationFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,6 +69,7 @@ data class AppSettings(
     val librarySort: SortField = SortField.RECENT,
     val libraryDescending: Boolean = true,
     val libraryFilter: ProgressFilter = ProgressFilter.ALL,
+    val libraryLocation: LocationFilter = LocationFilter.ALL,
     val lastBookId: String? = null,
     /** The "let BookSound run in the background" question was answered; don't ask again. */
     val backgroundPromptShown: Boolean = false,
@@ -129,6 +131,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val sort = stringPreferencesKey("library_sort")
         val descending = booleanPreferencesKey("library_descending")
         val filter = stringPreferencesKey("library_filter")
+        val location = stringPreferencesKey("library_location")
         val lastBook = stringPreferencesKey("last_book_id")
         val backgroundPrompt = booleanPreferencesKey("background_prompt_shown")
         val deviceId = stringPreferencesKey("device_id")
@@ -168,6 +171,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             librarySort = enumOrDefault(p[Keys.sort], SortField.RECENT),
             libraryDescending = p[Keys.descending] ?: true,
             libraryFilter = enumOrDefault(p[Keys.filter], ProgressFilter.ALL),
+            libraryLocation = enumOrDefault(p[Keys.location], LocationFilter.ALL),
             lastBookId = p[Keys.lastBook],
             backgroundPromptShown = p[Keys.backgroundPrompt] ?: false,
             nameTemplates = p[Keys.nameTemplates]?.split(TEMPLATE_SEPARATOR)?.filter { it.isNotBlank() } ?: NameTemplate.DEFAULTS,
@@ -220,6 +224,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         it[Keys.descending] = descending
     }
     suspend fun setLibraryFilter(filter: ProgressFilter) = edit { it[Keys.filter] = filter.name }
+    suspend fun setLibraryLocation(location: LocationFilter) = edit { it[Keys.location] = location.name }
     suspend fun setNameTemplates(templates: List<String>) = edit {
         it[Keys.nameTemplates] = templates.map { t -> t.replace(TEMPLATE_SEPARATOR, " ") }.joinToString(TEMPLATE_SEPARATOR)
     }
