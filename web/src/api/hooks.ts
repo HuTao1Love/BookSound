@@ -8,6 +8,7 @@ import type {
   LibraryEntryDto,
   PreferencesDto,
   ServerSettingsDto,
+  ServerUpdateDto,
   UploadDto,
   SessionDto,
   StatusDto,
@@ -29,6 +30,7 @@ export const keys = {
   settings: ["settings"],
   watchProfiles: ["watchProfiles"],
   preferences: ["preferences"],
+  update: ["update"],
 };
 
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: () => api.get<StatusDto>(paths.status) });
@@ -61,6 +63,7 @@ export const useUploads = () =>
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>(paths.devices) });
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api.get<UserDto[]>(paths.users) });
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api.get<ServerSettingsDto>(paths.settings) });
+export const useServerUpdate = () => useQuery({ queryKey: keys.update, queryFn: () => api.get<ServerUpdateDto>(paths.update) });
 export const useWatchProfiles = () => useQuery({ queryKey: keys.watchProfiles, queryFn: () => api.get<WatchProfileDto[]>(paths.watchProfiles) });
 export const usePreferences = () => useQuery({ queryKey: keys.preferences, queryFn: () => api.get<PreferencesDto>(paths.preferences) });
 

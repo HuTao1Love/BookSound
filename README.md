@@ -117,8 +117,21 @@ Settings are environment variables (`/etc/booksound.env` for LXC):
 | `BOOKSOUND_TRUSTED_PROXIES` | none | Addresses allowed to pass the client address and scheme in `X-Forwarded-*` (the router). |
 | `BOOKSOUND_TORRENTS` | on | `off` disables torrents. |
 | `BOOKSOUND_FFMPEG` | `ffmpeg` | Path to ffmpeg. |
+| `BOOKSOUND_UPDATER` | `systemd` (LXC), none | What installs updates from the admin page: `systemd` or `watchtower`. |
+| `BOOKSOUND_WATCHTOWER_URL`, `_TOKEN` | none | Watchtower's HTTP API, for `BOOKSOUND_UPDATER=watchtower`. |
 
 Bitrate, parallel conversions, torrent limits and watch profiles are set on the *Server* page.
+
+### Updating
+
+The *Server* page shows the latest release and installs it with *Install update*:
+
+- **LXC**: `install.sh` adds `booksound-update.path`, a root unit that installs the latest release when the
+  page asks (the server itself runs as a user that can't replace its program). Servers installed before it
+  need `install.sh` run once more to get it.
+- **Docker**: uncomment the `watchtower` service and the `BOOKSOUND_UPDATER`/`BOOKSOUND_WATCHTOWER_*` lines in
+  [`deploy/docker-compose.yml`](deploy/docker-compose.yml) (same token on both sides). Without Watchtower
+  the page shows the command instead: `docker compose pull && docker compose up -d`.
 
 ### Reaching it from the internet with a Keenetic / Netcraze router
 
