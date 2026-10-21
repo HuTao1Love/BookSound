@@ -589,6 +589,7 @@
     <string name="server_unreachable">Can\'t reach the server: %1$s</string>
     <string name="server_about">The server is optional: without it everything works on this phone as before. With it, books from the server\'s library can be downloaded, your books uploaded, and listening progress follows you between the phone, the watch and the browser.</string>
     <string name="server_sync_now">Sync now</string>
+    <string name="server_offline">The server can\'t be reached. Everything on this phone still works; listening progress is sent when the server is back.</string>
     <string name="server_sign_out">Sign out</string>
     <string name="server_group_options">Options</string>
     <string name="server_auto_upload">Upload new books</string>

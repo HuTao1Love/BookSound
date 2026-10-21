@@ -75,6 +75,7 @@ fun ServerScreen(navigator: AppNavigator) {
     val container = appContainer()
     val server = container.server
     val account by server.account.collectAsStateWithLifecycle()
+    val reachable by server.reachable.collectAsStateWithLifecycle()
     val settings by container.settings.state.collectAsStateWithLifecycle()
     val transfers by server.transfers.collectAsStateWithLifecycle()
     val serverBooks by remember { server.serverOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
@@ -127,6 +128,9 @@ fun ServerScreen(navigator: AppNavigator) {
                             Column(Modifier.padding(Spacing.lg)) {
                                 Text(current.userName, style = MaterialTheme.typography.titleMedium)
                                 Text(current.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (!reachable) {
+                                    Text(stringResource(R.string.server_offline), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Spacing.sm))
+                                }
                                 Row(Modifier.padding(top = Spacing.md), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                     OutlinedButton(onClick = { container.sync.requestSync() }) { Text(stringResource(R.string.server_sync_now)) }
                                     TextButton(onClick = { scope.launch { server.signOut() } }) { Text(stringResource(R.string.server_sign_out)) }
