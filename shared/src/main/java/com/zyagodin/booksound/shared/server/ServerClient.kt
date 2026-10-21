@@ -170,6 +170,8 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
                                 if (n < 0) throw IOException("File ended early")
                                 sink.write(buffer, 0, n)
                                 left -= n
+                                // Bytes handed to the socket, every MiB, so the bar moves within a chunk too.
+                                if (left % PROGRESS_STEP < n) onProgress(end + 1 - left, size)
                             }
                         }
                     }
@@ -245,6 +247,7 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
 
     companion object {
         private const val CHUNK_BYTES = 8L * 1024 * 1024
+        private const val PROGRESS_STEP = 1L shl 20
 
         /** "abook.example.link" → "https://abook.example.link"; trailing slashes go. */
         fun normalizeUrl(input: String): String {

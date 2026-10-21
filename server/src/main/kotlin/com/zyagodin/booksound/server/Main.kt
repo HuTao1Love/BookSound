@@ -55,6 +55,11 @@ class ServerContext(val config: ServerConfig) : AutoCloseable {
     }
 
     fun start() {
+        // Without a UTF-8 locale Java can't name files like "Толстой/Война и мир.m4b".
+        val names = System.getProperty("sun.jnu.encoding").orEmpty()
+        if (!names.replace("-", "").equals("UTF8", ignoreCase = true)) {
+            LoggerFactory.getLogger("BookSound").error("File names use $names, not UTF-8: books with non-Latin names will fail. Set LANG=C.UTF-8.")
+        }
         auth.init()
         imports.start()
         torrents?.start()

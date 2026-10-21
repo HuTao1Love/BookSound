@@ -159,7 +159,11 @@ fun Application.installHttp(auth: AuthService, trustedProxies: Set<InetAddress>)
         }
         exception<BadRequestException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorDto(ErrorCodes.BAD_REQUEST, e.message)) }
         exception<NotFoundException> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorDto(ErrorCodes.NOT_FOUND)) }
-        exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorDto(ErrorCodes.BAD_REQUEST, e.message)) }
+        exception<IllegalArgumentException> { call, e ->
+            // Thrown deep inside too (a path the file system can't name is one), so it is worth a line in the log.
+            call.application.environment.log.warn("Bad request: ${call.request.httpMethod.value} ${call.request.path()}: $e")
+            call.respond(HttpStatusCode.BadRequest, ErrorDto(ErrorCodes.BAD_REQUEST, e.message))
+        }
         exception<Throwable> { call, e ->
             call.application.environment.log.error("Request failed: ${call.request.httpMethod.value} ${call.request.path()}", e)
             call.respond(HttpStatusCode.InternalServerError, ErrorDto("internal", "Internal error"))
