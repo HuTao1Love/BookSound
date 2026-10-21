@@ -20,6 +20,8 @@ import com.zyagodin.booksound.api.WatchProfileDto
 import com.zyagodin.booksound.api.WatchServerLogin
 import com.zyagodin.booksound.api.toModel
 import com.zyagodin.booksound.core.metadata.AudioProbe
+import com.zyagodin.booksound.core.sync.BackendStatus
+import com.zyagodin.booksound.core.sync.SyncBackend
 import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.naming.LibraryLayout
 import com.zyagodin.booksound.core.wear.WatchPaths
@@ -96,7 +98,17 @@ class ServerManager(
     val accounts = ServerAccountStore(context)
     val client = ServerClient(http, accounts)
     val store = ServerLocalStore(db, accounts)
-    val syncTarget = SyncTarget(ServerSyncBackend(client), store)
+    private val _reachable = MutableStateFlow(true)
+    /** False when the last attempt to reach the server failed; the app then works from what it has. */
+    val reachable: StateFlow<Boolean> = _reachable
+
+    private val backend = ServerSyncBackend(client)
+    val syncTarget = SyncTarget(
+        object : SyncBackend by backend {
+            override suspend fun status() = backend.status().also { _reachable.value = it != BackendStatus.Unreachable }
+        },
+        store,
+    )
 
     val account = accounts.account
 
