@@ -8,7 +8,7 @@ import com.zyagodin.booksound.core.wear.WatchPaths
 
 /**
  * Wakes the app when the watch published a listening position, to merge it into the library,
- * or asked to play or pause the phone's book.
+ * asked to play or pause the phone's book, or asked to be signed in to the server.
  */
 class PhoneWearListenerService : WearableListenerService() {
     private val container get() = (application as BookSoundApp).container
@@ -21,5 +21,6 @@ class PhoneWearListenerService : WearableListenerService() {
         if (event.path.startsWith(WatchPaths.PHONE_COMMAND_PREFIX)) {
             container.watchRemote.onCommand(event.path.removePrefix(WatchPaths.PHONE_COMMAND_PREFIX))
         }
+        if (event.path == WatchPaths.SERVER_AUTH_REQUEST_PATH) container.server.onWatchAsksToSignIn()
     }
 }

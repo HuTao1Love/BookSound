@@ -46,8 +46,7 @@ const en = {
   },
   account: {
     devices: "Signed-in devices", thisDevice: "this device", signOut: "Sign out", revoke: "Sign out device", password: "Change password",
-    currentPassword: "Current password", newPassword: "New password", changed: "Password changed", watchCode: "Sign in a watch",
-    watchCodeHint: "Enter the code shown on the watch.", code: "Code", approve: "Approve", approved: "The watch is signed in", lastSeen: "Last seen {{when}}",
+    currentPassword: "Current password", newPassword: "New password", changed: "Password changed", lastSeen: "Last seen {{when}}",
     kind: { PHONE: "Phone", WATCH: "Watch", WEB: "Browser" },
   },
   admin: {
@@ -107,8 +106,7 @@ const ru: typeof en = {
   },
   account: {
     devices: "Устройства", thisDevice: "это устройство", signOut: "Выйти", revoke: "Отключить устройство", password: "Сменить пароль",
-    currentPassword: "Текущий пароль", newPassword: "Новый пароль", changed: "Пароль изменён", watchCode: "Вход на часах",
-    watchCodeHint: "Введите код, показанный на часах.", code: "Код", approve: "Подтвердить", approved: "Часы вошли", lastSeen: "Был(о) в сети {{when}}",
+    currentPassword: "Текущий пароль", newPassword: "Новый пароль", changed: "Пароль изменён", lastSeen: "Был(о) в сети {{when}}",
     kind: { PHONE: "Телефон", WATCH: "Часы", WEB: "Браузер" },
   },
   admin: {

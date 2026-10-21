@@ -1,9 +1,6 @@
 package com.zyagodin.booksound.server.http
 
 import com.zyagodin.booksound.api.ApiPaths
-import com.zyagodin.booksound.api.DeviceCodeApproveRequest
-import com.zyagodin.booksound.api.DeviceCodePollRequest
-import com.zyagodin.booksound.api.DeviceCodeStartRequest
 import com.zyagodin.booksound.api.DeviceKind
 import com.zyagodin.booksound.api.ErrorCodes
 import com.zyagodin.booksound.api.LoginRequest
@@ -87,17 +84,8 @@ fun Route.authRoutes(ctx: ServerContext) {
             call.respond(io { auth.refresh(body.refreshToken) })
         }
 
-        post(ApiPaths.DEVICE_CODE) {
-            val body = call.receive<DeviceCodeStartRequest>()
-            call.respond(io { auth.startDeviceCode(body.deviceName, body.deviceKind, body.deviceId) })
-        }
     }
 
-    // Polled every few seconds by a waiting device, so outside the login limit; the poll token is a 256-bit secret.
-    post(ApiPaths.DEVICE_CODE_POLL) {
-        val body = call.receive<DeviceCodePollRequest>()
-        call.respond(io { auth.pollDeviceCode(body.pollToken) })
-    }
 
     authenticate(AUTH) {
         get(ApiPaths.ME) {
@@ -119,12 +107,6 @@ fun Route.authRoutes(ctx: ServerContext) {
             call.respond(HttpStatusCode.NoContent)
         }
 
-        post(ApiPaths.DEVICE_CODE_APPROVE) {
-            val body = call.receive<DeviceCodeApproveRequest>()
-            val p = call.user
-            io { auth.approveDeviceCode(p, body.userCode) }
-            call.respond(HttpStatusCode.NoContent)
-        }
 
         get(ApiPaths.DEVICES) {
             val p = call.user

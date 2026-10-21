@@ -11,8 +11,6 @@ export default function AccountPage({ session }: { session: SessionDto }) {
   const { t, i18n } = useTranslation();
   const devices = useDevices();
   const client = useQueryClient();
-  const [code, setCode] = useState("");
-  const [codeResult, setCodeResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [passwords, setPasswords] = useState({ current: "", next: "" });
   const [passwordResult, setPasswordResult] = useState<{ ok: boolean; text: string } | null>(null);
   const when = (ms: number) => new Date(ms).toLocaleString(i18n.language);
@@ -30,29 +28,6 @@ export default function AccountPage({ session }: { session: SessionDto }) {
           <Stack direction="row" sx={{ alignItems: "center" }}>
             <Typography variant="h6" sx={{ flex: 1 }}>{session.user.name}</Typography>
             <Button startIcon={<LogoutIcon />} onClick={() => void signOut()}>{t("account.signOut")}</Button>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Stack spacing={1.5}>
-            <Typography variant="h6">{t("account.watchCode")}</Typography>
-            <Typography variant="body2" color="text.secondary">{t("account.watchCodeHint")}</Typography>
-            <Stack direction="row" spacing={1}>
-              <TextField size="small" label={t("account.code")} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} slotProps={{ htmlInput: { maxLength: 9 } }} />
-              <Button variant="contained" disabled={code.replace(/[^A-Z0-9]/g, "").length !== 8} onClick={async () => {
-                try {
-                  await api.post(paths.approveCode, { userCode: code });
-                  setCodeResult({ ok: true, text: t("account.approved") });
-                  setCode("");
-                  void client.invalidateQueries({ queryKey: keys.devices });
-                } catch (e) {
-                  setCodeResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
-                }
-              }}>{t("account.approve")}</Button>
-            </Stack>
-            {codeResult && <Alert severity={codeResult.ok ? "success" : "error"}>{codeResult.text}</Alert>}
           </Stack>
         </CardContent>
       </Card>

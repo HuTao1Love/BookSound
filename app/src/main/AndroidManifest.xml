@@ -135,6 +135,11 @@
                     android:host="*"
                     android:pathPrefix="/booksound/phone-command/"
                     android:scheme="wear" />
+                <!-- The watch asks to be signed in to the server with the phone's account. -->
+                <data
+                    android:host="*"
+                    android:pathPrefix="/booksound/server-auth-request"
+                    android:scheme="wear" />
             </intent-filter>
         </service>
 
