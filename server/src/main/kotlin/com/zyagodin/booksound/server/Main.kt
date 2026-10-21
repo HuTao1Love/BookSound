@@ -69,6 +69,7 @@ class ServerContext(val config: ServerConfig) : AutoCloseable {
     }
 
     override fun close() {
+        imports.stop()
         torrents?.close()
         scope.cancel()
         db.close()

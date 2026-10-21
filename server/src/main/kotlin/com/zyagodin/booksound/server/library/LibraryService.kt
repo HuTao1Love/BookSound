@@ -66,16 +66,18 @@ class LibraryService(
     ): BookRow = synchronized(writeLock) {
         val previous = repo.book(bookId)
         val previousFile = previous?.let { runCatching { fileOf(it) }.getOrNull() }
-        files.commit(partial, target, previousFile)
+        // The name was picked while converting; another book may have taken it since.
+        val placed = files.stillFree(target, previousFile)
+        files.commit(partial, placed, previousFile)
         if (cover != null) covers.save(bookId, cover) else if (previous == null) covers.remove(bookId)
         val now = clock()
         val row = BookRow(
             id = bookId,
             metadata = metadata,
             durationMs = durationMs,
-            relativePath = files.relativePathOf(target),
-            fileSize = target.length(),
-            fileModified = target.lastModified(),
+            relativePath = files.relativePathOf(placed),
+            fileSize = placed.length(),
+            fileModified = placed.lastModified(),
             sha256 = sha256,
             fileRevision = (previous?.fileRevision ?: 0) + 1,
             coverSha256 = cover?.let { Covers.sha256(it.bytes) } ?: previous?.coverSha256,
