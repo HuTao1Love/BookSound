@@ -597,6 +597,7 @@
     <string name="server_unreachable">Сервер недоступен: %1$s</string>
     <string name="server_about">Сервер необязателен: без него всё работает на телефоне, как раньше. С ним можно скачивать книги из библиотеки сервера, загружать туда свои, а прогресс прослушивания переходит между телефоном, часами и браузером.</string>
     <string name="server_sync_now">Синхронизировать</string>
+    <string name="server_offline">Сервер недоступен. Всё на телефоне работает как обычно; прогресс прослушивания отправится, когда сервер снова появится.</string>
     <string name="server_sign_out">Выйти</string>
     <string name="server_group_options">Настройки</string>
     <string name="server_auto_upload">Загружать новые книги</string>
