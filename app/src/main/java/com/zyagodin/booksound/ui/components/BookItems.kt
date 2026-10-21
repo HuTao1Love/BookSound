@@ -16,9 +16,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -30,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -43,7 +48,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.util.formatDuration
 
@@ -92,9 +99,54 @@ fun remainingLabel(item: LibraryItem): String {
     val context = LocalContext.current
     val entry = item.entry
     return when {
+        item.onServerOnly && entry.positionMs <= 0 && !entry.finished ->
+            stringResource(R.string.on_server_duration, formatDuration(context, entry.book.durationMs))
         entry.finished -> stringResource(R.string.state_finished)
         entry.positionMs > 0 -> stringResource(R.string.time_left, formatDuration(context, entry.book.durationMs - entry.positionMs))
         else -> formatDuration(context, entry.book.durationMs)
+    }
+}
+
+/** Opacity of a cover: dimmed while the book is only on the server, filling in as it downloads. */
+fun coverAlpha(item: LibraryItem, transfer: ServerTransfer?): Float = when {
+    !item.onServerOnly -> 1f
+    transfer != null && transfer.direction == ServerTransfer.Direction.DOWNLOAD -> SERVER_ONLY_ALPHA + (1f - SERVER_ONLY_ALPHA) * (transfer.progress ?: 0f)
+    else -> SERVER_ONLY_ALPHA
+}
+
+private const val SERVER_ONLY_ALPHA = 0.45f
+
+/**
+ * Corner mark of a cover once signed in to a server: a cloud for a book only on the server, a crossed-out cloud
+ * for one the server lacks, and the progress while it moves between them. Nothing for a book on both.
+ */
+@Composable
+fun ServerMark(item: LibraryItem, transfer: ServerTransfer?, modifier: Modifier = Modifier, small: Boolean = false) {
+    val icon = when {
+        transfer != null -> null
+        item.location == BookLocation.SERVER_ONLY -> Icons.Rounded.Cloud
+        item.location == BookLocation.PHONE_ONLY -> Icons.Rounded.CloudOff
+        else -> return
+    }
+    val size = if (small) 22.dp else 28.dp
+    Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.55f), contentColor = Color.White, modifier = modifier.size(size)) {
+        Box(contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Icon(
+                    icon,
+                    contentDescription = stringResource(if (item.onServerOnly) R.string.state_on_server else R.string.state_not_on_server),
+                    modifier = Modifier.size(if (small) 14.dp else 17.dp).alpha(if (item.onServerOnly) 1f else 0.8f),
+                )
+            } else {
+                val progress = transfer?.progress
+                val ring = Modifier.size(size - 6.dp)
+                if (progress != null && transfer?.stage == ServerTransfer.Stage.RUNNING) {
+                    CircularProgressIndicator(progress = { progress }, modifier = ring, color = Color.White, trackColor = Color.White.copy(alpha = 0.25f), strokeWidth = 2.dp)
+                } else {
+                    CircularProgressIndicator(modifier = ring, color = Color.White, trackColor = Color.White.copy(alpha = 0.25f), strokeWidth = 2.dp)
+                }
+            }
+        }
     }
 }
 
@@ -108,8 +160,13 @@ fun BookListRow(
     modifier: Modifier = Modifier,
     /** In the list of one series: only the book's number in front of the title, no series name. */
     inSeries: Boolean = false,
+    /** The book moving to or from the server. */
+    transfer: ServerTransfer? = null,
+    /** Downloads a book that is only on the server; its button replaces Play. */
+    onDownload: () -> Unit = {},
 ) {
     val meta = item.metadata
+    val textAlpha = if (item.onServerOnly) 0.7f else 1f
     Row(
         modifier
             .clip(RoundedCornerShape(16.dp))
@@ -118,11 +175,12 @@ fun BookListRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            BookCover(item.coverPath, meta.title, meta.author, Modifier.size(76.dp), elevation = 3.dp)
+            BookCover(item.coverPath, meta.title, meta.author, Modifier.size(76.dp).alpha(coverAlpha(item, transfer)), elevation = 3.dp)
             StatusBadge(item, Modifier.align(Alignment.TopEnd).padding(4.dp), small = true)
+            ServerMark(item, transfer, Modifier.align(Alignment.BottomEnd).padding(4.dp), small = true)
         }
         Spacer(Modifier.width(Spacing.lg))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).alpha(textAlpha)) {
             Text(
                 if (inSeries) numberedTitle(meta.title, meta.seriesIndex) else titleWithSeries(meta.title, meta.series, meta.seriesIndex),
                 style = MaterialTheme.typography.titleMedium,
@@ -145,14 +203,25 @@ fun BookListRow(
             }
         }
         Spacer(Modifier.width(Spacing.sm))
-        CircleIconButton(
-            icon = Icons.Rounded.PlayArrow,
-            contentDescription = stringResource(R.string.action_play),
-            onClick = onPlay,
-            enabled = !item.isMissing,
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        if (item.onServerOnly) {
+            CircleIconButton(
+                icon = Icons.Rounded.CloudDownload,
+                contentDescription = stringResource(R.string.action_download_to_phone),
+                onClick = onDownload,
+                enabled = transfer == null,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            )
+        } else {
+            CircleIconButton(
+                icon = Icons.Rounded.PlayArrow,
+                contentDescription = stringResource(R.string.action_play),
+                onClick = onPlay,
+                enabled = !item.isMissing,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 

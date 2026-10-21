@@ -15,6 +15,7 @@ import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.torrent.TorrentItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,7 +70,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     val events: SharedFlow<LibraryEvent> = _events
 
     val state: StateFlow<LibraryUiState> = combine(
-        container.library.library,
+        container.server.libraryWithServer(),
         query,
         container.settings.state,
         combine(container.importManager.jobs, container.torrents.items, container.server.transfers, container.watchSender.transfers) { jobs, torrents, server, watch ->
@@ -98,6 +100,10 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             groups = groups,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
+    /** Books moving to or from the server, by id; apart from [state] since progress changes many times a second. */
+    val transfers: StateFlow<Map<String, ServerTransfer>> = activeServerTransfers(container)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
      * Free bytes on the phone while they are below [LOW_STORAGE_BYTES], else null. Checked while the
@@ -133,6 +139,10 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         container.library.setFinished(item.id, finished)
     }
 
+    fun download(item: LibraryItem) = downloadFromServer(container, item)
+    fun upload(item: LibraryItem) = container.server.upload(item.id, item.metadata.title)
+    fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
+
     fun remove(item: LibraryItem, deleteFile: Boolean) = viewModelScope.launch {
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
@@ -150,4 +160,13 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         const val LOW_STORAGE_BYTES = 500L * 1024 * 1024
         const val LOW_STORAGE_CHECK_MS = 30_000L
     }
+}
+
+/** The active server transfers by book id, for the covers' progress. */
+internal fun activeServerTransfers(container: AppContainer) =
+    container.server.transfers.map { list -> list.filter { it.isActive }.associateBy { it.bookId } }
+
+/** Queues the download of a book that is only on the server. */
+internal fun downloadFromServer(container: AppContainer, item: LibraryItem) = container.appScope.launch {
+    container.server.download(item.id)
 }

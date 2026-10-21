@@ -609,11 +609,7 @@
     <string name="server_connect">Подключить</string>
     <string name="server_watch_connected">Часы подключены к серверу</string>
     <string name="server_watch_not_connected">Часы с BookSound не найдены</string>
-    <string name="server_group_transfers">Передача</string>
-    <string name="server_clear">Очистить</string>
-    <string name="server_group_books">Только на сервере (%1$d)</string>
     <string name="server_books_empty">Все книги сервера уже есть на телефоне.</string>
-    <string name="server_download">Скачать</string>
     <string name="server_downloading">Скачивание с сервера</string>
     <string name="server_uploading">Загрузка на сервер</string>
     <string name="server_stage_queued">В очереди</string>
@@ -621,8 +617,8 @@
     <string name="server_stage_failed">Ошибка: %1$s</string>
     <string name="server_stage_cancelled">Отменено</string>
     <string name="server_channel">Передача с сервером</string>
-    <string name="server_upload_started">Загрузка на сервер</string>
-    <string name="action_upload_to_server">Загрузить на сервер</string>
+    <string name="server_upload_started">Книга отправляется на сервер</string>
+    <string name="action_upload_to_server">Отправить на сервер</string>
     <string name="transfers_section">Передача</string>
     <string name="transfer_to_server">На сервер</string>
     <string name="transfer_from_server">С сервера</string>
@@ -648,4 +644,16 @@
         <item quantity="many">%1$d книг, %2$s</item>
         <item quantity="other">%1$d книги, %2$s</item>
     </plurals>
+    <string name="state_on_server">Только на сервере</string>
+    <string name="state_not_on_server">Нет на сервере</string>
+    <string name="on_server_duration">На сервере · %1$s</string>
+    <string name="action_download_to_phone">Скачать на телефон</string>
+    <string name="action_download_to_phone_size">Скачать на телефон · %1$s</string>
+    <string name="action_cancel_download">Отменить загрузку</string>
+    <string name="action_cancel_upload">Отменить отправку</string>
+    <string name="downloading_percent">Скачивается · %1$d%%</string>
+    <string name="uploading_percent">Отправляется на сервер · %1$d%%</string>
+    <string name="server_only_hint">Книга на сервере. Скачайте её, чтобы слушать на телефоне.</string>
+    <string name="server_bulk_upload">Отправить все книги на сервер (%1$d)</string>
+    <string name="server_bulk_download">Скачать все с сервера (%1$d · %2$s)</string>
 </resources>
