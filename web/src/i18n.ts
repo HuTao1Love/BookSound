@@ -3,6 +3,11 @@ import { initReactI18next } from "react-i18next";
 
 const en = {
   appName: "BookSound",
+  serverUpdated: {
+    message: "The server was updated to {{version}}. Reload the page to get the new version.",
+    incompatible: "The server was updated to {{version}} and this page no longer works with it. Reload it.",
+    reload: "Reload",
+  },
   nav: { library: "Library", imports: "Add books", admin: "Server", account: "Account" },
   common: {
     save: "Save", cancel: "Cancel", delete: "Delete", close: "Close", retry: "Try again", loading: "Loading…",
@@ -75,6 +80,11 @@ const en = {
 
 const ru: typeof en = {
   appName: "BookSound",
+  serverUpdated: {
+    message: "Сервер обновлён до {{version}}. Перезагрузите страницу, чтобы открыть новую версию.",
+    incompatible: "Сервер обновлён до {{version}}, и эта страница с ним уже не работает. Перезагрузите её.",
+    reload: "Перезагрузить",
+  },
   nav: { library: "Библиотека", imports: "Добавить", admin: "Сервер", account: "Аккаунт" },
   common: {
     save: "Сохранить", cancel: "Отмена", delete: "Удалить", close: "Закрыть", retry: "Повторить", loading: "Загрузка…",
