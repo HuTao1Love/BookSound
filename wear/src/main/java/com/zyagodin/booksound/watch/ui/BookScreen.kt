@@ -1,5 +1,6 @@
 package com.zyagodin.booksound.watch.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,7 @@ fun BookScreen(container: WatchContainer, bookId: String, onListen: () -> Unit, 
     val books by container.library.books.collectAsStateWithLifecycle()
     val book = books.firstOrNull { it.id == bookId } ?: return
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val listState = rememberTransformingLazyColumnState()
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
@@ -63,8 +66,8 @@ fun BookScreen(container: WatchContainer, bookId: String, onListen: () -> Unit, 
                     onClick = {
                         if (container.player.state.value.bookId == book.id) container.player.stop()
                         scope.launch {
-                            container.library.remove(book.id)
-                            onDeleted()
+                            if (container.library.remove(book.id)) onDeleted()
+                            else Toast.makeText(context, R.string.delete_failed, Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
