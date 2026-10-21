@@ -12,6 +12,7 @@ import com.zyagodin.booksound.core.library.SeriesGroup
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.library.defaultDescending
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.data.library.LocationFilter
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportSelection
@@ -40,6 +41,9 @@ data class LibraryUiState(
     val sort: SortField = SortField.RECENT,
     val descending: Boolean = true,
     val filter: ProgressFilter = ProgressFilter.ALL,
+    val location: LocationFilter = LocationFilter.ALL,
+    /** Some books of the library are only on the server, so filtering by where they are means something. */
+    val hasServerBooks: Boolean = false,
     val activeImports: List<ImportJob> = emptyList(),
     /** Torrents still downloading, waiting for review or being converted. */
     val activeTorrents: List<TorrentItem> = emptyList(),
@@ -88,7 +92,8 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         val libraryQuery = LibraryQuery(q, settings.librarySort, settings.libraryDescending, settings.libraryFilter)
         val byId = items.associateBy { it.id }
         // Books on the phone come first, then the ones only on the server, each part in the chosen order.
-        val (here, there) = LibrarySearch.apply(items.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
+        val shown = items.filter { settings.libraryLocation.matches(it) }
+        val (here, there) = LibrarySearch.apply(shown.map { it.entry }, libraryQuery).mapNotNull { byId[it.book.id.value] }
             .partition { !it.onServerOnly }
         val ordered = here + there
         // Likewise the sections: a series with a book on the phone stays among the phone's ones; the books
@@ -110,6 +115,8 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             sort = settings.librarySort,
             descending = settings.libraryDescending,
             filter = settings.libraryFilter,
+            location = settings.libraryLocation,
+            hasServerBooks = items.any { it.onServerOnly },
             // Torrent conversions are shown in the downloads.
             activeImports = jobs.filter { it.isActive && it.request.torrentId == null },
             activeTorrents = torrents.filter { it.record.isActive },
@@ -148,6 +155,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun setFilter(filter: ProgressFilter) = viewModelScope.launch { container.settings.setLibraryFilter(filter) }
+    fun setLocation(location: LocationFilter) = viewModelScope.launch { container.settings.setLibraryLocation(location) }
 
 
     fun refresh() = viewModelScope.launch {
