@@ -73,7 +73,7 @@ export function CoverBackdrop({ book }: { book: BookDto }) {
   const [light, dark] = paletteFor(book.metadata.title);
   const bg = theme.palette.background.default;
   return (
-    <Box aria-hidden sx={{ position: "fixed", top: 0, right: 0, left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+    <Box aria-hidden sx={{ position: "fixed", top: 0, right: "var(--side-player, 0px)", left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
       {url ? (
         <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: theme.palette.mode === "dark" ? 0.5 : 0.35 }} />
       ) : (

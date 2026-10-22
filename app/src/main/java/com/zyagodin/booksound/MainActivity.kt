@@ -5,10 +5,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.zyagodin.booksound.torrent.TorrentKeepAlive
 import com.zyagodin.booksound.ui.AppRoot
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -21,6 +26,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) handleIntent(intent)
+        // Positions saved on the server (the web app) while the app was in the background, and while it is open.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    container.sync.requestSync(listOf(container.server.syncTarget))
+                    delay(SERVER_SYNC_INTERVAL_MS)
+                }
+            }
+        }
         setContent {
             AppRoot(container, actions.receiveAsFlow())
         }
@@ -67,5 +81,6 @@ class MainActivity : ComponentActivity() {
         const val ACTION_OPEN_IMPORTS = "com.zyagodin.booksound.OPEN_IMPORTS"
         const val TORRENT_LINK_PREFIX = "torrent-link:"
         const val TORRENT_FILE_PREFIX = "torrent-file:"
+        private const val SERVER_SYNC_INTERVAL_MS = 60_000L
     }
 }

@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.math.abs
 
@@ -404,6 +405,9 @@ class PlaybackService : MediaSessionService() {
             // Persist the outgoing book before switching (not when re-setting the same book).
             if (player.currentMediaItem?.mediaId != bookId) savePosition()
             readyBookId = null
+            // The book may have been listened to on the web since the last pull: start from there. Briefly, so
+            // an unreachable server doesn't hold up playback.
+            withTimeoutOrNull(SYNC_BEFORE_PLAY_MS) { container.sync.syncNow(listOf(container.server.syncTarget)) }
             val item = buildItem(bookId)
             if (item == null) {
                 future.setException(IllegalArgumentException("Unknown book $bookId"))
@@ -467,6 +471,7 @@ class PlaybackService : MediaSessionService() {
         const val EXTRA_BOOK_ID = "book_id"
         private const val SAVE_INTERVAL_MS = 10_000L
         private const val FOLLOW_THRESHOLD_MS = 2_000L
+        private const val SYNC_BEFORE_PLAY_MS = 2_500L
         private val HANDLED_KEYS = setOf(
             KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD,
