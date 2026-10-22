@@ -9,12 +9,16 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useImports, useTorrents, useUploads } from "../api/hooks";
 import type { SessionDto } from "../api/types.gen";
 import MiniPlayer from "./MiniPlayer";
+import { SIDE_PLAYER_WIDTH, SidePlayer, useSidePlayer } from "./NowPlaying";
 import { Logo, SIDEBAR_WIDTH } from "./Ui";
 
 const BOTTOM_NAV = 64;
 const ACTIVE_JOBS = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
 
-/** Navigation on the left on wide screens, at the bottom on phones; the mini player above the content's bottom. */
+/**
+ * Navigation on the left on wide screens, at the bottom on phones. The book playing is on the right of the widest
+ * screens, otherwise in the mini player above the content's bottom.
+ */
 export default function AppShell({ session, children }: { session: SessionDto; features: string[]; children: ReactNode }) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -22,6 +26,7 @@ export default function AppShell({ session, children }: { session: SessionDto; f
   const location = useLocation();
   const navigate = useNavigate();
   const busy = useBusyCount();
+  const side = useSidePlayer();
 
   const tabs = [
     { path: "/", label: t("nav.library"), icon: <LibraryBooksRoundedIcon /> },
@@ -34,7 +39,7 @@ export default function AppShell({ session, children }: { session: SessionDto; f
   const onPlayer = location.pathname === "/player";
 
   return (
-    <Box sx={{ minHeight: "100dvh" }}>
+    <Box sx={{ minHeight: "100dvh", "--side-player": `${side ? SIDE_PLAYER_WIDTH : 0}px` }}>
       {wide && (
         <Box
           component="nav"
@@ -60,8 +65,13 @@ export default function AppShell({ session, children }: { session: SessionDto; f
                   "&:hover": { bgcolor: selected ? alpha(theme.palette.primary.main, 0.16) : alpha(theme.palette.text.primary, 0.05), color: selected ? "primary.main" : "text.primary" },
                 }}
               >
-                <Badge badgeContent={tab.badge} color="primary" sx={{ "& .MuiBadge-badge": { fontWeight: 800 } }}>{tab.icon}</Badge>
-                {tab.label}
+                {tab.icon}
+                <Box component="span" sx={{ flex: 1, textAlign: "left" }}>{tab.label}</Box>
+                {!!tab.badge && (
+                  <Box component="span" sx={{ minWidth: 22, height: 22, px: 0.75, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, background: theme.palette.gradient.css, color: theme.palette.gradient.on }}>
+                    {tab.badge}
+                  </Box>
+                )}
               </ButtonBase>
             );
           })}
@@ -81,8 +91,8 @@ export default function AppShell({ session, children }: { session: SessionDto; f
       <Box
         component="main"
         sx={{
-          ml: { md: `${SIDEBAR_WIDTH}px` }, position: "relative",
-          pb: wide ? (onPlayer ? 4 : 14) : `calc(${BOTTOM_NAV + (onPlayer ? 16 : 96)}px + env(safe-area-inset-bottom))`,
+          ml: { md: `${SIDEBAR_WIDTH}px` }, mr: "var(--side-player)", position: "relative",
+          pb: wide ? (onPlayer || side ? 4 : 14) : `calc(${BOTTOM_NAV + (onPlayer ? 16 : 96)}px + env(safe-area-inset-bottom))`,
         }}
       >
         <Box sx={{ position: "relative", zIndex: 1, maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3, md: 5 }, pt: { xs: 2.5, md: 5 } }}>
@@ -90,7 +100,7 @@ export default function AppShell({ session, children }: { session: SessionDto; f
         </Box>
       </Box>
 
-      {!onPlayer && <MiniPlayer bottomOffset={wide ? 0 : BOTTOM_NAV} />}
+      {side ? <SidePlayer /> : !onPlayer && <MiniPlayer bottomOffset={wide ? 0 : BOTTOM_NAV} />}
 
       {!wide && (
         <Box

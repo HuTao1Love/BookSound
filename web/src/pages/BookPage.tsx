@@ -21,6 +21,7 @@ import { api, paths, request } from "../api/client";
 import { keys, useBook, useMe, useWatchProfiles } from "../api/hooks";
 import type { BookDto, MetadataDto, WatchFileStatusDto } from "../api/types.gen";
 import BookCover, { CoverBackdrop } from "../components/BookCover";
+import { useSidePlayerFits } from "../components/NowPlaying";
 import { ProgressLine, SectionTitle } from "../components/Ui";
 import { chapterAt, formatDuration, isStarted } from "../library";
 import { usePlayer } from "../player/PlayerContext";
@@ -31,6 +32,8 @@ export default function BookPage() {
   const entry = useBook(id);
   const me = useMe();
   const player = usePlayer();
+  // Wide screens have the player on the right: starting a book keeps the page.
+  const side = useSidePlayerFits();
   const client = useQueryClient();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -103,11 +106,11 @@ export default function BookPage() {
             )}
             {playback?.finished && <Chip size="small" icon={<CheckCircleRoundedIcon />} label={t("book.finished")} sx={{ color: "secondary.main" }} />}
             <Stack direction="row" spacing={1} sx={{ pt: 1.5, flexWrap: "wrap", gap: 1, justifyContent: { xs: "center", md: "flex-start" }, alignItems: "center" }}>
-              <Button variant="contained" size="large" startIcon={<PlayArrowRoundedIcon />} onClick={() => { player.play(entry.data!); navigate("/player"); }}>
+              <Button variant="contained" size="large" startIcon={<PlayArrowRoundedIcon />} onClick={() => { player.play(entry.data!); if (!side) navigate("/player"); }}>
                 {started ? t("book.resume") : t("book.play")}
               </Button>
               {started && (
-                <Button variant="outlined" size="large" startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); navigate("/player"); }}>{t("book.restart")}</Button>
+                <Button variant="outlined" size="large" startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); if (!side) navigate("/player"); }}>{t("book.restart")}</Button>
               )}
               <Tooltip title={t("book.downloadFile")}>
                 <IconButton href={`${paths.bookFile(id)}?download=1`} sx={{ border: 1, borderColor: "divider" }}><DownloadIcon /></IconButton>

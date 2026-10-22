@@ -51,7 +51,10 @@ class UploadService(
         return UploadDto(id, name, request.sizeBytes, 0, request.kind)
     }
 
-    /** Uploads under way from every device, newest first, with who sends them. */
+    /**
+     * Uploads under way from every device, newest first, with who sends them. One that got no bytes for a while
+     * was cancelled or lost its connection: it isn't shown, and [cleanUp] drops it later.
+     */
     fun active(): List<UploadDto> = db.tx {
         query(
             """SELECT up.*, u.name AS user_name, d.name AS device_name FROM uploads up
@@ -59,6 +62,7 @@ class UploadService(
                ORDER BY up.created_at DESC""",
         ) {
             val id = it.str("id")!!
+            if (System.currentTimeMillis() - lastActivity(id, it.long("created_at")!!) > IDLE_HIDDEN_MS) return@query null
             UploadDto(
                 id = id,
                 fileName = it.str("file_name")!!,
@@ -68,7 +72,7 @@ class UploadService(
                 from = listOfNotNull(it.str("user_name"), it.str("device_name")).joinToString(" · "),
             )
         }
-    }.map { it.copy(receivedBytes = partFile(it.id).length()) }
+    }.filterNotNull().map { it.copy(receivedBytes = partFile(it.id).length()) }
 
     fun status(principal: Principal, id: String): UploadDto {
         val row = row(principal, id)
@@ -147,16 +151,24 @@ class UploadService(
         return imports.enqueue(spec, request.metadata?.title?.takeIf { it.isNotBlank() } ?: sourceName)
     }
 
+    /** Cancels an upload: the sender's own, or (for an admin, from the web app) anyone's that got stuck. */
     fun delete(principal: Principal, id: String) {
-        row(principal, id)
+        val exists = if (principal.isAdmin) db.tx { queryOne("SELECT id FROM uploads WHERE id = ?", id) { true } } != null
+        else runCatching { row(principal, id) }.isSuccess
+        if (!exists) throw LibraryException(ErrorCodes.NOT_FOUND, "No such upload")
         forget(id)
     }
 
-    /** Drops uploads nobody finished within two days. */
+    /**
+     * Drops uploads that got no bytes for an hour: the phone and the browser start a new upload on every attempt,
+     * so nobody comes back to them.
+     */
     fun cleanUp() {
-        val cutoff = System.currentTimeMillis() - 2 * 24 * 3_600_000L
-        val stale = db.tx { query("SELECT id FROM uploads WHERE created_at < ?", cutoff) { it.str("id")!! } }
-        stale.forEach(::forget)
+        val now = System.currentTimeMillis()
+        val cutoff = now - 2 * 24 * 3_600_000L
+        val stale = db.tx { query("SELECT id, created_at FROM uploads") { it.str("id")!! to it.long("created_at")!! } }
+            .filter { (id, createdAt) -> now - lastActivity(id, createdAt) > IDLE_DROPPED_MS }
+        stale.forEach { forget(it.first) }
         val known = db.tx { query("SELECT id FROM uploads") { it.str("id")!! } }.toSet()
         dir.listFiles()?.forEach { f ->
             val id = f.name.removeSuffix(".part")
@@ -196,6 +208,9 @@ class UploadService(
         }
     } ?: throw LibraryException(ErrorCodes.NOT_FOUND, "No such upload")
 
+    /** When the last chunk arrived: the part file is written by every chunk. */
+    private fun lastActivity(id: String, createdAt: Long): Long = maxOf(createdAt, partFile(id).lastModified())
+
     private fun forget(id: String) {
         partFile(id).delete()
         db.tx { update("DELETE FROM uploads WHERE id = ?", id) }
@@ -205,6 +220,9 @@ class UploadService(
         const val MAX_CHUNK_BYTES = 16L * 1024 * 1024
         private const val MAX_FILE_BYTES = 20L * 1024 * 1024 * 1024
         private const val SPACE_RESERVE = 200L * 1024 * 1024
+        /** A chunk takes seconds even on mobile data; a minute and a half without one means nobody is sending. */
+        private const val IDLE_HIDDEN_MS = 90_000L
+        private const val IDLE_DROPPED_MS = 3_600_000L
     }
 }
 

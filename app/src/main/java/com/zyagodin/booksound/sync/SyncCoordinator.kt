@@ -44,14 +44,18 @@ class SyncCoordinator(
     val lastReport: StateFlow<SyncReport> = _lastReport
     private val mutex = Mutex()
 
-    fun requestSync() {
-        scope.launch {
-            mutex.withLock {
-                val id = device()
-                for (target in targets) {
-                    val report = DefaultSyncEngine(target.backend, target.store, id).sync()
-                    if (report != SyncReport.Skipped) _lastReport.value = report
-                }
+    /** A round in the background with [only] these targets (all by default). */
+    fun requestSync(only: List<SyncTarget> = targets) {
+        scope.launch { syncNow(only) }
+    }
+
+    /** A round with [only] these targets, returning when it is over. */
+    suspend fun syncNow(only: List<SyncTarget> = targets) {
+        mutex.withLock {
+            val id = device()
+            for (target in only) {
+                val report = DefaultSyncEngine(target.backend, target.store, id).sync()
+                if (report != SyncReport.Skipped) _lastReport.value = report
             }
         }
     }
