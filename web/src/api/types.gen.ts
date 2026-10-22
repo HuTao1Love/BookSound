@@ -311,3 +311,17 @@ export interface EventDto {
   torrent?: TorrentDto | null;
   bookId?: string | null;
 }
+
+export interface ServerUpdateDto {
+  currentVersion: string;
+  latestVersion?: string | null;
+  available: boolean;
+  method: UpdateMethod;
+  stage: UpdateStage;
+  message?: string | null;
+  command?: string | null;
+}
+
+export type UpdateMethod = "SYSTEMD" | "WATCHTOWER" | "MANUAL";
+
+export type UpdateStage = "IDLE" | "REQUESTED" | "INSTALLING" | "FAILED";

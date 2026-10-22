@@ -96,6 +96,9 @@
     <string name="filter_in_progress">In progress</string>
     <string name="filter_not_started">Not started</string>
     <string name="filter_finished">Finished</string>
+    <string name="location_filter_all">All books, on the phone and on the server. Tap to show the phone\'s only</string>
+    <string name="location_filter_phone">Books on the phone only. Tap to show the server\'s only</string>
+    <string name="location_filter_server">Books on the server only. Tap to show all</string>
     <string name="sort_recent">Recent</string>
     <string name="sort_added">Date added</string>
     <string name="sort_title">Title</string>
@@ -589,6 +592,7 @@
     <string name="server_unreachable">Can\'t reach the server: %1$s</string>
     <string name="server_about">The server is optional: without it everything works on this phone as before. With it, books from the server\'s library can be downloaded, your books uploaded, and listening progress follows you between the phone, the watch and the browser.</string>
     <string name="server_sync_now">Sync now</string>
+    <string name="server_offline">The server can\'t be reached. Everything on this phone still works; listening progress is sent when the server is back.</string>
     <string name="server_sign_out">Sign out</string>
     <string name="server_group_options">Options</string>
     <string name="server_auto_upload">Upload new books</string>
@@ -600,11 +604,7 @@
     <string name="server_connect">Connect</string>
     <string name="server_watch_connected">The watch is connected to the server</string>
     <string name="server_watch_not_connected">No watch with BookSound found</string>
-    <string name="server_group_transfers">Transfers</string>
-    <string name="server_clear">Clear</string>
-    <string name="server_group_books">On the server only (%1$d)</string>
     <string name="server_books_empty">Every book of the server is on this phone.</string>
-    <string name="server_download">Download</string>
     <string name="server_downloading">Downloading from the server</string>
     <string name="server_uploading">Uploading to the server</string>
     <string name="server_stage_queued">Waiting</string>
@@ -635,4 +635,25 @@
         <item quantity="one">%1$d book, %2$s</item>
         <item quantity="other">%1$d books, %2$s</item>
     </plurals>
+    <string name="state_on_server">Only on the server</string>
+    <string name="state_not_on_server">Not on the server</string>
+    <string name="on_server_duration">On the server · %1$s</string>
+    <string name="action_download_to_phone">Download to phone</string>
+    <string name="action_download_to_phone_size">Download to phone · %1$s</string>
+    <string name="action_cancel_download">Cancel download</string>
+    <string name="action_cancel_upload">Cancel upload</string>
+    <string name="downloading_percent">Downloading · %1$d%%</string>
+    <string name="uploading_percent">Sending to the server · %1$d%%</string>
+    <string name="server_only_hint">The book is on the server. Download it to listen on this phone.</string>
+    <string name="server_bulk_upload">Send all books to the server (%1$d)</string>
+    <string name="server_bulk_download">Download all from the server (%1$d · %2$s)</string>
+    <string name="server_version">Server %1$s</string>
+    <string name="server_api_outdated">The server is too old for this app, so nothing syncs. Update it in the web app: Server → Install update.</string>
+    <string name="server_api_app_outdated">This app is too old for the server, so nothing syncs. Update the app.</string>
+    <string name="remove_delete_from_server">Also delete from the server</string>
+    <string name="remove_server_hint">The book disappears from the server for every user.</string>
+    <string name="action_delete_from_server">Delete from the server</string>
+    <string name="delete_from_server_title">Delete from the server?</string>
+    <string name="delete_from_server_message">“%1$s” will be deleted from the server, with its file, for every user.</string>
+    <string name="server_delete_failed">Can\'t delete from the server: %1$s</string>
 </resources>

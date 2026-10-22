@@ -96,6 +96,9 @@
     <string name="filter_in_progress">Слушаю</string>
     <string name="filter_not_started">Не начаты</string>
     <string name="filter_finished">Прослушаны</string>
+    <string name="location_filter_all">Все книги: на телефоне и на сервере. Нажмите, чтобы показать только книги телефона</string>
+    <string name="location_filter_phone">Только книги на телефоне. Нажмите, чтобы показать только книги сервера</string>
+    <string name="location_filter_server">Только книги на сервере. Нажмите, чтобы показать все</string>
     <string name="sort_recent">Недавние</string>
     <string name="sort_added">Дата добавления</string>
     <string name="sort_title">Название</string>
@@ -597,6 +600,7 @@
     <string name="server_unreachable">Сервер недоступен: %1$s</string>
     <string name="server_about">Сервер необязателен: без него всё работает на телефоне, как раньше. С ним можно скачивать книги из библиотеки сервера, загружать туда свои, а прогресс прослушивания переходит между телефоном, часами и браузером.</string>
     <string name="server_sync_now">Синхронизировать</string>
+    <string name="server_offline">Сервер недоступен. Всё на телефоне работает как обычно; прогресс прослушивания отправится, когда сервер снова появится.</string>
     <string name="server_sign_out">Выйти</string>
     <string name="server_group_options">Настройки</string>
     <string name="server_auto_upload">Загружать новые книги</string>
@@ -608,11 +612,7 @@
     <string name="server_connect">Подключить</string>
     <string name="server_watch_connected">Часы подключены к серверу</string>
     <string name="server_watch_not_connected">Часы с BookSound не найдены</string>
-    <string name="server_group_transfers">Передача</string>
-    <string name="server_clear">Очистить</string>
-    <string name="server_group_books">Только на сервере (%1$d)</string>
     <string name="server_books_empty">Все книги сервера уже есть на телефоне.</string>
-    <string name="server_download">Скачать</string>
     <string name="server_downloading">Скачивание с сервера</string>
     <string name="server_uploading">Загрузка на сервер</string>
     <string name="server_stage_queued">В очереди</string>
@@ -620,8 +620,8 @@
     <string name="server_stage_failed">Ошибка: %1$s</string>
     <string name="server_stage_cancelled">Отменено</string>
     <string name="server_channel">Передача с сервером</string>
-    <string name="server_upload_started">Загрузка на сервер</string>
-    <string name="action_upload_to_server">Загрузить на сервер</string>
+    <string name="server_upload_started">Книга отправляется на сервер</string>
+    <string name="action_upload_to_server">Отправить на сервер</string>
     <string name="transfers_section">Передача</string>
     <string name="transfer_to_server">На сервер</string>
     <string name="transfer_from_server">С сервера</string>
@@ -647,4 +647,25 @@
         <item quantity="many">%1$d книг, %2$s</item>
         <item quantity="other">%1$d книги, %2$s</item>
     </plurals>
+    <string name="state_on_server">Только на сервере</string>
+    <string name="state_not_on_server">Нет на сервере</string>
+    <string name="on_server_duration">На сервере · %1$s</string>
+    <string name="action_download_to_phone">Скачать на телефон</string>
+    <string name="action_download_to_phone_size">Скачать на телефон · %1$s</string>
+    <string name="action_cancel_download">Отменить загрузку</string>
+    <string name="action_cancel_upload">Отменить отправку</string>
+    <string name="downloading_percent">Скачивается · %1$d%%</string>
+    <string name="uploading_percent">Отправляется на сервер · %1$d%%</string>
+    <string name="server_only_hint">Книга на сервере. Скачайте её, чтобы слушать на телефоне.</string>
+    <string name="server_bulk_upload">Отправить все книги на сервер (%1$d)</string>
+    <string name="server_bulk_download">Скачать все с сервера (%1$d · %2$s)</string>
+    <string name="server_version">Сервер %1$s</string>
+    <string name="server_api_outdated">Сервер слишком старый для этой версии приложения, синхронизация остановлена. Обновите его в веб-приложении: Сервер → Установить обновление.</string>
+    <string name="server_api_app_outdated">Приложение слишком старое для этого сервера, синхронизация остановлена. Обновите приложение.</string>
+    <string name="remove_delete_from_server">Также удалить с сервера</string>
+    <string name="remove_server_hint">Книга пропадёт с сервера у всех пользователей.</string>
+    <string name="action_delete_from_server">Удалить с сервера</string>
+    <string name="delete_from_server_title">Удалить с сервера?</string>
+    <string name="delete_from_server_message">«%1$s» будет удалена с сервера вместе с файлом у всех пользователей.</string>
+    <string name="server_delete_failed">Не удалось удалить с сервера: %1$s</string>
 </resources>

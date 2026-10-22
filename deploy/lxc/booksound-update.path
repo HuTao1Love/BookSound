@@ -1,0 +1,9 @@
+# Starts booksound-update.service when the server asks for an update from its admin page.
+[Unit]
+Description=BookSound server update request
+
+[Path]
+PathExists=/var/lib/booksound/update/request
+
+[Install]
+WantedBy=multi-user.target

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -49,7 +50,9 @@ import androidx.lifecycle.viewModelScope
 import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.LibrarySearch
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
@@ -61,6 +64,7 @@ import com.zyagodin.booksound.ui.components.CoverBackdrop
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.numberedTitle
 import com.zyagodin.booksound.ui.navigation.appViewModel
@@ -87,7 +91,7 @@ class SeriesViewModel(private val container: AppContainer, series: String) : Vie
     val removed: SharedFlow<LibraryEvent.Removed> = _removed
 
     /** Every book of the series, ignoring the library's search and filter, ordered by number. */
-    val state: StateFlow<SeriesState> = container.library.library
+    val state: StateFlow<SeriesState> = container.server.libraryWithServer()
         .map { items ->
             val byId = items.associateBy { it.id }
             val group = LibrarySearch.seriesGroup(items.map { it.entry }, series)
@@ -96,13 +100,27 @@ class SeriesViewModel(private val container: AppContainer, series: String) : Vie
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesState.Loading)
 
+    /** Books moving to or from the server, by id. */
+    val transfers: StateFlow<Map<String, ServerTransfer>> = activeServerTransfers(container)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     fun play(item: LibraryItem) = container.player.play(item.id)
+    fun download(item: LibraryItem) = downloadFromServer(container, item)
+    fun upload(item: LibraryItem) = container.server.upload(item.id, item.metadata.title)
+    fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
 
     fun setFinished(item: LibraryItem, finished: Boolean) = viewModelScope.launch {
         container.library.setFinished(item.id, finished)
     }
 
-    fun remove(item: LibraryItem, deleteFile: Boolean) = viewModelScope.launch {
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun deleteFromServer(item: LibraryItem) = container.server.deleteFromServer(item.id)
+
+    fun remove(item: LibraryItem, deleteFile: Boolean, deleteFromServer: Boolean) = viewModelScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
         _removed.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
@@ -126,10 +144,13 @@ private fun upNext(items: List<LibraryItem>): LibraryItem? {
 fun SeriesScreen(series: String, navigator: AppNavigator) {
     val vm = appViewModel(key = "series-$series") { SeriesViewModel(it, series) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val transfers by vm.transfers.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteOnServerFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(vm) {
         vm.removed.collect { snackbar.showSnackbar(it.message(context)) }
@@ -149,6 +170,7 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
             }
             is SeriesState.Loaded -> {
                 val section = s.section
+                val next = upNext(section.items)
                 val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 CoverBackdrop(section.items.firstOrNull()?.coverPath, section.series.orEmpty(), Modifier.fillMaxWidth().height(420.dp))
                 LazyColumn(
@@ -161,11 +183,13 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                     item(key = "header") {
                         SeriesHeader(
                             section = section,
-                            upNext = upNext(section.items),
+                            upNext = next,
                             onPlay = { item ->
                                 vm.play(item)
                                 navigator.openPlayer()
                             },
+                            onDownload = vm::download,
+                            downloading = next != null && next.id in transfers,
                             onSearch = navigator::searchLibrary,
                             modifier = Modifier.padding(horizontal = Spacing.lg).widthIn(max = 720.dp),
                         )
@@ -181,6 +205,8 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                             },
                             modifier = Modifier.animateItem().padding(horizontal = Spacing.lg).widthIn(max = 720.dp).fillMaxWidth(),
                             inSeries = true,
+                            transfer = transfers[item.id],
+                            onDownload = { vm.download(item) },
                         )
                     }
                 }
@@ -193,7 +219,26 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
     if (actionItem != null) {
         BookActionsSheet(
             item = actionItem,
+            transfer = transfers[actionItem.id],
             onDismiss = { actionsFor = null },
+            onDownload = {
+                actionsFor = null
+                vm.download(actionItem)
+            },
+            onUpload = {
+                actionsFor = null
+                vm.upload(actionItem)
+            },
+            onCancelTransfer = {
+                actionsFor = null
+                vm.cancelTransfer(it)
+            },
+            onDeleteFromServer = if (canDeleteOnServer) {
+                {
+                    actionsFor = null
+                    deleteOnServerFor = actionItem.id
+                }
+            } else null,
             onPlay = {
                 actionsFor = null
                 vm.play(actionItem)
@@ -222,11 +267,23 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
         RemoveBookDialog(
             title = removeItem.metadata.title,
             filePath = null,
-            onConfirm = { deleteFile ->
+            onConfirm = { deleteFile, deleteFromServer ->
                 removeFor = null
-                vm.remove(removeItem, deleteFile)
+                vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
+            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+        )
+    }
+    val serverItem = deleteOnServerFor?.let { id -> items.firstOrNull { it.id == id } }
+    if (serverItem != null) {
+        DeleteFromServerDialog(
+            title = serverItem.metadata.title,
+            onConfirm = {
+                deleteOnServerFor = null
+                vm.deleteFromServer(serverItem)
+            },
+            onDismiss = { deleteOnServerFor = null },
         )
     }
 }
@@ -247,6 +304,9 @@ private fun SeriesHeader(
     section: SeriesSection,
     upNext: LibraryItem?,
     onPlay: (LibraryItem) -> Unit,
+    /** The next book is only on the server: its button downloads it. */
+    onDownload: (LibraryItem) -> Unit,
+    downloading: Boolean,
     onSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -289,11 +349,20 @@ private fun SeriesHeader(
         }
         if (upNext != null) {
             Spacer(Modifier.height(Spacing.xl))
-            PrimaryButton(
-                stringResource(if (upNext.entry.positionMs > 0) R.string.action_resume else R.string.action_play),
-                onClick = { onPlay(upNext) },
-                icon = Icons.Rounded.PlayArrow,
-            )
+            if (upNext.onServerOnly) {
+                PrimaryButton(
+                    stringResource(R.string.action_download_to_phone),
+                    onClick = { onDownload(upNext) },
+                    icon = Icons.Rounded.CloudDownload,
+                    enabled = !downloading,
+                )
+            } else {
+                PrimaryButton(
+                    stringResource(if (upNext.entry.positionMs > 0) R.string.action_resume else R.string.action_play),
+                    onClick = { onPlay(upNext) },
+                    icon = Icons.Rounded.PlayArrow,
+                )
+            }
             Spacer(Modifier.height(Spacing.sm))
             Text(
                 stringResource(R.string.series_up_next, numberedTitle(upNext.metadata.title, upNext.metadata.seriesIndex).text),

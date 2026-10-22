@@ -85,5 +85,6 @@ export const paths = {
   users: "/api/admin/users",
   settings: "/api/admin/settings",
   rescan: "/api/admin/rescan",
+  update: "/api/admin/update",
   watchProfiles: "/api/watch-profiles",
 };

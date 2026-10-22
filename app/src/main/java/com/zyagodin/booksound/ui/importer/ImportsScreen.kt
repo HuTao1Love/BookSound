@@ -30,10 +30,15 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.importer.ImportFailure
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportService
@@ -125,6 +131,7 @@ fun ImportsScreen(navigator: AppNavigator) {
                         container.watchSender.dismissFinished()
                     })
                 }
+                ServerBulkMenu()
             }
             if (jobs.isEmpty() && torrents.isEmpty() && transfers.isEmpty()) {
                 // Scrolls so that the button stays reachable above the mini player in landscape.
@@ -320,4 +327,43 @@ fun failureMessage(context: Context, failure: ImportFailure): String = when (fai
     is ImportFailure.VerificationFailed -> context.getString(R.string.failure_verification)
     is ImportFailure.TimeLimit -> context.getString(R.string.failure_time_limit)
     is ImportFailure.Unexpected -> context.getString(R.string.failure_unexpected, failure.detail.orEmpty())
+}
+
+/** Sends every book the server lacks, or gets every book the phone lacks; shown once signed in to a server. */
+@Composable
+private fun ServerBulkMenu() {
+    val server = appContainer().server
+    val account by server.account.collectAsStateWithLifecycle()
+    if (account == null) return
+    val context = LocalContext.current
+    val transfers by server.transfers.collectAsStateWithLifecycle()
+    val phoneBooks by remember(server) { server.phoneOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
+    val serverBooks by remember(server) { server.serverOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
+    var open by remember { mutableStateOf(false) }
+    val moving = transfers.filter { it.isActive }
+    val toUpload = phoneBooks.filter { b -> moving.none { it.bookId == b.id && it.direction == ServerTransfer.Direction.UPLOAD } }
+    val toDownload = serverBooks.filter { b -> moving.none { it.bookId == b.entity.id && it.direction == ServerTransfer.Direction.DOWNLOAD } }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.action_more)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = MaterialTheme.shapes.large) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.server_bulk_upload, toUpload.size)) },
+                leadingIcon = { Icon(Icons.Rounded.CloudUpload, null) },
+                enabled = toUpload.isNotEmpty(),
+                onClick = {
+                    open = false
+                    server.uploadAll(toUpload)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.server_bulk_download, toDownload.size, formatSize(context, toDownload.sumOf { it.entity.sizeBytes }))) },
+                leadingIcon = { Icon(Icons.Rounded.CloudDownload, null) },
+                enabled = toDownload.isNotEmpty(),
+                onClick = {
+                    open = false
+                    server.downloadAll(toDownload)
+                },
+            )
+        }
+    }
 }

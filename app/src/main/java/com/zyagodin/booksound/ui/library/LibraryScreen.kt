@@ -36,6 +36,10 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
@@ -85,9 +89,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SortField
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
+import com.zyagodin.booksound.data.library.LocationFilter
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.importer.ImportSelection
+import com.zyagodin.booksound.server.ServerInfo
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.torrent.TorrentPhase
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
@@ -96,6 +104,7 @@ import com.zyagodin.booksound.ui.components.BookCover
 import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.PrimaryButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SheetAction
 import com.zyagodin.booksound.ui.components.titleWithSeries
@@ -112,25 +121,30 @@ fun LibraryScreen(navigator: AppNavigator) {
     val vm = appViewModel { LibraryViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val lowStorage by vm.lowStorage.collectAsStateWithLifecycle()
+    val transfers by vm.transfers.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
+    val serverInfo by vm.serverInfo.collectAsStateWithLifecycle()
     val window = rememberWindowLayout()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var showImportSheet by rememberSaveable { mutableStateOf(false) }
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteOnServerFor by rememberSaveable { mutableStateOf<String?>(null) }
     // Search hides behind a button in the top bar; it stays open while it holds text.
     var searching by rememberSaveable { mutableStateOf(false) }
     var searchText by rememberSaveable { mutableStateOf(state.query) }
     val gridState = rememberLazyGridState()
 
     // A name tapped on another screen (an author on a book's page): show the books it finds,
-    // whatever the progress filter.
+    // whatever the filters.
     LaunchedEffect(navigator.pendingSearch) {
         val text = navigator.pendingSearch ?: return@LaunchedEffect
         searchText = text
         searching = true
         vm.setQuery(text)
         if (state.filter != ProgressFilter.ALL) vm.setFilter(ProgressFilter.ALL)
+        if (state.location != LocationFilter.ALL) vm.setLocation(LocationFilter.ALL)
         gridState.scrollToItem(0)
         navigator.pendingSearch = null
     }
@@ -181,6 +195,7 @@ fun LibraryScreen(navigator: AppNavigator) {
                         onTextChange = { searchText = it },
                         onSearch = vm::setQuery,
                         onFilter = vm::setFilter,
+                        onLocation = vm::setLocation,
                         onSort = vm::setSort,
                         onSettings = navigator::openSettings,
                         onDownloads = { navigator.openImports() },
@@ -188,6 +203,11 @@ fun LibraryScreen(navigator: AppNavigator) {
                 }
                 lowStorage?.let { free ->
                     item(span = { GridItemSpan(maxLineSpan) }, key = "low-storage") { LowStorageNotice(free) }
+                }
+                serverInfo?.takeIf { it.incompatible }?.let { info ->
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "server-api") {
+                        ServerApiNotice(info, onUpdateApp = vm::checkUpdates)
+                    }
                 }
                 when {
                     state.loading -> item(span = { GridItemSpan(maxLineSpan) }, key = "loading") {
@@ -212,10 +232,11 @@ fun LibraryScreen(navigator: AppNavigator) {
                             modifier = Modifier.heightIn(min = 320.dp),
                         )
                     }
-                    else -> items(state.groups, key = { "series:" + (it.series ?: "") }) { section ->
+                    else -> items(state.groups, key = { it.key }) { section ->
                         SeriesSectionView(
                             section = section,
                             coverSize = if (window.isCompact) 128.dp else 152.dp,
+                            transfers = transfers,
                             onOpen = { navigator.openBook(it.id) },
                             onLongClick = { actionsFor = it.id },
                             onOpenSeries = navigator::openSeries,
@@ -242,7 +263,26 @@ fun LibraryScreen(navigator: AppNavigator) {
     if (actionItem != null) {
         BookActionsSheet(
             item = actionItem,
+            transfer = transfers[actionItem.id],
             onDismiss = { actionsFor = null },
+            onDownload = {
+                actionsFor = null
+                vm.download(actionItem)
+            },
+            onUpload = {
+                actionsFor = null
+                vm.upload(actionItem)
+            },
+            onCancelTransfer = {
+                actionsFor = null
+                vm.cancelTransfer(it)
+            },
+            onDeleteFromServer = if (canDeleteOnServer) {
+                {
+                    actionsFor = null
+                    deleteOnServerFor = actionItem.id
+                }
+            } else null,
             onPlay = {
                 actionsFor = null
                 vm.play(actionItem)
@@ -271,11 +311,23 @@ fun LibraryScreen(navigator: AppNavigator) {
         RemoveBookDialog(
             title = removeItem.metadata.title,
             filePath = null,
-            onConfirm = { deleteFile ->
+            onConfirm = { deleteFile, deleteFromServer ->
                 removeFor = null
-                vm.remove(removeItem, deleteFile)
+                vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
+            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+        )
+    }
+    val serverItem = deleteOnServerFor?.let { id -> state.items.firstOrNull { it.id == id } }
+    if (serverItem != null) {
+        DeleteFromServerDialog(
+            title = serverItem.metadata.title,
+            onConfirm = {
+                deleteOnServerFor = null
+                vm.deleteFromServer(serverItem)
+            },
+            onDismiss = { deleteOnServerFor = null },
         )
     }
 }
@@ -289,6 +341,7 @@ private fun LibraryHeader(
     onTextChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onFilter: (ProgressFilter) -> Unit,
+    onLocation: (LocationFilter) -> Unit,
     onSort: (SortField) -> Unit,
     onSettings: () -> Unit,
     onDownloads: () -> Unit,
@@ -358,7 +411,7 @@ private fun LibraryHeader(
         }
         if (state.totalCount > 0) {
             Spacer(Modifier.height(Spacing.md))
-            FilterRow(state, onFilter, onSort)
+            FilterRow(state, onFilter, onLocation, onSort)
             Spacer(Modifier.height(Spacing.sm))
         }
     }
@@ -394,7 +447,7 @@ private fun DownloadsButton(state: LibraryUiState, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit, onSort: (SortField) -> Unit) {
+private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit, onLocation: (LocationFilter) -> Unit, onSort: (SortField) -> Unit) {
     var filterMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -414,6 +467,10 @@ private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit,
                     )
                 }
             }
+        }
+        // Shown while it filters too, so it can be turned off after the server's books are gone.
+        if (state.hasServerBooks || state.location != LocationFilter.ALL) {
+            LocationButton(state.location, onClick = { onLocation(state.location.next()) })
         }
         Spacer(Modifier.weight(1f))
         Box {
@@ -439,6 +496,24 @@ private fun FilterRow(state: LibraryUiState, onFilter: (ProgressFilter) -> Unit,
                 }
             }
         }
+    }
+}
+
+/** Where the shown books are: a grey cloud for all of them, a crossed-out one for the phone's, a bright one for the server's. */
+@Composable
+private fun LocationButton(location: LocationFilter, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.padding(start = Spacing.xs)) {
+        Icon(
+            if (location == LocationFilter.PHONE) Icons.Rounded.CloudOff else Icons.Rounded.Cloud,
+            contentDescription = stringResource(
+                when (location) {
+                    LocationFilter.ALL -> R.string.location_filter_all
+                    LocationFilter.PHONE -> R.string.location_filter_phone
+                    LocationFilter.SERVER -> R.string.location_filter_server
+                },
+            ),
+            tint = if (location == LocationFilter.ALL) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
@@ -475,11 +550,20 @@ private fun SortField.label(): Int = when (this) {
     SortField.PROGRESS -> R.string.sort_progress
 }
 
-/** Long-press menu of a book in the library and in a series. */
+/**
+ * Long-press menu of a book in the library and in a series. A book only on the server can be downloaded and
+ * looked at; one the server lacks can be sent there.
+ */
 @Composable
 internal fun BookActionsSheet(
     item: LibraryItem,
+    transfer: ServerTransfer?,
     onDismiss: () -> Unit,
+    onDownload: () -> Unit,
+    onUpload: () -> Unit,
+    onCancelTransfer: (ServerTransfer) -> Unit,
+    /** Null unless the user may delete books from the server. */
+    onDeleteFromServer: (() -> Unit)?,
     onPlay: () -> Unit,
     onDetails: () -> Unit,
     onEdit: () -> Unit,
@@ -495,16 +579,67 @@ internal fun BookActionsSheet(
                 item.metadata.author?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        SheetAction(Icons.Rounded.PlayArrow, stringResource(if (item.entry.positionMs > 0) R.string.action_resume else R.string.action_play), onPlay, enabled = !item.isMissing)
-        SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
-        SheetAction(Icons.Rounded.Edit, stringResource(R.string.action_edit_details), onEdit, enabled = !item.isMissing)
-        SheetAction(
-            if (item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle,
-            stringResource(if (item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished),
-            onToggleFinished,
-        )
-        SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
+        if (transfer != null) {
+            SheetAction(
+                Icons.Rounded.Close,
+                stringResource(if (transfer.direction == ServerTransfer.Direction.DOWNLOAD) R.string.action_cancel_download else R.string.action_cancel_upload),
+                { onCancelTransfer(transfer) },
+            )
+        }
+        if (item.onServerOnly) {
+            if (transfer == null) {
+                SheetAction(Icons.Rounded.CloudDownload, stringResource(R.string.action_download_to_phone_size, formatSize(LocalContext.current, item.entry.book.file.sizeBytes)), onDownload)
+            }
+            SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
+            onDeleteFromServer?.let {
+                SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_delete_from_server), it, color = MaterialTheme.colorScheme.error)
+            }
+        } else {
+            SheetAction(Icons.Rounded.PlayArrow, stringResource(if (item.entry.positionMs > 0) R.string.action_resume else R.string.action_play), onPlay, enabled = !item.isMissing)
+            SheetAction(Icons.Rounded.Info, stringResource(R.string.action_details), onDetails)
+            if (item.location == BookLocation.PHONE_ONLY && transfer == null) {
+                SheetAction(Icons.Rounded.CloudUpload, stringResource(R.string.action_upload_to_server), onUpload, enabled = !item.isMissing)
+            }
+            SheetAction(Icons.Rounded.Edit, stringResource(R.string.action_edit_details), onEdit, enabled = !item.isMissing)
+            SheetAction(
+                if (item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle,
+                stringResource(if (item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished),
+                onToggleFinished,
+            )
+            SheetAction(Icons.Rounded.DeleteOutline, stringResource(R.string.action_remove_from_library), onRemove, color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(Spacing.lg))
+    }
+}
+
+/**
+ * The server speaks another API than this app, so nothing syncs: shown above the books until the older side
+ * is updated. Newer releases of the same API work together, so a plain version difference shows nothing.
+ */
+@Composable
+private fun ServerApiNotice(info: ServerInfo, onUpdateApp: () -> Unit) {
+    Surface(
+        onClick = onUpdateApp,
+        // The app updates from here; the server only from its web app.
+        enabled = !info.serverOutdated,
+        shape = Radii.card,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.sm),
+    ) {
+        Row(Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Warning, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(if (info.serverOutdated) R.string.server_api_outdated else R.string.server_api_app_outdated),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (!info.serverOutdated) {
+                    Text(stringResource(R.string.update_check), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = Spacing.xs))
+                }
+            }
+        }
     }
 }
 

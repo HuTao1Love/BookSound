@@ -33,7 +33,7 @@ class ServerSyncBackend(private val client: ServerClient) : SyncBackend {
         if (client.account == null) return BackendStatus.NotConfigured
         return try {
             val status = client.status()
-            if (status.apiVersion != API_VERSION) BackendStatus.Unauthorized("Server API ${status.apiVersion}, this app speaks $API_VERSION; update both")
+            if (status.apiVersion != API_VERSION) BackendStatus.Incompatible(status.serverVersion, status.apiVersion, API_VERSION)
             else BackendStatus.Available(status.serverVersion)
         } catch (e: SignedOutException) {
             BackendStatus.Unauthorized(e.message ?: "Signed out")

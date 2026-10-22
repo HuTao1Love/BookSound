@@ -2,15 +2,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import KeyIcon from "@mui/icons-material/Key";
 import {
   Alert, Button, Card, CardContent, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, List, ListItem,
-  ListItemText, MenuItem, Stack, Switch, TextField, Typography,
+  LinearProgress, ListItemText, MenuItem, Stack, Switch, TextField, Typography,
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, paths } from "../api/client";
 import { PageHeader } from "../components/Ui";
-import { keys, useSettings, useUsers, useWatchProfiles } from "../api/hooks";
-import type { RescanResultDto, ServerSettingsDto, UserDto, WatchProfileDto, WatchProfileMode } from "../api/types.gen";
+import { keys, useServerUpdate, useSettings, useUsers, useWatchProfiles } from "../api/hooks";
+import type { RescanResultDto, ServerSettingsDto, ServerUpdateDto, StatusDto, UserDto, WatchProfileDto, WatchProfileMode } from "../api/types.gen";
 
 export default function AdminPage() {
   const { t } = useTranslation();
@@ -19,6 +19,7 @@ export default function AdminPage() {
       <PageHeader title={t("nav.admin")} subtitle={t("admin.subtitle")} />
       <UsersCard />
       <SettingsCard />
+      <UpdateCard />
       <ProfilesCard />
     </Stack>
   );
@@ -135,6 +136,131 @@ function SettingsCard() {
               setMessage({ ok: true, text: t("admin.rescanned", { ...r }) });
               void client.invalidateQueries({ queryKey: keys.books });
             }}>{t("admin.rescan")}</Button>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+const UPDATE_POLL_MS = 3000;
+const UPDATE_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** The server's version against the latest release; installs it and waits for the server to come back with it. */
+function UpdateCard() {
+  const { t } = useTranslation();
+  const update = useServerUpdate();
+  const client = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // The version being replaced while an update runs, and when it started.
+  const [waiting, setWaiting] = useState<{ from: string; since: number } | null>(null);
+  const [doneVersion, setDoneVersion] = useState<string | null>(null);
+  const data = update.data;
+  const stage = data?.stage;
+  const busy = !!waiting || stage === "REQUESTED" || stage === "INSTALLING";
+
+  // An update requested from another tab (or before a reload) is waited for too.
+  useEffect(() => {
+    if (data && (stage === "REQUESTED" || stage === "INSTALLING") && !waiting) setWaiting({ from: data.currentVersion, since: Date.now() });
+  }, [data, stage, waiting]);
+
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(async () => {
+      if (Date.now() - waiting.since > UPDATE_TIMEOUT_MS) {
+        setWaiting(null);
+        setError(t("admin.updateTimeout"));
+        return;
+      }
+      try {
+        // The server is down for a while during the update: failed requests are expected.
+        const status = await api.get<StatusDto>(paths.status);
+        if (status.serverVersion !== waiting.from) {
+          setWaiting(null);
+          setDoneVersion(status.serverVersion);
+          window.setTimeout(() => window.location.reload(), 1500);
+          return;
+        }
+        const now = await api.get<ServerUpdateDto>(paths.update);
+        client.setQueryData(keys.update, now);
+        if (now.stage === "FAILED") {
+          setWaiting(null);
+          setError(now.message ?? t("admin.updateFailed"));
+        }
+      } catch {
+        // Restarting.
+      }
+    }, UPDATE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [waiting, client, t]);
+
+  if (!data) return null;
+  const check = async () => {
+    setChecking(true);
+    setError(null);
+    try {
+      client.setQueryData(keys.update, await api.get<ServerUpdateDto>(`${paths.update}?refresh=1`));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setChecking(false);
+    }
+  };
+  const install = async () => {
+    setError(null);
+    try {
+      const now = await api.post<ServerUpdateDto>(paths.update);
+      client.setQueryData(keys.update, now);
+      if (now.stage === "FAILED") setError(now.message ?? t("admin.updateFailed"));
+      else setWaiting({ from: now.currentVersion, since: Date.now() });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  // A failure left from an earlier attempt is shown until the next one.
+  const failure = error ?? (stage === "FAILED" && !busy ? data.message ?? t("admin.updateFailed") : null);
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+          <Typography variant="h6">{t("admin.update")}</Typography>
+          <Typography variant="body2">
+            {t("admin.updateVersion", { version: data.currentVersion })}
+            {" · "}
+            {data.latestVersion == null ? t("admin.updateUnknown")
+              : data.available ? t("admin.updateLatest", { version: data.latestVersion })
+              : t("admin.updateUpToDate")}
+          </Typography>
+          {failure && <Alert severity="error" onClose={() => setError(null)} sx={{ whiteSpace: "pre-wrap" }}>{failure}</Alert>}
+          {doneVersion && <Alert severity="success">{t("admin.updateDone", { version: doneVersion })}</Alert>}
+          {busy && !doneVersion && (
+            <Stack spacing={1}>
+              <Typography variant="body2" color="text.secondary">{t("admin.updateInstalling")}</Typography>
+              <LinearProgress />
+            </Stack>
+          )}
+          {data.method === "MANUAL" && data.available && data.command && (
+            <Stack spacing={1}>
+              <Typography variant="body2" color="text.secondary">{t("admin.updateManual")}</Typography>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography component="code" variant="body2" sx={{ fontFamily: "monospace", bgcolor: "action.hover", px: 1, py: 0.5, borderRadius: 1, overflowX: "auto", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+                  {data.command}
+                </Typography>
+                <Button size="small" onClick={() => {
+                  void navigator.clipboard?.writeText(data.command!).then(() => setCopied(true));
+                }}>{copied ? t("admin.copied") : t("admin.copy")}</Button>
+              </Stack>
+            </Stack>
+          )}
+          <Stack direction="row" spacing={1}>
+            {data.method !== "MANUAL" && data.available && (
+              <Button variant="contained" disabled={busy || !!doneVersion} onClick={() => void install()}>
+                {t("admin.updateInstall")}
+              </Button>
+            )}
+            <Button disabled={checking || busy} onClick={() => void check()}>{t("admin.updateCheck")}</Button>
           </Stack>
         </Stack>
       </CardContent>
