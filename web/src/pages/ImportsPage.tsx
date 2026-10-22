@@ -18,7 +18,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api, paths, request } from "../api/client";
-import { keys, useImports, useTorrents, useUploads } from "../api/hooks";
+import { ACTIVE_STAGES, keys, useImports, useTorrents, useUploads } from "../api/hooks";
 import type { ImportJobDto, MetadataDto, TorrentBookDto, TorrentDto, UploadDto } from "../api/types.gen";
 import { uploadFile } from "../api/upload";
 import { PageHeader } from "../components/Ui";
@@ -286,8 +286,6 @@ function ReviewDialog({ torrent, book, onClose }: { torrent: TorrentDto; book: T
 
 // ---------------------------------------------------------------------------------------------- jobs
 
-const ACTIVE_STAGES = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
-
 function JobsCard() {
   const { t } = useTranslation();
   const jobs = useImports();
@@ -302,8 +300,10 @@ function JobsCard() {
   }, [done, client]);
 
   const remove = async (ids: string[]) => {
-    await Promise.allSettled(ids.map((id) => api.delete(`${paths.imports}/${id}`)));
-    client.setQueryData<ImportJobDto[]>(keys.imports, (old) => old?.filter((j) => !ids.includes(j.id)));
+    const results = await Promise.allSettled(ids.map((id) => api.delete(`${paths.imports}/${id}`)));
+    // Only what the server forgot leaves the list; the rest would come back with the next poll anyway.
+    const removed = ids.filter((_, i) => results[i].status === "fulfilled");
+    client.setQueryData<ImportJobDto[]>(keys.imports, (old) => old?.filter((j) => !removed.includes(j.id)));
   };
   // A stuck upload from a phone: the phone's own attempt then fails and can be started again.
   const cancelUpload = async (id: string) => {

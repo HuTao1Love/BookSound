@@ -160,14 +160,17 @@ class UploadService(
     }
 
     /**
-     * Drops uploads that got no bytes for an hour: the phone and the browser start a new upload on every attempt,
-     * so nobody comes back to them.
+     * Drops unfinished uploads that got no bytes for an hour: the phone and the browser start a new upload on every
+     * attempt, so nobody comes back to them. Finished ones wait for the rest of their book (a folder takes hours over
+     * a slow link) or for completing to be retried, for two days.
      */
     fun cleanUp() {
         val now = System.currentTimeMillis()
         val cutoff = now - 2 * 24 * 3_600_000L
-        val stale = db.tx { query("SELECT id, created_at FROM uploads") { it.str("id")!! to it.long("created_at")!! } }
-            .filter { (id, createdAt) -> now - lastActivity(id, createdAt) > IDLE_DROPPED_MS }
+        val stale = db.tx { query("SELECT id, size_bytes, created_at FROM uploads") { Triple(it.str("id")!!, it.long("size_bytes")!!, it.long("created_at")!!) } }
+            .filter { (id, size, createdAt) ->
+                if (partFile(id).length() == size) createdAt < cutoff else now - lastActivity(id, createdAt) > IDLE_DROPPED_MS
+            }
         stale.forEach { forget(it.first) }
         val known = db.tx { query("SELECT id FROM uploads") { it.str("id")!! } }.toSet()
         dir.listFiles()?.forEach { f ->

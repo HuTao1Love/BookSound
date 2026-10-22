@@ -43,6 +43,14 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
 
     private val cache = ConcurrentHashMap<String, Cached>()
 
+    private data class Failures(val count: Int, val lockedUntil: Long?)
+
+    /**
+     * Wrong passwords per account and client address. Counted per address so a stranger guessing at an account
+     * locks out only themselves, not its owner signing in from elsewhere.
+     */
+    private val failures = ConcurrentHashMap<String, Failures>()
+
     fun init() {
         if (db.tx { queryOne("SELECT COUNT(*) FROM users") { it.getInt(1) } } == 0) {
             setupToken = Secrets.token().take(24)
@@ -87,10 +95,13 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         db.tx {
             if (queryOne("SELECT 1 FROM users WHERE id = ?", id) { 1 } == null) throw AuthException("not_found")
             if (isAdmin == false) requireAnotherAdmin(id)
-            hash?.let { update("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?", it, id) }
+            hash?.let { update("UPDATE users SET password_hash = ? WHERE id = ?", it, id) }
             isAdmin?.let { update("UPDATE users SET is_admin = ? WHERE id = ?", it, id) }
         }
-        if (hash != null) revokeAllDevices(id, keep = null)
+        if (hash != null) {
+            revokeAllDevices(id, keep = null)
+            failures.keys.removeIf { it.startsWith("$id|") }
+        }
         cache.clear()
     }
 
@@ -122,27 +133,34 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         if (password.length > 256) throw AuthException("bad_request", "Password is too long")
     }
 
-    /** Checks a password; repeated failures lock the account for longer each time (up to an hour). */
-    fun checkCredentials(name: String, password: String): LoginResult {
+    /**
+     * Checks a password; repeated failures from one [address] lock the account there for longer each time (up to an
+     * hour). Other addresses are not affected.
+     */
+    fun checkCredentials(name: String, password: String, address: String): LoginResult {
         val now = clock()
-        data class Row(val id: String, val name: String, val hash: String, val admin: Boolean, val failed: Int, val lockedUntil: Long?)
+        data class Row(val id: String, val name: String, val hash: String, val admin: Boolean)
         val row = db.tx {
             queryOne("SELECT * FROM users WHERE name = ?", name.trim()) {
-                Row(it.str("id")!!, it.str("name")!!, it.str("password_hash")!!, it.bool("is_admin"), it.getInt("failed_logins"), it.long("locked_until"))
+                Row(it.str("id")!!, it.str("name")!!, it.str("password_hash")!!, it.bool("is_admin"))
             }
         }
         if (row == null) {
             Secrets.burnPasswordCheck(password)
             return LoginResult.InvalidCredentials
         }
-        if (row.lockedUntil != null && row.lockedUntil > now) return LoginResult.Locked(row.lockedUntil)
+        val key = "${row.id}|$address"
+        val previous = failures[key]
+        if (previous?.lockedUntil != null && previous.lockedUntil > now) return LoginResult.Locked(previous.lockedUntil)
         if (!Secrets.verifyPassword(password, row.hash)) {
-            val failed = row.failed + 1
+            val failed = (previous?.count ?: 0) + 1
             val lock = if (failed >= FREE_ATTEMPTS) now + minOf(60_000L shl minOf(failed - FREE_ATTEMPTS, 6), 3_600_000L) else null
-            db.tx { update("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?", failed, lock, row.id) }
+            // Many addresses guessing: forget the ones that hold no lock, so the map stays small.
+            if (failures.size > MAX_TRACKED_FAILURES) failures.values.removeIf { it.lockedUntil == null || it.lockedUntil <= now }
+            failures[key] = Failures(failed, lock)
             return LoginResult.InvalidCredentials
         }
-        if (row.failed != 0) db.tx { update("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", row.id) }
+        failures.remove(key)
         return LoginResult.Success(UserDto(row.id, row.name, row.admin))
     }
 
@@ -292,6 +310,7 @@ class AuthService(private val db: Database, private val clock: () -> Long = Syst
         /** How long a replaced refresh token may be retried, for an answer lost on the way. */
         const val LOST_REFRESH_GRACE_MS = 2 * 60 * 1000L
         private const val FREE_ATTEMPTS = 5
+        private const val MAX_TRACKED_FAILURES = 10_000
         private const val CACHE_MS = 30_000L
     }
 }

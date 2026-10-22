@@ -6,14 +6,13 @@ import { alpha, Avatar, Badge, Box, ButtonBase, Typography, useMediaQuery, useTh
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useImports, useTorrents, useUploads } from "../api/hooks";
+import { ACTIVE_STAGES, useImports, useTorrents, useUploads } from "../api/hooks";
 import type { SessionDto } from "../api/types.gen";
 import MiniPlayer from "./MiniPlayer";
 import { SIDE_PLAYER_WIDTH, SidePlayer, useSidePlayer } from "./NowPlaying";
 import { Logo, SIDEBAR_WIDTH } from "./Ui";
 
 const BOTTOM_NAV = 64;
-const ACTIVE_JOBS = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
 
 /**
  * Navigation on the left on wide screens, at the bottom on phones. The book playing is on the right of the widest
@@ -132,7 +131,7 @@ function useBusyCount(): number {
   const imports = useImports();
   const torrents = useTorrents();
   const uploads = useUploads();
-  return (imports.data?.filter((j) => ACTIVE_JOBS.includes(j.stage)).length ?? 0)
+  return (imports.data?.filter((j) => ACTIVE_STAGES.includes(j.stage)).length ?? 0)
     + (torrents.data?.filter((t) => t.phase !== "COMPLETED" && t.phase !== "FAILED").length ?? 0)
     + (uploads.data?.length ?? 0);
 }

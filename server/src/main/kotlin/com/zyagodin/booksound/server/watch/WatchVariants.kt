@@ -1,6 +1,7 @@
 package com.zyagodin.booksound.server.watch
 
 import com.zyagodin.booksound.api.EventTypes
+import com.zyagodin.booksound.api.ImportStage
 import com.zyagodin.booksound.api.WatchProfileDto
 import com.zyagodin.booksound.api.WatchProfileMode
 import com.zyagodin.booksound.api.toModel
@@ -65,10 +66,16 @@ class WatchVariants(
     /** The ready copy, touched so the cache keeps it, or null. */
     fun ready(book: BookRow, profile: WatchProfileDto): File? = file(book, profile).takeIf { it.isFile }?.also { it.setLastModified(System.currentTimeMillis()) }
 
-    /** Queues the copy unless it exists or is being made; returns the job making it. */
+    /**
+     * Queues the copy unless it exists or is being made; returns the job making it. A copy that failed lately is not
+     * tried again: its job comes back with the error, so whoever waits for it stops (clearing the job allows a retry).
+     */
     fun request(book: BookRow, profile: WatchProfileDto): JobRecord? {
         if (ready(book, profile) != null) return null
         imports.activeWatchJob(book.id, profile.id)?.let { return it }
+        imports.latestWatchJob(book.id, profile.id, book.fileRevision)
+            ?.takeIf { it.stage == ImportStage.FAILED && System.currentTimeMillis() - (it.finishedAt ?: it.createdAt) < RETRY_FAILED_AFTER_MS }
+            ?.let { return it }
         if (!ffmpeg.available) throw ImportFailure("ffmpeg is needed for watch copies")
         return imports.enqueue(WatchSpec(book.id, profile.id, book.fileRevision), "⌚ ${book.metadata.title}")
     }
@@ -136,5 +143,10 @@ class WatchVariants(
             if (total > limit) f.delete()
         }
         dir.listFiles()?.filter { it.isDirectory && it.list()?.isEmpty() == true }?.forEach { it.delete() }
+    }
+
+    private companion object {
+        /** How long a failed copy is reported as failed before a request builds it again. */
+        const val RETRY_FAILED_AFTER_MS = 30 * 60 * 1000L
     }
 }
