@@ -8,12 +8,6 @@ import { Equalizer, type VoicePreset } from "./equalizer";
 
 export type SleepTimer = { kind: "off" } | { kind: "minutes"; endsAt: number } | { kind: "chapter" };
 
-/** A position saved on another device that differs from where this player is. */
-export interface RemoteOffer {
-  positionMs: number;
-  device: string;
-}
-
 interface PlayerState {
   book: BookDto | null;
   playing: boolean;
@@ -23,7 +17,6 @@ interface PlayerState {
   chapterIndex: number;
   sleep: SleepTimer;
   preset: VoicePreset;
-  remoteOffer: RemoteOffer | null;
   skipBack: number;
   skipForward: number;
 }
@@ -37,8 +30,6 @@ interface PlayerApi extends PlayerState {
   goToChapter: (index: number) => void;
   setSleep: (timer: SleepTimer) => void;
   setPreset: (preset: VoicePreset) => void;
-  acceptRemote: () => void;
-  dismissRemote: () => void;
   setFinished: (finished: boolean) => void;
 }
 
@@ -50,7 +41,8 @@ const SAVE_INTERVAL_MS = 10_000;
 const SMART_REWIND_AFTER_MS = 60_000;
 const SMART_REWIND_MS = 10_000;
 const FADE_MS = 10_000;
-const REMOTE_DIFFERENCE_MS = 30_000;
+/** Closer than this to another device's position, the player stays where it is. */
+const FOLLOW_DIFFERENCE_MS = 2_000;
 
 /**
  * The web app's player: one audio element for the whole app, so playback goes on while browsing. It saves the
@@ -68,7 +60,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
 
   const [state, setState] = useState<PlayerState>({
     book: null, playing: false, positionMs: 0, durationMs: 0, speed: 1, chapterIndex: 0, sleep: { kind: "off" },
-    preset: "OFF", remoteOffer: null, skipBack: 15, skipForward: 30,
+    preset: "OFF", skipBack: 15, skipForward: 30,
   });
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -78,6 +70,8 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
   const lastSave = useRef(0);
   const preferences = useRef<PreferencesDto | null>(null);
   const pendingSeek = useRef<number | null>(null);
+  // The chapter playback is in, kept apart from the state so a seek doesn't count as reaching the chapter's end.
+  const playingChapter = useRef(0);
 
   const update = (patch: Partial<PlayerState>) => setState((s) => ({ ...s, ...patch }));
 
@@ -138,10 +132,11 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       const positionMs = audio.currentTime * 1000;
       const chapters = s.book?.chapters ?? [];
       const chapterIndex = chapterAt(chapters, positionMs);
-      if (s.sleep.kind === "chapter" && chapterIndex !== s.chapterIndex && !audio.paused) {
+      if (s.sleep.kind === "chapter" && chapterIndex !== playingChapter.current && !audio.paused) {
         audio.pause();
         update({ sleep: { kind: "off" } });
       }
+      playingChapter.current = chapterIndex;
       update({ positionMs, chapterIndex, durationMs: (audio.duration || 0) * 1000 || (s.book?.durationMs ?? 0) });
       if (!audio.paused && Date.now() - lastSave.current > SAVE_INTERVAL_MS) void save();
     };
@@ -213,6 +208,37 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
 
   // ----------------------------------------------------------------------------------- controls
 
+  /**
+   * Another device saved a newer position for the loaded book: continue from there, as the phone does with a paused
+   * book. Not saved back, it's the other device's position.
+   */
+  const follow = useCallback(
+    (remote: PlaybackDto | null | undefined) => {
+      if (!remote || remote.finished || remote.stamp.updatedBy === deviceId) return;
+      if (remote.stamp.updatedAt <= (playback.current?.stamp.updatedAt ?? 0)) return;
+      playback.current = { ...remote };
+      if (pendingSeek.current !== null) {
+        pendingSeek.current = remote.positionMs;
+      } else if (Math.abs(remote.positionMs - audio.currentTime * 1000) > FOLLOW_DIFFERENCE_MS) {
+        audio.currentTime = remote.positionMs / 1000;
+        playingChapter.current = chapterAt(stateRef.current.book?.chapters ?? [], remote.positionMs);
+        update({ positionMs: remote.positionMs, chapterIndex: playingChapter.current });
+      }
+    },
+    [audio, deviceId],
+  );
+
+  const checkRemote = useCallback(async () => {
+    const book = stateRef.current.book;
+    if (!book) return;
+    try {
+      const entry = await api.get<LibraryEntryDto>(paths.book(book.id));
+      if (stateRef.current.book?.id === book.id) follow(entry.playback);
+    } catch {
+      // offline
+    }
+  }, [follow]);
+
   const presetFor = (bookId: string): VoicePreset => (preferences.current?.voicePresets?.[bookId] as VoicePreset | undefined) ?? "OFF";
 
   const play = useCallback(
@@ -220,6 +246,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       const book = entry.book;
       const current = stateRef.current.book;
       if (current?.id === book.id && fromMs === undefined) {
+        void checkRemote();
         void audio.play();
         return;
       }
@@ -228,40 +255,27 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       const start = fromMs ?? (entry.playback?.finished ? 0 : entry.playback?.positionMs ?? 0);
       const speed = entry.playback?.speed ?? preferences.current?.defaultSpeed ?? 1;
       const preset = presetFor(book.id);
-      update({ book, positionMs: start, durationMs: book.durationMs, speed, chapterIndex: chapterAt(book.chapters ?? [], start), remoteOffer: null, preset });
+      playingChapter.current = chapterAt(book.chapters ?? [], start);
+      update({ book, positionMs: start, durationMs: book.durationMs, speed, chapterIndex: playingChapter.current, preset });
       pendingSeek.current = start;
       pausedAt.current = null;
       audio.src = paths.bookFile(book.id);
       audio.playbackRate = speed;
       equalizer.apply(preset);
       void audio.play();
-      // Books from the library list come without chapters: fetch them while the audio starts.
-      if (!book.chapters?.length) {
-        api.get<LibraryEntryDto>(paths.book(book.id)).then((full) => {
-          if (stateRef.current.book?.id !== book.id) return;
+      // Books from the library list come without chapters, and the list's position may be a minute old: fetch the
+      // book while the audio starts.
+      api.get<LibraryEntryDto>(paths.book(book.id)).then((full) => {
+        if (stateRef.current.book?.id !== book.id) return;
+        if (!book.chapters?.length) {
           const chapters = full.book.chapters ?? [];
           setState((s) => ({ ...s, book: full.book, chapterIndex: chapterAt(chapters, audio.currentTime * 1000) }));
-        }).catch(() => {});
-      }
+        }
+        if (fromMs === undefined) follow(full.playback);
+      }).catch(() => {});
     },
-    [audio, equalizer, save],
+    [audio, equalizer, save, checkRemote, follow],
   );
-
-  const checkRemote = useCallback(async () => {
-    const book = stateRef.current.book;
-    if (!book) return;
-    try {
-      const entry = await api.get<LibraryEntryDto>(paths.book(book.id));
-      const remote = entry.playback;
-      if (remote && remote.stamp.updatedBy !== deviceId && remote.stamp.updatedAt > (playback.current?.stamp.updatedAt ?? 0) &&
-        Math.abs(remote.positionMs - audio.currentTime * 1000) > REMOTE_DIFFERENCE_MS) {
-        update({ remoteOffer: { positionMs: remote.positionMs, device: remote.stamp.updatedBy } });
-        playback.current = { ...remote };
-      }
-    } catch {
-      // offline
-    }
-  }, [audio, deviceId]);
 
   const toggle = useCallback(() => {
     if (!stateRef.current.book) return;
@@ -269,8 +283,9 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       // Smart rewind: after a longer pause, start a little earlier to pick the thread up again.
       if (pausedAt.current && Date.now() - pausedAt.current > SMART_REWIND_AFTER_MS) {
         audio.currentTime = Math.max(0, audio.currentTime - SMART_REWIND_MS / 1000);
-        void checkRemote();
       }
+      // It may have been listened to on another device meanwhile.
+      void checkRemote();
       void audio.play();
     } else {
       audio.pause();
@@ -280,7 +295,8 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
   const seek = useCallback(
     (ms: number) => {
       audio.currentTime = Math.max(0, Math.min(ms, (audio.duration || Infinity) * 1000) / 1000);
-      update({ positionMs: audio.currentTime * 1000 });
+      playingChapter.current = chapterAt(stateRef.current.book?.chapters ?? [], audio.currentTime * 1000);
+      update({ positionMs: audio.currentTime * 1000, chapterIndex: playingChapter.current });
       void save();
     },
     [audio, save],
@@ -387,12 +403,6 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
     goToChapter,
     setSleep: (sleep) => update({ sleep }),
     setPreset,
-    acceptRemote: () => {
-      const offer = stateRef.current.remoteOffer;
-      if (offer) seek(offer.positionMs);
-      update({ remoteOffer: null });
-    },
-    dismissRemote: () => update({ remoteOffer: null }),
     setFinished,
   };
 

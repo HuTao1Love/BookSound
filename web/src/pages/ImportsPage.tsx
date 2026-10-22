@@ -1,18 +1,24 @@
+import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import ClearAllIcon from "@mui/icons-material/ClearAll";
 import CloseIcon from "@mui/icons-material/Close";
+import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import CreateNewFolderIcon from "@mui/icons-material/CreateNewFolder";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import {
-  Alert, Box, Button, Card, CardContent, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton,
+  Alert, alpha, Box, Button, Card, CardContent, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton,
   LinearProgress, List, ListItem, ListItemText, Stack, Switch, TextField, Typography,
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api, paths, request } from "../api/client";
-import { keys, useImports, useTorrents, useUploads } from "../api/hooks";
+import { ACTIVE_STAGES, keys, useImports, useTorrents, useUploads } from "../api/hooks";
 import type { ImportJobDto, MetadataDto, TorrentBookDto, TorrentDto, UploadDto } from "../api/types.gen";
 import { uploadFile } from "../api/upload";
 import { PageHeader } from "../components/Ui";
@@ -75,9 +81,9 @@ function UploadCard() {
         <Stack spacing={1.5}>
           <Typography variant="h6">{t("imports.upload")}</Typography>
           <Typography variant="body2" color="text.secondary">{t("imports.uploadHint")}</Typography>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
             <Button variant="contained" startIcon={<UploadFileIcon />} disabled={!!progress} onClick={() => files.current?.click()}>{t("imports.upload")}</Button>
-            <Button startIcon={<CreateNewFolderIcon />} disabled={!!progress} onClick={() => folder.current?.click()}>{t("imports.uploadFolder")}</Button>
+            <Button variant="outlined" startIcon={<CreateNewFolderIcon />} disabled={!!progress} onClick={() => folder.current?.click()}>{t("imports.uploadFolder")}</Button>
           </Stack>
           <input ref={files} type="file" multiple hidden accept=".mp3,.m4a,.m4b,.mp4,.aac,image/*" onChange={(e) => void send(e.target.files, false)} />
           <input ref={folder} type="file" hidden {...{ webkitdirectory: "", directory: "" }} onChange={(e) => void send(e.target.files, true)} />
@@ -133,13 +139,13 @@ function TorrentsCard() {
       <CardContent>
         <Stack spacing={1.5}>
           <Typography variant="h6">{t("imports.torrents")}</Typography>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" } }}>
             <TextField size="small" fullWidth placeholder={t("imports.torrentLink")} value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link.trim() && void add()} />
-            <Button variant="contained" onClick={() => void add()} disabled={!link.trim()}>{t("imports.addTorrent")}</Button>
-            <Button onClick={() => fileInput.current?.click()} sx={{ whiteSpace: "nowrap" }}>{t("imports.torrentFile")}</Button>
+            <Button variant="contained" onClick={() => void add()} disabled={!link.trim()} sx={{ whiteSpace: "nowrap", flexShrink: 0 }}>{t("imports.addTorrent")}</Button>
+            <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInput.current?.click()} sx={{ whiteSpace: "nowrap", flexShrink: 0 }}>{t("imports.torrentFile")}</Button>
             <input ref={fileInput} type="file" hidden accept=".torrent,application/x-bittorrent" onChange={(e) => e.target.files?.[0] && void addFile(e.target.files[0])} />
           </Stack>
-          <FormControlLabel control={<Switch checked={auto} onChange={(e) => setAuto(e.target.checked)} />} label={t("imports.autoImport")} />
+          <FormControlLabel control={<Switch checked={auto} onChange={(e) => setAuto(e.target.checked)} />} label={t("imports.autoImport")} sx={{ alignSelf: "flex-start", ml: -1 }} />
           {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
           {(list.data?.length ?? 0) === 0 ? (
             <Typography color="text.secondary">{t("imports.noTorrents")}</Typography>
@@ -285,62 +291,127 @@ function JobsCard() {
   const jobs = useImports();
   const uploads = useUploads();
   const client = useQueryClient();
+  const navigate = useNavigate();
+  const [clearing, setClearing] = useState(false);
   // A job that finished since the last poll brings a new book: refresh the library.
   const done = jobs.data?.filter((j) => j.stage === "DONE").length ?? 0;
   useEffect(() => {
     if (done > 0) void client.invalidateQueries({ queryKey: keys.books });
   }, [done, client]);
-  const navigate = useNavigate();
+
+  const remove = async (ids: string[]) => {
+    const results = await Promise.allSettled(ids.map((id) => api.delete(`${paths.imports}/${id}`)));
+    // Only what the server forgot leaves the list; the rest would come back with the next poll anyway.
+    const removed = ids.filter((_, i) => results[i].status === "fulfilled");
+    client.setQueryData<ImportJobDto[]>(keys.imports, (old) => old?.filter((j) => !removed.includes(j.id)));
+  };
+  // A stuck upload from a phone: the phone's own attempt then fails and can be started again.
+  const cancelUpload = async (id: string) => {
+    await api.delete(paths.upload(id)).catch(() => undefined);
+    client.setQueryData<UploadDto[]>(keys.uploads, (old) => old?.filter((u) => u.id !== id));
+  };
+  const finished = jobs.data?.filter((j) => !ACTIVE_STAGES.includes(j.stage)).map((j) => j.id) ?? [];
+  const clearFinished = async () => {
+    setClearing(true);
+    try {
+      await remove(finished);
+    } finally {
+      setClearing(false);
+    }
+  };
+  const empty = (jobs.data?.length ?? 0) === 0 && (uploads.data?.length ?? 0) === 0;
+
   return (
     <Card variant="outlined">
       <CardContent>
-        <Typography variant="h6" sx={{ mb: 1 }}>{t("imports.jobs")}</Typography>
-        {(uploads.data?.length ?? 0) > 0 && (
-          <List disablePadding sx={{ mb: 1 }}>
-            {uploads.data!.map((u) => (
-              <ListItem key={u.id} disableGutters sx={{ display: "block" }}>
-                <Typography noWrap>{u.fileName}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t("imports.incoming", { from: u.from ?? "?" })} · {formatBytes(u.receivedBytes)} / {formatBytes(u.sizeBytes)}
-                </Typography>
-                <LinearProgress variant="determinate" value={u.sizeBytes ? (u.receivedBytes / u.sizeBytes) * 100 : 0} sx={{ mt: 0.5 }} />
-              </ListItem>
-            ))}
-          </List>
-        )}
-        {(jobs.data?.length ?? 0) === 0 && (uploads.data?.length ?? 0) === 0 ? (
+        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1, minHeight: 36 }}>
+          <Typography variant="h6">{t("imports.jobs")}</Typography>
+          {finished.length > 0 && (
+            <Button size="small" startIcon={<ClearAllIcon />} disabled={clearing} onClick={() => void clearFinished()}>{t("imports.clearFinished")}</Button>
+          )}
+        </Stack>
+        {empty ? (
           <Typography color="text.secondary">{t("imports.noJobs")}</Typography>
         ) : (
-          <List disablePadding>
-            {jobs.data!.map((job) => {
-              const active = !["DONE", "FAILED", "CANCELLED"].includes(job.stage);
+          <Stack divider={<Divider flexItem />}>
+            {uploads.data?.map((u) => (
+              <JobLine
+                key={u.id}
+                icon={<CloudUploadRoundedIcon />}
+                tone="primary"
+                title={u.fileName}
+                subtitle={`${t("imports.incoming", { from: u.from ?? "?" })} · ${formatBytes(u.receivedBytes)} / ${formatBytes(u.sizeBytes)}`}
+                progress={u.sizeBytes ? u.receivedBytes / u.sizeBytes : 0}
+                action={<IconButton size="small" aria-label={t("imports.cancel")} onClick={() => void cancelUpload(u.id)}><CloseIcon fontSize="small" /></IconButton>}
+              />
+            ))}
+            {jobs.data?.map((job) => {
+              const active = ACTIVE_STAGES.includes(job.stage);
+              const openable = job.stage === "DONE" && !!job.bookId;
               return (
-                <ListItem key={job.id} disableGutters sx={{ display: "block" }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography noWrap sx={{ cursor: job.bookId && job.stage === "DONE" ? "pointer" : undefined }} onClick={() => job.stage === "DONE" && job.bookId && navigate(`/book/${job.bookId}`)}>
-                        {job.title}
-                      </Typography>
-                      <Typography variant="body2" color={job.stage === "FAILED" ? "error" : "text.secondary"}>
-                        {t(`imports.stage.${job.stage}`)}{job.progress != null && active ? ` ${Math.round(job.progress * 100)}%` : ""}{job.error ? ` · ${job.error}` : ""}
-                      </Typography>
-                    </Box>
-                    {active ? (
-                      <Button size="small" onClick={() => void api.post(`${paths.imports}/${job.id}/cancel`)}>{t("imports.cancel")}</Button>
-                    ) : (
-                      <IconButton size="small" onClick={async () => {
-                        await api.delete(`${paths.imports}/${job.id}`);
-                        client.setQueryData<ImportJobDto[]>(keys.imports, (old) => old?.filter((j) => j.id !== job.id));
-                      }}><CloseIcon fontSize="small" /></IconButton>
-                    )}
-                  </Stack>
-                  {active && <LinearProgress variant={job.progress != null ? "determinate" : "indeterminate"} value={(job.progress ?? 0) * 100} sx={{ mt: 0.5 }} />}
-                </ListItem>
+                <JobLine
+                  key={job.id}
+                  icon={active ? <SyncRoundedIcon /> : job.stage === "DONE" ? <CheckCircleRoundedIcon /> : job.stage === "FAILED" ? <ErrorRoundedIcon /> : <CancelRoundedIcon />}
+                  tone={job.stage === "DONE" ? "secondary" : job.stage === "FAILED" ? "error" : active ? "primary" : undefined}
+                  title={job.title}
+                  onTitle={openable ? () => navigate(`/book/${job.bookId}`) : undefined}
+                  subtitle={`${t(`imports.stage.${job.stage}`)}${job.progress != null && active ? ` ${Math.round(job.progress * 100)}%` : ""}`}
+                  error={job.error}
+                  progress={active ? job.progress ?? null : undefined}
+                  action={active ? (
+                    <Button size="small" onClick={() => void api.post(`${paths.imports}/${job.id}/cancel`)}>{t("imports.cancel")}</Button>
+                  ) : (
+                    <IconButton size="small" aria-label={t("imports.remove")} onClick={() => void remove([job.id])}><CloseIcon fontSize="small" /></IconButton>
+                  )}
+                />
               );
             })}
-          </List>
+          </Stack>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** One upload or conversion: a status icon, what it is, how far along, and what can be done with it. */
+function JobLine({ icon, tone, title, onTitle, subtitle, error, progress, action }: {
+  icon: ReactNode;
+  tone?: "primary" | "secondary" | "error";
+  title: string;
+  onTitle?: () => void;
+  subtitle: string;
+  error?: string | null;
+  /** A fraction, null while unknown (an indeterminate bar), undefined for no bar. */
+  progress?: number | null;
+  action?: ReactNode;
+}) {
+  return (
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", py: 1.25 }}>
+      <Box
+        sx={(theme) => ({
+          width: 36, height: 36, borderRadius: 2.5, flexShrink: 0, display: "grid", placeItems: "center",
+          color: tone ? theme.palette[tone].main : theme.palette.text.secondary,
+          bgcolor: alpha(tone ? theme.palette[tone].main : theme.palette.text.secondary, 0.12),
+          "& svg": { fontSize: 20 },
+        })}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          noWrap
+          onClick={onTitle}
+          sx={{ fontWeight: 700, cursor: onTitle ? "pointer" : undefined, "&:hover": onTitle ? { color: "primary.main" } : undefined }}
+        >
+          {title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" noWrap>{subtitle}</Typography>
+        {error && <Typography variant="body2" color="error" sx={{ wordBreak: "break-word" }}>{error}</Typography>}
+        {progress !== undefined && (
+          <LinearProgress variant={progress === null ? "indeterminate" : "determinate"} value={(progress ?? 0) * 100} sx={{ mt: 0.75, height: 4 }} />
+        )}
+      </Box>
+      {action && <Box sx={{ flexShrink: 0 }}>{action}</Box>}
+    </Stack>
   );
 }

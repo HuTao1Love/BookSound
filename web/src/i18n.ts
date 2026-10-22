@@ -39,7 +39,7 @@ const en = {
   player: {
     nothing: "Nothing playing", speed: "Speed", sleep: "Sleep timer", sleepOff: "Off", sleepEndOfChapter: "End of chapter", sleepMinutes: "{{count}} min",
     sleepLeft: "Stops in {{time}}", voice: "Narrator's voice", back: "Back {{s}} s", forward: "Forward {{s}} s", chapter: "Chapter {{n}} of {{total}}",
-    otherDevice: "Another device stopped at {{time}}. Continue from there?", jump: "Jump",
+    nowPlaying: "Now playing", chapters: "Chapters",
     presets: { OFF: "Off", DEEP_MALE: "Deep voice", BRIGHT_FEMALE: "Bright voice", NO_BASS: "No bass", OLD_RECORDING: "Old recording", CLARITY: "Clarity" },
   },
   imports: {
@@ -52,7 +52,7 @@ const en = {
     stage: { QUEUED: "Waiting", PREPARING: "Reading files", CONVERTING: "Converting", WRITING: "Writing", VERIFYING: "Checking", FINISHING: "Finishing", DONE: "Done", FAILED: "Failed", CANCELLED: "Cancelled" },
     phase: { FETCHING_METADATA: "Getting file list", AWAITING_REVIEW: "Waiting for review", DOWNLOADING: "Downloading", DOWNLOADED: "Downloaded", VERIFYING: "Checking", CONVERTING: "Converting", COMPLETED: "In the library", FAILED: "Failed", PAUSED: "Paused" },
     torrentsUnavailable: "Torrents are not available on this server.",
-    incoming: "Arriving from {{from}}",
+    incoming: "Arriving from {{from}}", clearFinished: "Clear finished", open: "Open",
   },
   account: {
     devices: "Signed-in devices", thisDevice: "this device", signOut: "Sign out", revoke: "Sign out device", password: "Change password",
@@ -116,7 +116,7 @@ const ru: typeof en = {
   player: {
     nothing: "Ничего не играет", speed: "Скорость", sleep: "Таймер сна", sleepOff: "Выкл.", sleepEndOfChapter: "Конец главы", sleepMinutes: "{{count}} мин",
     sleepLeft: "Остановка через {{time}}", voice: "Голос чтеца", back: "Назад на {{s}} с", forward: "Вперёд на {{s}} с", chapter: "Глава {{n}} из {{total}}",
-    otherDevice: "На другом устройстве остановились на {{time}}. Продолжить оттуда?", jump: "Перейти",
+    nowPlaying: "Сейчас играет", chapters: "Главы",
     presets: { OFF: "Выкл.", DEEP_MALE: "Низкий голос", BRIGHT_FEMALE: "Высокий голос", NO_BASS: "Без басов", OLD_RECORDING: "Старая запись", CLARITY: "Разборчивость" },
   },
   imports: {
@@ -129,7 +129,7 @@ const ru: typeof en = {
     stage: { QUEUED: "В очереди", PREPARING: "Чтение файлов", CONVERTING: "Конвертация", WRITING: "Запись", VERIFYING: "Проверка", FINISHING: "Завершение", DONE: "Готово", FAILED: "Ошибка", CANCELLED: "Отменено" },
     phase: { FETCHING_METADATA: "Получение списка файлов", AWAITING_REVIEW: "Ждёт проверки", DOWNLOADING: "Скачивается", DOWNLOADED: "Скачан", VERIFYING: "Проверка", CONVERTING: "Конвертация", COMPLETED: "В библиотеке", FAILED: "Ошибка", PAUSED: "Пауза" },
     torrentsUnavailable: "Торренты на этом сервере недоступны.",
-    incoming: "Загружается с {{from}}",
+    incoming: "Загружается с {{from}}", clearFinished: "Очистить завершённые", open: "Открыть",
   },
   account: {
     devices: "Устройства", thisDevice: "это устройство", signOut: "Выйти", revoke: "Отключить устройство", password: "Сменить пароль",

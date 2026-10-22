@@ -11,7 +11,7 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import WatchIcon from "@mui/icons-material/Watch";
 import {
   Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItemButton, ListItemIcon, ListItemText,
-  Menu, MenuItem, Stack, TextField, Tooltip, Typography,
+  Menu, MenuItem, Snackbar, Stack, TextField, Tooltip, Typography,
 } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -21,6 +21,7 @@ import { api, paths, request } from "../api/client";
 import { keys, useBook, useMe, useWatchProfiles } from "../api/hooks";
 import type { BookDto, MetadataDto, WatchFileStatusDto } from "../api/types.gen";
 import BookCover, { CoverBackdrop } from "../components/BookCover";
+import { useSidePlayerFits } from "../components/NowPlaying";
 import { ProgressLine, SectionTitle } from "../components/Ui";
 import { chapterAt, formatDuration, isStarted } from "../library";
 import { usePlayer } from "../player/PlayerContext";
@@ -31,6 +32,8 @@ export default function BookPage() {
   const entry = useBook(id);
   const me = useMe();
   const player = usePlayer();
+  // Wide screens have the player on the right: starting a book keeps the page.
+  const side = useSidePlayerFits();
   const client = useQueryClient();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -103,11 +106,11 @@ export default function BookPage() {
             )}
             {playback?.finished && <Chip size="small" icon={<CheckCircleRoundedIcon />} label={t("book.finished")} sx={{ color: "secondary.main" }} />}
             <Stack direction="row" spacing={1} sx={{ pt: 1.5, flexWrap: "wrap", gap: 1, justifyContent: { xs: "center", md: "flex-start" }, alignItems: "center" }}>
-              <Button variant="contained" size="large" startIcon={<PlayArrowRoundedIcon />} onClick={() => { player.play(entry.data!); navigate("/player"); }}>
+              <Button variant="contained" size="large" startIcon={<PlayArrowRoundedIcon />} onClick={() => { player.play(entry.data!); if (!side) navigate("/player"); }}>
                 {started ? t("book.resume") : t("book.play")}
               </Button>
               {started && (
-                <Button variant="outlined" size="large" startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); navigate("/player"); }}>{t("book.restart")}</Button>
+                <Button variant="outlined" size="large" startIcon={<ReplayIcon />} onClick={() => { player.play(entry.data!, 0); if (!side) navigate("/player"); }}>{t("book.restart")}</Button>
               )}
               <Tooltip title={t("book.downloadFile")}>
                 <IconButton href={`${paths.bookFile(id)}?download=1`} sx={{ border: 1, borderColor: "divider" }}><DownloadIcon /></IconButton>
@@ -178,19 +181,23 @@ function WatchCopyButton({ bookId }: { bookId: string }) {
   const profiles = useWatchProfiles();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchCopy = async (profileId: string) => {
     setAnchor(null);
+    setError(null);
     setPreparing(true);
     try {
+      // An error answer (no ffmpeg, no such book) or a failed conversion ends the wait.
       for (;;) {
-        const response = await fetch(`${paths.watchFile(bookId, profileId)}&status=1`, { credentials: "same-origin" });
-        const status = (await response.json()) as WatchFileStatusDto;
+        const status = await api.get<WatchFileStatusDto>(`${paths.watchFile(bookId, profileId)}&status=1`);
         if (status.ready) break;
-        if (status.job?.stage === "FAILED") throw new Error(status.job.error ?? "failed");
+        if (status.job?.stage === "FAILED" || status.job?.stage === "CANCELLED") throw new Error(status.job.error ?? t(`imports.stage.${status.job.stage}`));
         await new Promise((r) => setTimeout(r, 3000));
       }
       window.location.href = `${paths.watchFile(bookId, profileId)}&download=1`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPreparing(false);
     }
@@ -207,6 +214,9 @@ function WatchCopyButton({ bookId }: { bookId: string }) {
           <MenuItem key={p.id} onClick={() => void fetchCopy(p.id)}>{p.name}</MenuItem>
         ))}
       </Menu>
+      <Snackbar open={!!error} autoHideDuration={8000} onClose={() => setError(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity="error" variant="filled" onClose={() => setError(null)}>{error}</Alert>
+      </Snackbar>
     </>
   );
 }

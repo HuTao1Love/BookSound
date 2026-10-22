@@ -14,6 +14,16 @@ export async function uploadFile(
   signal?: AbortSignal,
 ): Promise<UploadDto> {
   let upload = await api.post<UploadDto>(paths.uploads, { ...create, fileName: file.name, sizeBytes: file.size });
+  try {
+    return await sendChunks(file, upload, onProgress, signal);
+  } catch (e) {
+    // The next attempt starts a new upload: the server needn't keep (and show) this one.
+    void api.delete(paths.upload(upload.id)).catch(() => undefined);
+    throw e;
+  }
+}
+
+async function sendChunks(file: File, upload: UploadDto, onProgress: (sent: number) => void, signal?: AbortSignal): Promise<UploadDto> {
   let offset = 0;
   let failures = 0;
   while (offset < file.size) {

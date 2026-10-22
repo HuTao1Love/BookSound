@@ -46,22 +46,29 @@ class SyncCoordinator(
     val lastReport: StateFlow<SyncReport> = _lastReport
     private val mutex = Mutex()
 
-    fun requestSync() {
-        scope.launch {
-            mutex.withLock {
-                val id = device()
-                for (target in targets) {
-                    // A target that fails (a server down or answering nonsense) skips this round; the others still sync.
-                    val report = try {
-                        DefaultSyncEngine(target.backend, target.store, id).sync()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Sync failed", e)
-                        SyncReport.Failed(e.message ?: e.javaClass.simpleName)
-                    }
-                    if (report != SyncReport.Skipped) _lastReport.value = report
+    /** A round is under way (one starts on every pause, with every target). */
+    val busy: Boolean get() = mutex.isLocked
+
+    /** A round in the background with [only] these targets (all by default). */
+    fun requestSync(only: List<SyncTarget> = targets) {
+        scope.launch { syncNow(only) }
+    }
+
+    /** A round with [only] these targets, returning when it is over. */
+    suspend fun syncNow(only: List<SyncTarget> = targets) {
+        mutex.withLock {
+            val id = device()
+            for (target in only) {
+                // A target that fails (a server down or answering nonsense) skips this round; the others still sync.
+                val report = try {
+                    DefaultSyncEngine(target.backend, target.store, id).sync()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Sync failed", e)
+                    SyncReport.Failed(e.message ?: e.javaClass.simpleName)
                 }
+                if (report != SyncReport.Skipped) _lastReport.value = report
             }
         }
     }
