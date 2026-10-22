@@ -12,10 +12,12 @@ import com.zyagodin.booksound.api.UploadCreateRequest
 import com.zyagodin.booksound.api.UploadDto
 import com.zyagodin.booksound.api.UploadKind
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.KSerializer
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -161,42 +163,49 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     ): UploadDto = withContext(Dispatchers.IO) {
         var upload = post(ApiPaths.UPLOADS, UploadCreateRequest(fileName, size, kind, sha256), UploadCreateRequest.serializer(), UploadDto.serializer())
         var failures = 0
-        while (upload.receivedBytes < size) {
-            currentCoroutineContext().ensureActive()
-            val start = upload.receivedBytes
-            val end = minOf(start + CHUNK_BYTES, size) - 1
-            try {
-                val body = object : RequestBody() {
-                    override fun contentType() = "application/octet-stream".toMediaType()
-                    override fun contentLength() = end - start + 1
-                    override fun writeTo(sink: BufferedSink) {
-                        open(start).use { input ->
-                            val buffer = ByteArray(64 * 1024)
-                            var left = end - start + 1
-                            while (left > 0) {
-                                val n = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
-                                if (n < 0) throw IOException("File ended early")
-                                sink.write(buffer, 0, n)
-                                left -= n
-                                // Bytes handed to the socket, every MiB, so the bar moves within a chunk too.
-                                if (left % PROGRESS_STEP < n) onProgress(end + 1 - left, size)
+        try {
+            while (upload.receivedBytes < size) {
+                currentCoroutineContext().ensureActive()
+                val start = upload.receivedBytes
+                val end = minOf(start + CHUNK_BYTES, size) - 1
+                try {
+                    val body = object : RequestBody() {
+                        override fun contentType() = "application/octet-stream".toMediaType()
+                        override fun contentLength() = end - start + 1
+                        override fun writeTo(sink: BufferedSink) {
+                            open(start).use { input ->
+                                val buffer = ByteArray(64 * 1024)
+                                var left = end - start + 1
+                                while (left > 0) {
+                                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                                    if (n < 0) throw IOException("File ended early")
+                                    sink.write(buffer, 0, n)
+                                    left -= n
+                                    // Bytes handed to the socket, every MiB, so the bar moves within a chunk too.
+                                    if (left % PROGRESS_STEP < n) onProgress(end + 1 - left, size)
+                                }
                             }
                         }
                     }
+                    upload = decode(UploadDto.serializer(), authorized(ApiPaths.upload(upload.id)) {
+                        it.put(body).header("Content-Range", "bytes $start-$end/$size")
+                    })
+                    failures = 0
+                    onProgress(upload.receivedBytes, size)
+                } catch (e: ServerException) {
+                    if (e.status != 409 && e.status < 500 || ++failures > 5) throw e
+                    upload = get(ApiPaths.upload(upload.id), UploadDto.serializer())
+                } catch (e: IOException) {
+                    if (e is SignedOutException || ++failures > 5) throw e
+                    kotlinx.coroutines.delay(2_000L * failures)
+                    upload = get(ApiPaths.upload(upload.id), UploadDto.serializer())
                 }
-                upload = decode(UploadDto.serializer(), authorized(ApiPaths.upload(upload.id)) {
-                    it.put(body).header("Content-Range", "bytes $start-$end/$size")
-                })
-                failures = 0
-                onProgress(upload.receivedBytes, size)
-            } catch (e: ServerException) {
-                if (e.status != 409 && e.status < 500 || ++failures > 5) throw e
-                upload = get(ApiPaths.upload(upload.id), UploadDto.serializer())
-            } catch (e: IOException) {
-                if (e is SignedOutException || ++failures > 5) throw e
-                kotlinx.coroutines.delay(2_000L * failures)
-                upload = get(ApiPaths.upload(upload.id), UploadDto.serializer())
             }
+        } catch (e: Throwable) {
+            // Cancelled or failed: the next attempt starts a new upload, so the server needn't keep (and show) this one.
+            val id = upload.id
+            withContext(NonCancellable) { runCatching { withTimeout(10_000) { authorized(ApiPaths.upload(id)) { it.delete() }.close() } } }
+            throw e
         }
         upload
     }

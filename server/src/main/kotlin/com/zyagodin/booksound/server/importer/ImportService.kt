@@ -142,6 +142,12 @@ class ImportService(
         jobs.values.firstOrNull { j -> j.isActive && (j.spec as? WatchSpec)?.let { it.bookId == bookId && it.profileId == profileId } == true }
     }
 
+    /** The newest watch job for this revision of the book and the profile, running or finished. */
+    fun latestWatchJob(bookId: String, profileId: String, fileRevision: Int): JobRecord? = synchronized(lock) {
+        jobs.values.filter { j -> (j.spec as? WatchSpec)?.let { it.bookId == bookId && it.profileId == profileId && it.fileRevision == fileRevision } == true }
+            .maxByOrNull { it.createdAt }
+    }
+
     fun cancel(id: String) {
         val job = synchronized(lock) { jobs[id] } ?: return
         if (!job.isActive) return

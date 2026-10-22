@@ -130,7 +130,7 @@ fun Route.authRoutes(ctx: ServerContext) {
 }
 
 private suspend fun ApplicationCall.checkLogin(ctx: ServerContext, name: String, password: String): UserDto =
-    when (val result = io { ctx.auth.checkCredentials(name, password) }) {
+    when (val result = io { ctx.auth.checkCredentials(name, password, client.address) }) {
         is LoginResult.Success -> result.user
         LoginResult.InvalidCredentials -> throw AuthException(ErrorCodes.INVALID_CREDENTIALS, "Wrong user name or password")
         is LoginResult.Locked -> {

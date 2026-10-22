@@ -37,7 +37,8 @@ export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: () => 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => api.get<SessionDto>(paths.me), retry: false });
 // Live updates come over server-sent events, but proxies (the router's KeenDNS among them) may cut that stream:
 // lists that show progress also poll, quickly while something is under way.
-const activeStages = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
+/** Stages of an import job that is still under way. */
+export const ACTIVE_STAGES = ["QUEUED", "PREPARING", "CONVERTING", "WRITING", "VERIFYING", "FINISHING"];
 
 export const useBooks = () => useQuery({ queryKey: keys.books, queryFn: () => api.get<LibraryEntryDto[]>(paths.books), refetchInterval: 60_000 });
 export const useBook = (id: string) => useQuery({ queryKey: keys.book(id), queryFn: () => api.get<LibraryEntryDto>(paths.book(id)) });
@@ -45,7 +46,7 @@ export const useImports = () =>
   useQuery({
     queryKey: keys.imports,
     queryFn: () => api.get<ImportJobDto[]>(paths.imports),
-    refetchInterval: (q) => (q.state.data?.some((j) => activeStages.includes(j.stage)) ? 3_000 : 30_000),
+    refetchInterval: (q) => (q.state.data?.some((j) => ACTIVE_STAGES.includes(j.stage)) ? 3_000 : 30_000),
   });
 export const useTorrents = () =>
   useQuery({

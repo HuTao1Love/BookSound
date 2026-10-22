@@ -1,4 +1,4 @@
-import { Box, useTheme } from "@mui/material";
+import { Box, useTheme, type SxProps, type Theme } from "@mui/material";
 import { useState } from "react";
 import { paths } from "../api/client";
 import type { BookDto } from "../api/types.gen";
@@ -66,19 +66,22 @@ export default function BookCover({ book, size = 256, radius = 2, progress, shad
   );
 }
 
-/** The cover, blurred and fading into the page: behind the book and the player, or (contained) behind a series card. */
-export function CoverBackdrop({ book, contained, intensity = 1 }: { book: BookDto; contained?: boolean; intensity?: number }) {
+/**
+ * The cover, blurred and fading into the page: behind the book and the player. [contained] puts it behind a series
+ * card, [panel] at the top of the side player.
+ */
+export function CoverBackdrop({ book, contained, panel, intensity = 1 }: { book: BookDto; contained?: boolean; panel?: boolean; intensity?: number }) {
   const theme = useTheme();
   const url = coverUrl(book, 256);
   const [light, dark] = paletteFor(book.metadata.title);
-  const bg = contained ? theme.palette.surface.low : theme.palette.background.default;
+  const bg = contained || panel ? theme.palette.surface.low : theme.palette.background.default;
+  const place: SxProps<Theme> = contained
+    ? { position: "absolute", inset: 0, borderRadius: "inherit" }
+    : panel
+      ? { position: "absolute", top: 0, left: 0, right: 0, height: 420 }
+      : { position: "fixed", top: 0, right: "var(--side-player, 0px)", left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, zIndex: 0 };
   return (
-    <Box
-      aria-hidden
-      sx={contained
-        ? { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", borderRadius: "inherit" }
-        : { position: "fixed", top: 0, right: 0, left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}
-    >
+    <Box aria-hidden sx={[place, { overflow: "hidden", pointerEvents: "none" }]}>
       {url ? (
         <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: (theme.palette.mode === "dark" ? 0.5 : 0.35) * intensity }} />
       ) : (
