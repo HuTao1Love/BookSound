@@ -34,7 +34,7 @@ const en = {
   player: {
     nothing: "Nothing playing", speed: "Speed", sleep: "Sleep timer", sleepOff: "Off", sleepEndOfChapter: "End of chapter", sleepMinutes: "{{count}} min",
     sleepLeft: "Stops in {{time}}", voice: "Narrator's voice", back: "Back {{s}} s", forward: "Forward {{s}} s", chapter: "Chapter {{n}} of {{total}}",
-    otherDevice: "Another device stopped at {{time}}. Continue from there?", jump: "Jump", nowPlaying: "Now playing", chapters: "Chapters",
+    nowPlaying: "Now playing", chapters: "Chapters",
     presets: { OFF: "Off", DEEP_MALE: "Deep voice", BRIGHT_FEMALE: "Bright voice", NO_BASS: "No bass", OLD_RECORDING: "Old recording", CLARITY: "Clarity" },
   },
   imports: {
@@ -101,7 +101,7 @@ const ru: typeof en = {
   player: {
     nothing: "Ничего не играет", speed: "Скорость", sleep: "Таймер сна", sleepOff: "Выкл.", sleepEndOfChapter: "Конец главы", sleepMinutes: "{{count}} мин",
     sleepLeft: "Остановка через {{time}}", voice: "Голос чтеца", back: "Назад на {{s}} с", forward: "Вперёд на {{s}} с", chapter: "Глава {{n}} из {{total}}",
-    otherDevice: "На другом устройстве остановились на {{time}}. Продолжить оттуда?", jump: "Перейти", nowPlaying: "Сейчас играет", chapters: "Главы",
+    nowPlaying: "Сейчас играет", chapters: "Главы",
     presets: { OFF: "Выкл.", DEEP_MALE: "Низкий голос", BRIGHT_FEMALE: "Высокий голос", NO_BASS: "Без басов", OLD_RECORDING: "Старая запись", CLARITY: "Разборчивость" },
   },
   imports: {

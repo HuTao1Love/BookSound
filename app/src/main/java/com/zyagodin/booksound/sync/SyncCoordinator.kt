@@ -44,6 +44,9 @@ class SyncCoordinator(
     val lastReport: StateFlow<SyncReport> = _lastReport
     private val mutex = Mutex()
 
+    /** A round is under way (one starts on every pause, with every target). */
+    val busy: Boolean get() = mutex.isLocked
+
     /** A round in the background with [only] these targets (all by default). */
     fun requestSync(only: List<SyncTarget> = targets) {
         scope.launch { syncNow(only) }

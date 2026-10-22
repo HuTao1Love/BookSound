@@ -406,8 +406,11 @@ class PlaybackService : MediaSessionService() {
             if (player.currentMediaItem?.mediaId != bookId) savePosition()
             readyBookId = null
             // The book may have been listened to on the web since the last pull: start from there. Briefly, so
-            // an unreachable server doesn't hold up playback.
-            withTimeoutOrNull(SYNC_BEFORE_PLAY_MS) { container.sync.syncNow(listOf(container.server.syncTarget)) }
+            // an unreachable server doesn't hold up playback; not at all without a server, or when a round is
+            // already under way (the one a pause starts brings the server's positions too).
+            if (container.server.accounts.current != null && !container.sync.busy) {
+                withTimeoutOrNull(SYNC_BEFORE_PLAY_MS) { container.sync.syncNow(listOf(container.server.syncTarget)) }
+            }
             val item = buildItem(bookId)
             if (item == null) {
                 future.setException(IllegalArgumentException("Unknown book $bookId"))

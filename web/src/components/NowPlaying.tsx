@@ -7,7 +7,7 @@ import SkipNextIcon from "@mui/icons-material/SkipNext";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import SpeedIcon from "@mui/icons-material/Speed";
 import {
-  Alert, Box, Button, Chip, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Slider, Stack, Typography, useMediaQuery, useTheme,
+  Box, Chip, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Slider, Stack, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { formatDuration } from "../library";
 import { voicePresets } from "../player/equalizer";
 import { usePlayer } from "../player/PlayerContext";
-import BookCover, { coverUrl, paletteFor } from "./BookCover";
+import BookCover, { CoverBackdrop } from "./BookCover";
 import { PlayButton } from "./Ui";
 
 const SPEEDS = [0.75, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2, 2.5, 3];
@@ -38,13 +38,8 @@ export function useSidePlayer(): boolean {
 
 /** The player on the right of wide screens: always there while a book is loaded, with its chapters below. */
 export function SidePlayer() {
-  const player = usePlayer();
-  const theme = useTheme();
-  const book = player.book;
+  const book = usePlayer().book;
   if (!book) return null;
-  const url = coverUrl(book, 256);
-  const [light, dark] = paletteFor(book.metadata.title);
-  const bg = theme.palette.surface.low;
   return (
     <Box
       component="aside"
@@ -53,14 +48,7 @@ export function SidePlayer() {
         bgcolor: "surface.low", borderLeft: 1, borderColor: "divider",
       }}
     >
-      <Box aria-hidden sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 420, overflow: "hidden", pointerEvents: "none" }}>
-        {url ? (
-          <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-20%", width: "140%", height: "140%", objectFit: "cover", filter: "blur(60px) saturate(1.3)", opacity: theme.palette.mode === "dark" ? 0.45 : 0.3 }} />
-        ) : (
-          <Box sx={{ position: "absolute", inset: 0, background: `radial-gradient(80% 80% at 30% 10%, ${light}55, transparent), radial-gradient(70% 70% at 90% 0%, ${dark}33, transparent)` }} />
-        )}
-        <Box sx={{ position: "absolute", inset: 0, background: `linear-gradient(to bottom, ${bg}33, ${bg}cc 60%, ${bg})` }} />
-      </Box>
+      <CoverBackdrop book={book} panel />
       <Box sx={{ position: "relative", px: 3, pt: 3, pb: 4 }}>
         <NowPlaying side />
       </Box>
@@ -117,11 +105,6 @@ export default function NowPlaying({ side = false }: { side?: boolean }) {
         </Typography>
         {!side && <Box sx={{ width: 40 }} />}
       </Box>
-      {player.remoteOffer && (
-        <Alert severity="info" action={<><Button onClick={player.acceptRemote}>{t("player.jump")}</Button><Button onClick={player.dismissRemote}>{t("common.no")}</Button></>}>
-          {t("player.otherDevice", { time: formatDuration(player.remoteOffer.positionMs) })}
-        </Alert>
-      )}
       <Box
         onClick={side ? () => navigate(`/book/${book.id}`) : undefined}
         sx={{ width: side ? "100%" : "min(100%, 380px)", mx: "auto", cursor: side ? "pointer" : undefined }}
