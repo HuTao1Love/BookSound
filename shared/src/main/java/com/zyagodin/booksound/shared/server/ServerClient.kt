@@ -40,6 +40,12 @@ class ServerException(val status: Int, val code: String, message: String?) : IOE
 class SignedOutException : IOException("Signed out by the server")
 
 /**
+ * The address answered, but not as a BookSound server: a router's or proxy's page while the server is down, a
+ * captive portal, another site. An IOException like any other network failure, so it is treated as "unreachable".
+ */
+class UnexpectedAnswerException(cause: Throwable) : IOException("The server's answer can't be read", cause)
+
+/**
  * HTTP client of the BookSound server, shared by the phone and the watch. Access tokens are refreshed when they
  * expire; a refused refresh signs the device out. Downloads resume with Range requests, uploads go in chunks.
  */
@@ -90,6 +96,8 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
 
     suspend fun <B, T> put(path: String, body: B, bodySerializer: KSerializer<B>, serializer: KSerializer<T>): T =
         decode(serializer, send("PUT", path, ApiJson.encodeToString(bodySerializer, body)))
+
+    suspend fun delete(path: String): Unit = withContext(Dispatchers.IO) { authorized(path) { it.delete() }.close() }
 
     private suspend fun send(method: String, path: String, body: String): Response = authorized(path) { it.method(method, body.toRequestBody(json)) }
 
@@ -251,7 +259,13 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     }
 
     private suspend fun <T> decode(serializer: KSerializer<T>, response: Response): T = withContext(Dispatchers.IO) {
-        response.use { ApiJson.decodeFromString(serializer, it.body.string()) }
+        val text = response.use { it.body.string() }
+        try {
+            ApiJson.decodeFromString(serializer, text)
+        } catch (e: IllegalArgumentException) {
+            // SerializationException is one: HTML, or JSON of something else.
+            throw UnexpectedAnswerException(e)
+        }
     }
 
     companion object {

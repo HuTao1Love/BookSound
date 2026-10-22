@@ -3,6 +3,11 @@ import { initReactI18next } from "react-i18next";
 
 const en = {
   appName: "BookSound",
+  serverUpdated: {
+    message: "The server was updated to {{version}}. Reload the page to get the new version.",
+    incompatible: "The server was updated to {{version}} and this page no longer works with it. Reload it.",
+    reload: "Reload",
+  },
   nav: { library: "Library", imports: "Add books", admin: "Server", account: "Account" },
   common: {
     save: "Save", cancel: "Cancel", delete: "Delete", close: "Close", retry: "Try again", loading: "Loading…",
@@ -20,7 +25,7 @@ const en = {
     nothingFound: "Nothing found", sort: "Sort", filter: "Show", series: "Series", booksInSeries_one: "{{count}} book", booksInSeries_few: "{{count}} books", booksInSeries_many: "{{count}} books", booksInSeries_other: "{{count}} books",
     sortBy: { RECENT: "Recently played", ADDED: "Recently added", TITLE: "Title", AUTHOR: "Author", SERIES: "Series", DURATION: "Length", PROGRESS: "Progress" },
     filters: { ALL: "All books", NOT_STARTED: "Not started", IN_PROGRESS: "In progress", FINISHED: "Finished" },
-    playNext: "Play next unfinished",
+    finishedOf: "{{finished}}/{{total}} done", openSeries: "Open series", upNext: "Up next: {{title}}", seriesEmpty: "No books in this series",
     continue: "Continue listening", all: "All books", count_one: "{{count}} book", count_few: "{{count}} books", count_many: "{{count}} books", count_other: "{{count}} books", hours: "{{h}} h of listening",
   },
   book: {
@@ -65,11 +70,21 @@ const en = {
     profileRateKeep: "As the source", profileCover: "Cover size, px (0 = none)", profileMode: "Make copies",
     modes: { ON_DEMAND: "When a watch asks", ALL_BOOKS: "For all books", IN_PROGRESS: "For books in progress" },
     newProfile: "New profile",
+    update: "Updates", updateVersion: "Version {{version}}", updateLatest: "Latest release: {{version}}", updateUnknown: "Can't reach GitHub to check for updates",
+    updateUpToDate: "This is the latest version", updateCheck: "Check", updateInstall: "Install update",
+    updateInstalling: "Installing the update; the server restarts by itself…", updateDone: "Updated to {{version}}, reloading…",
+    updateFailed: "The update failed", updateTimeout: "The server did not come back with a new version in 5 minutes",
+    updateManual: "This server can't update itself. Run this on its host:", copy: "Copy", copied: "Copied",
   },
 };
 
 const ru: typeof en = {
   appName: "BookSound",
+  serverUpdated: {
+    message: "Сервер обновлён до {{version}}. Перезагрузите страницу, чтобы открыть новую версию.",
+    incompatible: "Сервер обновлён до {{version}}, и эта страница с ним уже не работает. Перезагрузите её.",
+    reload: "Перезагрузить",
+  },
   nav: { library: "Библиотека", imports: "Добавить", admin: "Сервер", account: "Аккаунт" },
   common: {
     save: "Сохранить", cancel: "Отмена", delete: "Удалить", close: "Закрыть", retry: "Повторить", loading: "Загрузка…",
@@ -87,7 +102,7 @@ const ru: typeof en = {
     nothingFound: "Ничего не найдено", sort: "Сортировка", filter: "Показать", series: "Серия", booksInSeries_one: "{{count}} книга", booksInSeries_few: "{{count}} книги", booksInSeries_many: "{{count}} книг", booksInSeries_other: "{{count}} книги",
     sortBy: { RECENT: "Недавно слушали", ADDED: "Недавно добавленные", TITLE: "Название", AUTHOR: "Автор", SERIES: "Серия", DURATION: "Длительность", PROGRESS: "Прогресс" },
     filters: { ALL: "Все книги", NOT_STARTED: "Не начатые", IN_PROGRESS: "Слушаю", FINISHED: "Прослушанные" },
-    playNext: "Следующая непрослушанная",
+    finishedOf: "{{finished}}/{{total}} прослушано", openSeries: "Открыть серию", upNext: "Далее: {{title}}", seriesEmpty: "В серии нет книг",
     continue: "Продолжить", all: "Все книги", count_one: "{{count}} книга", count_few: "{{count}} книги", count_many: "{{count}} книг", count_other: "{{count}} книги", hours: "{{h}} ч прослушивания",
   },
   book: {
@@ -132,6 +147,11 @@ const ru: typeof en = {
     profileRateKeep: "Как в источнике", profileCover: "Обложка, px (0 — без неё)", profileMode: "Делать копии",
     modes: { ON_DEMAND: "Когда часы попросят", ALL_BOOKS: "Для всех книг", IN_PROGRESS: "Для начатых книг" },
     newProfile: "Новый профиль",
+    update: "Обновления", updateVersion: "Версия {{version}}", updateLatest: "Последний релиз: {{version}}", updateUnknown: "Не удалось проверить обновления на GitHub",
+    updateUpToDate: "Установлена последняя версия", updateCheck: "Проверить", updateInstall: "Установить обновление",
+    updateInstalling: "Обновление устанавливается, сервер перезапустится сам…", updateDone: "Обновлено до {{version}}, перезагружаю…",
+    updateFailed: "Обновление не удалось", updateTimeout: "Сервер не вернулся с новой версией за 5 минут",
+    updateManual: "Этот сервер не может обновиться сам. Выполните на его хосте:", copy: "Скопировать", copied: "Скопировано",
   },
 };
 

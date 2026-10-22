@@ -1,15 +1,16 @@
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SwapVertRoundedIcon from "@mui/icons-material/SwapVertRounded";
-import { Alert, Box, ButtonBase, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useBooks } from "../api/hooks";
 import type { LibraryEntryDto } from "../api/types.gen";
 import BookCover from "../components/BookCover";
+import { SeriesCard, Shelf } from "../components/SeriesParts";
 import { EmptyState, PageHeader, PlayButton, ProgressLine, SectionTitle } from "../components/Ui";
-import { applyQuery, defaultDescending, formatDuration, groupSeries, progressFilters, progressOf, sortFields, type LibraryItem, type ProgressFilter, type SortField } from "../library";
+import { applyQuery, defaultDescending, formatDuration, groupSeries, progressFilters, sortFields, type ProgressFilter, type SortField } from "../library";
 import { usePlayer } from "../player/PlayerContext";
 
 function stored<T extends string>(key: string, fallback: T): T {
@@ -37,11 +38,8 @@ export default function LibraryPage() {
   const [descending, setDescending] = useState(() => stored("library.descending", "true") === "true");
   const [filter, setFilter] = useState<ProgressFilter>(() => stored("library.filter", "ALL"));
 
-  const items: LibraryItem[] = useMemo(() => {
-    const sorted = applyQuery(books.data ?? [], text, sort, descending, filter);
-    // While searching every match is shown on its own; otherwise series collapse.
-    return text.trim() ? sorted.map((entry) => ({ kind: "book" as const, entry })) : groupSeries(sorted);
-  }, [books.data, text, sort, descending, filter]);
+  // As on the phone: books outside any series on one shelf, then a card per series.
+  const sections = useMemo(() => groupSeries(applyQuery(books.data ?? [], text, sort, descending, filter)), [books.data, text, sort, descending, filter]);
 
   // What one was listening to, latest first: the row on top.
   const listening = useMemo(
@@ -123,57 +121,29 @@ export default function LibraryPage() {
                   />
                 ))}
               </Stack>
-            {items.length === 0 ? (
+            {sections.length === 0 ? (
               <EmptyState icon={<SearchRoundedIcon />} title={t("library.nothingFound")} />
             ) : (
-              <Box sx={{ display: "grid", columnGap: { xs: 1.5, md: 2.5 }, rowGap: { xs: 2.5, md: 3.5 }, gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(auto-fill, minmax(160px, 1fr))", lg: "repeat(auto-fill, minmax(180px, 1fr))" } }}>
-                {items.map((item) => (
-                  <GridItem key={item.kind === "series" ? `series:${item.series}` : item.entry.book.id} item={item} onOpen={() => navigate(item.kind === "series" ? `/series/${encodeURIComponent(item.series!)}` : `/book/${item.entry.book.id}`)} />
+              // Series cards, two side by side on wide screens.
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 520px), 1fr))" }}>
+                {sections.map((section) => section.series === null ? (
+                  <Box key="standalone" sx={{ gridColumn: "1 / -1", minWidth: 0, mx: { xs: -2, sm: 0 } }}>
+                    <Shelf books={section.books} numbered={false} onOpen={(e) => navigate(`/book/${e.book.id}`)} inset={{ xs: 2, sm: 0 }} />
+                  </Box>
+                ) : (
+                  <SeriesCard
+                    key={`series:${section.series}`}
+                    series={section.series}
+                    books={section.books}
+                    onOpenSeries={() => navigate(`/series/${encodeURIComponent(section.series!)}`)}
+                    onOpenBook={(e) => navigate(`/book/${e.book.id}`)}
+                  />
                 ))}
               </Box>
             )}
           </Box>
         </Stack>
       )}
-    </Box>
-  );
-}
-
-function GridItem({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) {
-  const { t } = useTranslation();
-  const player = usePlayer();
-  const book = item.entry.book;
-  const isSeries = item.kind === "series";
-  const progress = isSeries ? undefined : progressOf(item.entry);
-  return (
-    <Box sx={{ minWidth: 0, "&:hover .play": { opacity: 1, transform: "none" }, "&:hover .cover": { transform: "translateY(-3px)" } }}>
-      <Box sx={{ position: "relative" }}>
-        {isSeries && (
-          <>
-            <Box sx={{ position: "absolute", inset: 0, transform: "translate(10px, -8px) scale(0.94)", borderRadius: 2, bgcolor: "surface.highest", opacity: 0.6 }} />
-            <Box sx={{ position: "absolute", inset: 0, transform: "translate(5px, -4px) scale(0.97)", borderRadius: 2, bgcolor: "surface.high" }} />
-          </>
-        )}
-        <ButtonBase className="cover" onClick={onOpen} sx={{ display: "block", width: "100%", borderRadius: 2, transition: "transform 160ms ease" }}>
-          <BookCover book={book} progress={progress} shadow />
-        </ButtonBase>
-        {!isSeries && (
-          <PlayButton
-            size={44}
-            onClick={() => player.play(item.entry)}
-            className="play"
-            sx={{ position: "absolute", right: 10, bottom: 14, opacity: 0, transform: "translateY(6px)", transition: "opacity 160ms, transform 160ms", display: { xs: "none", md: "inline-flex" } }}
-          />
-        )}
-      </Box>
-      <ButtonBase onClick={onOpen} sx={{ display: "block", textAlign: "left", width: "100%", mt: 1.25, borderRadius: 1 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          {isSeries ? item.series : book.metadata.title}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap component="div" sx={{ mt: 0.25 }}>
-          {isSeries ? `${book.metadata.author ? book.metadata.author + " · " : ""}${t("library.booksInSeries", { count: item.books!.length })}` : book.metadata.author}
-        </Typography>
-      </ButtonBase>
     </Box>
   );
 }

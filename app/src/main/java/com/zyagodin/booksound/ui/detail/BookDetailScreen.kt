@@ -40,8 +40,11 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Watch
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +77,7 @@ import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.playback.PlayerUiState
+import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.ui.AppNavigator
 import com.zyagodin.booksound.ui.LocalBottomOverlayPadding
 import com.zyagodin.booksound.ui.components.BookCover
@@ -85,6 +89,7 @@ import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.PrimaryButton
 import com.zyagodin.booksound.ui.components.QuietButton
+import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
 import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.components.Tag
@@ -96,6 +101,7 @@ import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSize
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -108,9 +114,19 @@ sealed interface DetailState {
 }
 
 class BookDetailViewModel(private val container: AppContainer, private val bookId: String) : ViewModel() {
-    val state: StateFlow<DetailState> = container.library.observeDetails(bookId)
-        .map { d -> if (d == null || d.item.entry.book.sync.deleted) DetailState.Gone else DetailState.Loaded(d) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailState.Loading)
+    /** The phone's book; a book only on the server has a page too, until it is downloaded and becomes the phone's. */
+    val state: StateFlow<DetailState> = combine(container.library.observeDetails(bookId), container.server.serverDetails(bookId)) { local, remote ->
+        when {
+            local != null && !local.item.entry.book.sync.deleted -> DetailState.Loaded(local)
+            remote != null -> DetailState.Loaded(remote)
+            else -> DetailState.Gone
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailState.Loading)
+
+    /** The book moving to or from the server. */
+    val transfer: StateFlow<ServerTransfer?> = container.server.transfers
+        .map { list -> list.lastOrNull { it.bookId == bookId && it.isActive } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val player: StateFlow<PlayerUiState> = container.player.state
     val watchConnected: StateFlow<Boolean> = container.watchSender.watchConnected
@@ -119,6 +135,14 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     val canUpload: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(container.server.account, container.server.serverBookIds()) { account, ids ->
         account != null && bookId !in ids
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The server has this book. */
+    val onServer: StateFlow<Boolean> = container.server.serverBookIds().map { bookId in it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The user may delete books from the server too (an admin). */
+    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     init {
         container.watchSender.refreshWatch()
@@ -131,8 +155,14 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     fun rescan() = viewModelScope.launch { container.scanner.scan() }
     fun sendToWatch(title: String) = container.watchSender.send(bookId, title)
     fun uploadToServer(title: String) = container.server.upload(bookId, title)
+    fun download() = viewModelScope.launch { container.server.download(bookId) }
+    fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
 
-    fun remove(deleteFile: Boolean) = viewModelScope.launch {
+    fun deleteFromServer() = container.server.deleteFromServer(bookId)
+
+    // The app's scope: the page closes right away.
+    fun remove(deleteFile: Boolean, deleteFromServer: Boolean) = container.appScope.launch {
+        if (deleteFromServer) container.server.deleteFromServer(bookId)
         if (container.player.state.value.bookId == bookId) container.player.stop()
         container.library.remove(bookId, deleteFile)
     }
@@ -162,9 +192,13 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
     val playerState = vm.player.collectAsStateWithLifecycle()
     val watchConnected by vm.watchConnected.collectAsStateWithLifecycle()
     val canUpload by vm.canUpload.collectAsStateWithLifecycle()
+    val transfer by vm.transfer.collectAsStateWithLifecycle()
+    val onServer by vm.onServer.collectAsStateWithLifecycle()
+    val canDeleteOnServer by vm.canDeleteOnServer.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val live = remember(bookId, playerState) { LivePlayback(bookId, playerState) }
     var showRemove by rememberSaveable { mutableStateOf(false) }
+    var showDeleteOnServer by rememberSaveable { mutableStateOf(false) }
 
     when (val s = state) {
         DetailState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingDots() }
@@ -176,7 +210,8 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
             val details = s.details
             val finished = details.item.entry.finished
             val title = details.item.metadata.title
-            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title) {
+            val remote = details.item.onServerOnly
+            val actions = remember(vm, navigator, finished, watchConnected, canUpload, title, remote, canDeleteOnServer) {
                 DetailActions(
                     onBack = navigator::back,
                     onPlay = {
@@ -185,8 +220,10 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                     },
                     onPause = vm::pause,
                     onChapter = { chapter ->
-                        vm.playChapter(chapter)
-                        navigator.openPlayer()
+                        if (!remote) {
+                            vm.playChapter(chapter)
+                            navigator.openPlayer()
+                        }
                     },
                     onEdit = { navigator.openImportEditor(vm.startEdit()) },
                     onToggleFinished = { vm.setFinished(!finished) },
@@ -200,7 +237,12 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                             Toast.makeText(context, R.string.watch_send_started, Toast.LENGTH_SHORT).show()
                         }
                     } else null,
-                    onUploadToServer = if (canUpload) {
+                    onDownload = vm::download,
+                    onDeleteFromServer = if (remote && canDeleteOnServer) {
+                        { showDeleteOnServer = true }
+                    } else null,
+                    onCancelTransfer = vm::cancelTransfer,
+                    onUploadToServer = if (canUpload && !remote) {
                         {
                             vm.uploadToServer(title)
                             Toast.makeText(context, R.string.server_upload_started, Toast.LENGTH_SHORT).show()
@@ -214,20 +256,34 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                     Modifier.fillMaxWidth().height(if (maxWidth >= 680.dp) maxHeight else 620.dp),
                 )
                 if (maxWidth >= 680.dp) {
-                    TwoColumnDetail(details, live, actions)
+                    TwoColumnDetail(details, live, actions, transfer)
                 } else {
-                    SingleColumnDetail(details, live, actions)
+                    SingleColumnDetail(details, live, actions, transfer)
                 }
             }
             if (showRemove) {
                 RemoveBookDialog(
                     title = details.item.metadata.title,
                     filePath = details.relativePath,
-                    onConfirm = { deleteFile ->
+                    onConfirm = { deleteFile, deleteFromServer ->
                         showRemove = false
-                        vm.remove(deleteFile)
+                        vm.remove(deleteFile, deleteFromServer)
+                        // A book kept on the server would turn this into its server page.
+                        navigator.back()
                     },
                     onDismiss = { showRemove = false },
+                    fromServerOption = canDeleteOnServer && onServer,
+                )
+            }
+            if (showDeleteOnServer) {
+                DeleteFromServerDialog(
+                    title = details.item.metadata.title,
+                    onConfirm = {
+                        showDeleteOnServer = false
+                        vm.deleteFromServer()
+                        navigator.back()
+                    },
+                    onDismiss = { showDeleteOnServer = false },
                 )
             }
         }
@@ -276,10 +332,15 @@ private class DetailActions(
     val onSendToWatch: (() -> Unit)?,
     /** Null unless signed in to a server that lacks the book. */
     val onUploadToServer: (() -> Unit)? = null,
+    /** Downloads a book that is only on the server. */
+    val onDownload: () -> Unit = {},
+    /** Null unless the book is only on the server and the user may delete it there. */
+    val onDeleteFromServer: (() -> Unit)? = null,
+    val onCancelTransfer: (ServerTransfer) -> Unit = {},
 )
 
 @Composable
-private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions) {
+private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions, transfer: ServerTransfer?) {
     val currentChapter = rememberCurrentChapter(details, live)
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
@@ -298,7 +359,7 @@ private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions
                 Spacer(Modifier.height(Spacing.xl))
                 TitleBlock(details, actions, centered = true)
                 Spacer(Modifier.height(Spacing.xl))
-                PlayBlock(details, live, actions)
+                PlayBlock(details, live, actions, transfer)
                 Spacer(Modifier.height(Spacing.lg))
                 StatsRow(details)
             }
@@ -309,7 +370,7 @@ private fun SingleColumnDetail(details: BookDetails, live: LivePlayback, actions
 }
 
 @Composable
-private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions) {
+private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: DetailActions, transfer: ServerTransfer?) {
     val currentChapter = rememberCurrentChapter(details, live)
     val bottom = LocalBottomOverlayPadding.current + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Column(Modifier.fillMaxSize()) {
@@ -323,7 +384,7 @@ private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: D
                     elevation = 16.dp,
                 )
                 Spacer(Modifier.height(Spacing.xl))
-                PlayBlock(details, live, actions)
+                PlayBlock(details, live, actions, transfer)
                 Spacer(Modifier.height(Spacing.lg))
                 StatsRow(details)
             }
@@ -345,41 +406,57 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
     ) {
         CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back), actions.onBack, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Spacer(Modifier.weight(1f))
-        Box {
-            CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_edit_details)) },
-                    leadingIcon = { Icon(Icons.Rounded.Edit, null) },
-                    enabled = !details.item.isMissing,
-                    onClick = { menu = false; actions.onEdit() },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(if (details.item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished)) },
-                    leadingIcon = { Icon(if (details.item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle, null) },
-                    onClick = { menu = false; actions.onToggleFinished() },
-                )
-                actions.onSendToWatch?.let { send ->
+        // A book only on the server can only be deleted there, by an admin.
+        if (details.item.onServerOnly) {
+            actions.onDeleteFromServer?.let { delete ->
+                Box {
+                    CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_delete_from_server), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menu = false; delete() },
+                        )
+                    }
+                }
+            }
+        } else {
+            Box {
+                CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_send_to_watch)) },
-                        leadingIcon = { Icon(Icons.Rounded.Watch, null) },
+                        text = { Text(stringResource(R.string.action_edit_details)) },
+                        leadingIcon = { Icon(Icons.Rounded.Edit, null) },
                         enabled = !details.item.isMissing,
-                        onClick = { menu = false; send() },
+                        onClick = { menu = false; actions.onEdit() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (details.item.entry.finished) R.string.action_mark_unfinished else R.string.action_mark_finished)) },
+                        leadingIcon = { Icon(if (details.item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle, null) },
+                        onClick = { menu = false; actions.onToggleFinished() },
+                    )
+                    actions.onSendToWatch?.let { send ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_send_to_watch)) },
+                            leadingIcon = { Icon(Icons.Rounded.Watch, null) },
+                            enabled = !details.item.isMissing,
+                            onClick = { menu = false; send() },
+                        )
+                    }
+                    actions.onUploadToServer?.let { upload ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_upload_to_server)) },
+                            leadingIcon = { Icon(Icons.Rounded.CloudUpload, null) },
+                            enabled = !details.item.isMissing,
+                            onClick = { menu = false; upload() },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_remove_from_library), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menu = false; actions.onRemove() },
                     )
                 }
-                actions.onUploadToServer?.let { upload ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_upload_to_server)) },
-                        leadingIcon = { Icon(Icons.Rounded.CloudUpload, null) },
-                        enabled = !details.item.isMissing,
-                        onClick = { menu = false; upload() },
-                    )
-                }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_remove_from_library), color = MaterialTheme.colorScheme.error) },
-                    leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { menu = false; actions.onRemove() },
-                )
             }
         }
     }
@@ -415,36 +492,99 @@ private fun TitleBlock(details: BookDetails, actions: DetailActions, centered: B
 }
 
 @Composable
-private fun PlayBlock(details: BookDetails, live: LivePlayback, actions: DetailActions) {
+private fun PlayBlock(details: BookDetails, live: LivePlayback, actions: DetailActions, transfer: ServerTransfer?) {
     val context = LocalContext.current
     val entry = details.item.entry
     val position = live.position(details)
     val duration = entry.book.durationMs
     val playingNow = live.playWhenReady
-    val label = when {
-        playingNow -> stringResource(R.string.action_pause)
-        entry.finished -> stringResource(R.string.action_listen_again)
-        position > 0 -> stringResource(R.string.action_resume_with_left, formatDuration(context, duration - position))
-        else -> stringResource(R.string.action_play)
-    }
     Column(Modifier.fillMaxWidth().widthIn(max = 480.dp)) {
-        PrimaryButton(
-            text = label,
-            onClick = if (playingNow) actions.onPause else actions.onPlay,
-            icon = when {
-                playingNow -> Icons.Rounded.Pause
-                entry.finished -> Icons.Rounded.Replay
-                else -> Icons.Rounded.PlayArrow
-            },
-            enabled = !details.item.isMissing,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (details.item.onServerOnly) {
+            // Not on the phone: the page offers the download, and shows it while it runs.
+            if (transfer == null) {
+                PrimaryButton(
+                    text = stringResource(R.string.action_download_to_phone_size, formatSize(context, details.fileSize)),
+                    onClick = actions.onDownload,
+                    icon = Icons.Rounded.CloudDownload,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Spacing.sm))
+                Text(
+                    stringResource(R.string.server_only_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                TransferProgress(transfer, actions)
+            }
+        } else {
+            val label = when {
+                playingNow -> stringResource(R.string.action_pause)
+                entry.finished -> stringResource(R.string.action_listen_again)
+                position > 0 -> stringResource(R.string.action_resume_with_left, formatDuration(context, duration - position))
+                else -> stringResource(R.string.action_play)
+            }
+            PrimaryButton(
+                text = label,
+                onClick = if (playingNow) actions.onPause else actions.onPlay,
+                icon = when {
+                    playingNow -> Icons.Rounded.Pause
+                    entry.finished -> Icons.Rounded.Replay
+                    else -> Icons.Rounded.PlayArrow
+                },
+                enabled = !details.item.isMissing,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // Sending the book to the server.
+            if (transfer != null) {
+                Spacer(Modifier.height(Spacing.md))
+                TransferProgress(transfer, actions)
+            }
+        }
         if (position > 0 && !entry.finished && duration > 0) {
             Spacer(Modifier.height(Spacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BookProgressBar(position.toFloat() / duration, Modifier.weight(1f))
                 Spacer(Modifier.width(Spacing.md))
                 Text("${(position * 100 / duration)}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** A download from or an upload to the server: what it is doing, its progress and a cancel button. */
+@Composable
+private fun TransferProgress(transfer: ServerTransfer, actions: DetailActions) {
+    val percent = ((transfer.progress ?: 0f) * 100).toInt()
+    val download = transfer.direction == ServerTransfer.Direction.DOWNLOAD
+    Surface(shape = Radii.card, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(start = Spacing.lg, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when (transfer.stage) {
+                        ServerTransfer.Stage.QUEUED -> stringResource(R.string.server_stage_queued)
+                        ServerTransfer.Stage.FINISHING -> stringResource(R.string.server_stage_finishing)
+                        else -> stringResource(if (download) R.string.downloading_percent else R.string.uploading_percent, percent)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                CircleIconButton(
+                    Icons.Rounded.Close,
+                    stringResource(if (download) R.string.action_cancel_download else R.string.action_cancel_upload),
+                    { actions.onCancelTransfer(transfer) },
+                    size = 40.dp,
+                    iconSize = 20.dp,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                )
+            }
+            val progress = transfer.progress
+            if (progress != null && transfer.stage == ServerTransfer.Stage.RUNNING) {
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(end = Spacing.md))
+            } else {
+                LinearProgressIndicator(Modifier.fillMaxWidth().padding(end = Spacing.md))
             }
         }
     }
@@ -518,10 +658,12 @@ private fun LazyListScope.infoItems(details: BookDetails, actions: DetailActions
             }
         }
     }
-    item {
-        Column(Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.lg)) {
-            SectionHeader(stringResource(R.string.section_file))
-            Text(details.relativePath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (details.relativePath.isNotEmpty()) {
+        item {
+            Column(Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.lg)) {
+                SectionHeader(stringResource(R.string.section_file))
+                Text(details.relativePath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -547,7 +689,7 @@ private fun LazyListScope.chapterItems(
             isCurrent = i == currentIndex,
             isPlaying = i == currentIndex && live.isPlaying,
             onClick = { actions.onChapter(chapter) },
-            enabled = !details.item.isMissing,
+            enabled = !details.item.isMissing && !details.item.onServerOnly,
             modifier = Modifier.padding(horizontal = horizontalPadding - Spacing.sm),
         )
     }

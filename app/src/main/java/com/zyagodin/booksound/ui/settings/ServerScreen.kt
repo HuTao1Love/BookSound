@@ -18,18 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -51,12 +47,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.api.WatchProfileDto
-import com.zyagodin.booksound.server.ServerOnlyBook
 import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.shared.server.ServerException
 import com.zyagodin.booksound.ui.AppNavigator
@@ -64,7 +58,6 @@ import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.navigation.appContainer
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
-import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSize
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -75,6 +68,8 @@ fun ServerScreen(navigator: AppNavigator) {
     val container = appContainer()
     val server = container.server
     val account by server.account.collectAsStateWithLifecycle()
+    val reachable by server.reachable.collectAsStateWithLifecycle()
+    val info by server.info.collectAsStateWithLifecycle()
     val settings by container.settings.state.collectAsStateWithLifecycle()
     val transfers by server.transfers.collectAsStateWithLifecycle()
     val serverBooks by remember { server.serverOnlyBooks() }.collectAsStateWithLifecycle(emptyList())
@@ -127,6 +122,21 @@ fun ServerScreen(navigator: AppNavigator) {
                             Column(Modifier.padding(Spacing.lg)) {
                                 Text(current.userName, style = MaterialTheme.typography.titleMedium)
                                 Text(current.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                info?.let { Text(stringResource(R.string.server_version, it.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                if (!reachable) {
+                                    Text(stringResource(R.string.server_offline), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Spacing.sm))
+                                }
+                                info?.takeIf { it.incompatible }?.let {
+                                    Text(
+                                        stringResource(if (it.serverOutdated) R.string.server_api_outdated else R.string.server_api_app_outdated),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(top = Spacing.sm),
+                                    )
+                                    if (!it.serverOutdated) {
+                                        TextButton(onClick = container.updates::check) { Text(stringResource(R.string.update_check)) }
+                                    }
+                                }
                                 Row(Modifier.padding(top = Spacing.md), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                     OutlinedButton(onClick = { container.sync.requestSync() }) { Text(stringResource(R.string.server_sync_now)) }
                                     TextButton(onClick = { scope.launch { server.signOut() } }) { Text(stringResource(R.string.server_sign_out)) }
@@ -174,26 +184,7 @@ fun ServerScreen(navigator: AppNavigator) {
                                 }
                             }
                         }
-                        if (transfers.isNotEmpty()) {
-                            Row(Modifier.fillMaxWidth().padding(top = Spacing.xl), verticalAlignment = Alignment.CenterVertically) {
-                                SectionHeader(stringResource(R.string.server_group_transfers), Modifier.weight(1f).padding(start = Spacing.xs))
-                                if (transfers.any { !it.isActive }) TextButton(onClick = server::clearFinished) { Text(stringResource(R.string.server_clear)) }
-                            }
-                            Card {
-                                Column { transfers.forEach { TransferRow(it) { server.cancel(it.bookId, it.direction) } } }
-                            }
-                        }
-                        SectionHeader(stringResource(R.string.server_group_books, serverBooks.size), Modifier.padding(top = Spacing.xl, start = Spacing.xs))
-                        if (serverBooks.isEmpty()) {
-                            Text(stringResource(R.string.server_books_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(Spacing.sm))
-                        }
                     }
-                }
-            }
-            if (account != null) {
-                items(serverBooks.sortedWith(compareBy({ it.entity.author ?: "" }, { it.entity.series ?: "" }, { it.entity.seriesIndex?.toDoubleOrNull() ?: 0.0 }, { it.entity.title })), key = { it.entity.id }) { book ->
-                    val transfer = transfers.firstOrNull { it.bookId == book.entity.id && it.direction == ServerTransfer.Direction.DOWNLOAD && it.isActive }
-                    ServerBookRow(book, transfer) { server.download(book.entity) }
                 }
             }
         }
@@ -280,52 +271,5 @@ private fun WatchProfileRow(profiles: List<WatchProfileDto>, selected: String?, 
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun TransferRow(transfer: ServerTransfer, onCancel: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(transfer.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val stage = when (transfer.stage) {
-                    ServerTransfer.Stage.QUEUED -> stringResource(R.string.server_stage_queued)
-                    ServerTransfer.Stage.RUNNING -> stringResource(
-                        if (transfer.direction == ServerTransfer.Direction.UPLOAD) R.string.server_uploading else R.string.server_downloading,
-                    ) + (transfer.progress?.let { " · ${(it * 100).toInt()}%" } ?: "")
-                    ServerTransfer.Stage.FINISHING -> stringResource(R.string.server_stage_finishing)
-                    ServerTransfer.Stage.DONE -> stringResource(R.string.server_stage_done)
-                    ServerTransfer.Stage.FAILED -> stringResource(R.string.server_stage_failed, transfer.error ?: "")
-                    ServerTransfer.Stage.CANCELLED -> stringResource(R.string.server_stage_cancelled)
-                }
-                Text(stage, style = MaterialTheme.typography.bodySmall, color = if (transfer.stage == ServerTransfer.Stage.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (transfer.isActive) IconButton(onClick = onCancel) { Icon(Icons.Rounded.Close, stringResource(R.string.action_cancel)) }
-        }
-        if (transfer.stage == ServerTransfer.Stage.FINISHING) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-        } else if (transfer.stage == ServerTransfer.Stage.RUNNING) {
-            transfer.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) } ?: LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun ServerBookRow(book: ServerOnlyBook, transfer: ServerTransfer?, onDownload: () -> Unit) {
-    val e = book.entity
-    val context = LocalContext.current
-    Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(listOfNotNull(e.seriesIndex?.takeIf { e.series != null }?.let { "$it." }, e.title).joinToString(" "), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val details = listOfNotNull(e.author, e.series, formatDuration(context, e.durationMs), formatSize(context, e.sizeBytes),
-                book.positionMs?.takeIf { it > 0 && !book.finished }?.let { "▶ " + formatDuration(context, it) })
-            Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (transfer != null) {
-                transfer.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs)) }
-                    ?: LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = Spacing.xs))
-            }
-        }
-        IconButton(onClick = onDownload, enabled = transfer == null) { Icon(Icons.Rounded.CloudDownload, stringResource(R.string.server_download)) }
     }
 }

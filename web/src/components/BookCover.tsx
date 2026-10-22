@@ -67,21 +67,23 @@ export default function BookCover({ book, size = 256, radius = 2, progress, shad
 }
 
 /**
- * The cover, blurred and fading into the page: behind the book and the player. In a [panel] (the side player) it
- * fills the top of that panel instead of the page.
+ * The cover, blurred and fading into the page: behind the book and the player. [contained] puts it behind a series
+ * card, [panel] at the top of the side player.
  */
-export function CoverBackdrop({ book, panel = false }: { book: BookDto; panel?: boolean }) {
+export function CoverBackdrop({ book, contained, panel, intensity = 1 }: { book: BookDto; contained?: boolean; panel?: boolean; intensity?: number }) {
   const theme = useTheme();
   const url = coverUrl(book, 256);
   const [light, dark] = paletteFor(book.metadata.title);
-  const bg = panel ? theme.palette.surface.low : theme.palette.background.default;
-  const place: SxProps<Theme> = panel
-    ? { position: "absolute", top: 0, left: 0, right: 0, height: 420 }
-    : { position: "fixed", top: 0, right: "var(--side-player, 0px)", left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, zIndex: 0 };
+  const bg = contained || panel ? theme.palette.surface.low : theme.palette.background.default;
+  const place: SxProps<Theme> = contained
+    ? { position: "absolute", inset: 0, borderRadius: "inherit" }
+    : panel
+      ? { position: "absolute", top: 0, left: 0, right: 0, height: 420 }
+      : { position: "fixed", top: 0, right: "var(--side-player, 0px)", left: { xs: 0, md: SIDEBAR_WIDTH }, height: { xs: 460, md: 560 }, zIndex: 0 };
   return (
     <Box aria-hidden sx={[place, { overflow: "hidden", pointerEvents: "none" }]}>
       {url ? (
-        <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: theme.palette.mode === "dark" ? 0.5 : 0.35 }} />
+        <Box component="img" src={url} alt="" sx={{ position: "absolute", inset: "-10%", width: "120%", height: "120%", objectFit: "cover", filter: "blur(72px) saturate(1.3)", opacity: (theme.palette.mode === "dark" ? 0.5 : 0.35) * intensity }} />
       ) : (
         <Box sx={{ position: "absolute", inset: 0, background: `radial-gradient(60% 80% at 30% 20%, ${light}55, transparent), radial-gradient(50% 70% at 80% 10%, ${dark}33, transparent)` }} />
       )}

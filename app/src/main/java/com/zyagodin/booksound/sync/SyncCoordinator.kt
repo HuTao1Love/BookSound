@@ -1,5 +1,6 @@
 package com.zyagodin.booksound.sync
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.zyagodin.booksound.core.model.BookId
 import com.zyagodin.booksound.core.model.DeviceId
@@ -20,6 +21,7 @@ import com.zyagodin.booksound.data.db.PlaybackStateEntity
 import com.zyagodin.booksound.data.library.metadata
 import com.zyagodin.booksound.data.library.toCore
 import com.zyagodin.booksound.data.settings.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,10 +59,22 @@ class SyncCoordinator(
         mutex.withLock {
             val id = device()
             for (target in only) {
-                val report = DefaultSyncEngine(target.backend, target.store, id).sync()
+                // A target that fails (a server down or answering nonsense) skips this round; the others still sync.
+                val report = try {
+                    DefaultSyncEngine(target.backend, target.store, id).sync()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Sync failed", e)
+                    SyncReport.Failed(e.message ?: e.javaClass.simpleName)
+                }
                 if (report != SyncReport.Skipped) _lastReport.value = report
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncCoordinator"
     }
 }
 
