@@ -95,7 +95,7 @@ import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSpeed
 
-enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE, OUTPUT }
+enum class PlayerSheet { SPEED, SLEEP, CHAPTERS, VOICE, OUTPUT, STARTS }
 
 /**
  * Derived, display-ready playback values. The position changes four times a second while playing,
@@ -252,6 +252,15 @@ fun PlayerScreen(navigator: AppNavigator, onClose: () -> Unit) {
             onMakeDefault = { vm.makeDefaultSound(bookId) },
             onDismiss = { sheet = null },
         )
+        PlayerSheet.STARTS -> {
+            val starts by vm.listeningStarts.collectAsStateWithLifecycle()
+            ListeningStartsSheet(
+                starts = starts,
+                chapters = details.chapters,
+                onSelect = { position -> vm.seekTo(position); sheet = null },
+                onDismiss = { sheet = null },
+            )
+        }
         PlayerSheet.CHAPTERS -> ChaptersSheet(
             chapters = details.chapters,
             currentIndex = now.chapterIndex,
@@ -432,6 +441,7 @@ private fun PlayerTopBar(now: NowPlaying, cb: PlayerCallbacks) {
         Box {
             CircleIconButton(Icons.Rounded.MoreVert, stringResource(R.string.action_more), { menu = true }, containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.starts_title)) }, onClick = { menu = false; cb.onSheet(PlayerSheet.STARTS) })
                 DropdownMenuItem(text = { Text(stringResource(R.string.action_go_to_book)) }, onClick = { menu = false; cb.onOpenBook() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.action_edit_details)) }, onClick = { menu = false; cb.onEdit() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.action_stop_playback)) }, onClick = { menu = false; cb.onStop() })

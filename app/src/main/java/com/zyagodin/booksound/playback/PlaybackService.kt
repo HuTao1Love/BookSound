@@ -81,6 +81,8 @@ class PlaybackService : MediaSessionService() {
     private var readyBookId: String? = null
     /** Voice equalizer and volume boost in the audio path; they follow the book being played. */
     private val voiceEq = VoiceEqAudioProcessor()
+    /** Where listening sessions begin, for going back to "where I started last time". */
+    private val sessions = ListeningSessions()
 
     override fun onCreate() {
         super.onCreate()
@@ -287,11 +289,23 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** Remembers where a new listening session begins (after smart rewind: where the listener really starts). */
+    private fun recordSessionStart() {
+        val bookId = player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
+        if (!sessions.started(bookId, System.currentTimeMillis())) return
+        val position = player.currentPosition
+        container.appScope.launch(Dispatchers.IO) { container.library.recordListeningStart(bookId, position) }
+    }
+
     private inner class PlayerEvents : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) startPeriodicSave() else {
+            if (isPlaying) {
+                startPeriodicSave()
+                recordSessionStart()
+            } else {
                 periodicSave?.cancel()
                 savePosition()
+                sessions.stopped(System.currentTimeMillis())
             }
             container.watchRemote.update(player.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }, isPlaying, player.currentPosition)
         }

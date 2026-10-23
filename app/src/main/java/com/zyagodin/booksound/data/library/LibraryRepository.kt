@@ -15,6 +15,7 @@ import com.zyagodin.booksound.data.db.AppDatabase
 import com.zyagodin.booksound.data.db.BookEntity
 import com.zyagodin.booksound.data.db.BookWithState
 import com.zyagodin.booksound.data.db.ChapterEntity
+import com.zyagodin.booksound.data.db.ListeningStartEntity
 import com.zyagodin.booksound.data.db.PlaybackStateEntity
 import com.zyagodin.booksound.data.settings.SettingsRepository
 import com.zyagodin.booksound.storage.DocumentStore
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /** Where a book is, as far as the BookSound server goes. */
 enum class BookLocation {
@@ -78,6 +80,12 @@ data class BookDetails(
     val speed: Float?,
 )
 
+/** Starts of listening sessions kept per book. */
+private const val KEPT_STARTS = 10
+
+/** Two starts closer than this are the same place in the book. */
+private const val SAME_PLACE_MS = 30_000L
+
 class LibraryRepository(
     private val db: AppDatabase,
     private val documents: DocumentStore,
@@ -86,6 +94,7 @@ class LibraryRepository(
 ) {
     private val books = db.books()
     private val playback = db.playback()
+    private val starts = db.listeningStarts()
     @Volatile private var deviceId: DeviceId? = null
 
     suspend fun device(): DeviceId = deviceId ?: settings.deviceId().also { deviceId = it }
@@ -136,6 +145,23 @@ class LibraryRepository(
                     dirty = true,
                 ),
             )
+        }
+    }
+
+    /** Where the book's listening sessions began, the latest first. */
+    fun observeListeningStarts(bookId: String): Flow<List<ListeningStartEntity>> = starts.observe(bookId)
+
+    /**
+     * Remembers that a listening session of the book began at [positionMs]. Starting again from (nearly) the
+     * place the last session began only moves that session's time: the list stays one entry per place.
+     */
+    suspend fun recordListeningStart(bookId: String, positionMs: Long) {
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            if (books.get(bookId) == null) return@withTransaction
+            starts.latest(bookId)?.takeIf { abs(it.positionMs - positionMs) < SAME_PLACE_MS }?.let { starts.delete(bookId, it.startedAt) }
+            starts.insert(ListeningStartEntity(bookId, now, positionMs.coerceAtLeast(0)))
+            starts.trim(bookId, KEPT_STARTS)
         }
     }
 

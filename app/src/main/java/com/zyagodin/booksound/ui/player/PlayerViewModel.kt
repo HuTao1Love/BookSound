@@ -8,19 +8,26 @@ import com.zyagodin.booksound.cast.CastSessionState
 import com.zyagodin.booksound.cast.CastTarget
 import com.zyagodin.booksound.cast.CastUiState
 import com.zyagodin.booksound.core.audio.VoicePreset
+import com.zyagodin.booksound.data.db.ListeningStartEntity
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.data.settings.AppSettings
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.playback.AudioOutput
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.playback.SleepTimerState
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModel(private val container: AppContainer) : ViewModel() {
     val cast: StateFlow<CastUiState> = container.cast.state
     val output: Flow<AudioOutput> = container.audioOutputs.current
@@ -35,6 +42,13 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
     val book: StateFlow<BookDetails?> = container.nowPlaying
     val sleep: StateFlow<SleepTimerState> = container.sleepTimer.state
     val settings: StateFlow<AppSettings> = container.settings.state
+
+    /** Where the listening sessions of the book playing began, the latest first. */
+    val listeningStarts: StateFlow<List<ListeningStartEntity>> = container.nowPlaying
+        .map { it?.item?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> id?.let { container.library.observeListeningStarts(it) } ?: flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val connection get() = container.player
     private val casting get() = container.cast.isCasting

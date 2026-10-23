@@ -1,5 +1,6 @@
 package com.zyagodin.booksound.ui.player
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +18,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -41,14 +45,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.audio.VoicePreset
 import com.zyagodin.booksound.core.audio.VolumeBoost
 import com.zyagodin.booksound.core.model.Chapter
+import com.zyagodin.booksound.data.db.ListeningStartEntity
 import com.zyagodin.booksound.playback.SleepTimerState
 import com.zyagodin.booksound.ui.components.AppBottomSheet
 import com.zyagodin.booksound.ui.components.CircleIconButton
@@ -60,6 +67,9 @@ import com.zyagodin.booksound.ui.theme.Spacing
 import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatSpeed
 import kotlin.math.roundToInt
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 private val SpeedPresets = listOf(0.8f, 1f, 1.2f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 
@@ -397,5 +407,84 @@ fun ChaptersSheet(
                 )
             }
         }
+    }
+}
+
+/**
+ * Where each listening session of the book began, the latest first: the way back after falling asleep
+ * or losing the thread ("where I started last time").
+ */
+@Composable
+fun ListeningStartsSheet(
+    starts: List<ListeningStartEntity>,
+    chapters: List<Chapter>,
+    onSelect: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AppBottomSheet(onDismiss = onDismiss) {
+        Text(
+            stringResource(R.string.starts_title),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+        )
+        Text(
+            stringResource(if (starts.isEmpty()) R.string.starts_empty else R.string.starts_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Spacing.xl),
+        )
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+            modifier = Modifier.nestedScroll(KeepFlingInList),
+        ) {
+            items(starts, key = { it.startedAt }) { start ->
+                val chapter = chapters.lastOrNull { it.startMs <= start.positionMs }?.takeIf { chapters.size > 1 }
+                Surface(
+                    onClick = { onSelect(start.positionMs) },
+                    shape = MaterialTheme.shapes.medium,
+                    color = Color.Transparent,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.heightIn(min = 56.dp).padding(horizontal = Spacing.sm, vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(Spacing.lg))
+                        Column(Modifier.weight(1f)) {
+                            Text(startedAtLabel(start.startedAt), style = MaterialTheme.typography.bodyLarge)
+                            chapter?.let {
+                                Text(
+                                    it.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(Spacing.md))
+                        Text(formatClock(start.positionMs), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "Today, 23:14", "Yesterday, 22:50", or the date and time for older ones. */
+@Composable
+private fun startedAtLabel(millis: Long): String {
+    val context = LocalContext.current
+    val zone = ZoneId.systemDefault()
+    val day = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+    val today = LocalDate.now(zone)
+    val time = DateUtils.formatDateTime(context, millis, DateUtils.FORMAT_SHOW_TIME)
+    return when (day) {
+        today -> stringResource(R.string.starts_today, time)
+        today.minusDays(1) -> stringResource(R.string.starts_yesterday, time)
+        else -> DateUtils.formatDateTime(
+            context,
+            millis,
+            DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_WEEKDAY or
+                DateUtils.FORMAT_ABBREV_WEEKDAY or DateUtils.FORMAT_ABBREV_MONTH,
+        )
     }
 }

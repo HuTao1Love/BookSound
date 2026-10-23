@@ -497,6 +497,11 @@
     <string name="skip_silence_title">Skip silence</string>
     <string name="skip_silence_hint">Long pauses in the recording are skipped</string>
     <string name="settings_boost_default">Volume boost</string>
+    <string name="starts_title">Listening starts</string>
+    <string name="starts_hint">Where each time you listened began. Tap one to go back there.</string>
+    <string name="starts_empty">Nothing yet: the place is remembered each time you start listening.</string>
+    <string name="starts_today">Today, %1$s</string>
+    <string name="starts_yesterday">Yesterday, %1$s</string>
     <string name="voice_off">Off</string>
     <string name="voice_off_hint">The recording as it is</string>
     <string name="voice_deep_male">Deep male voice</string>
