@@ -35,6 +35,13 @@ const en = {
     edit: "Edit details", cover: "Change cover", deleteTitle: "Delete this book for everyone?", deleteText: "The file is removed from the server.",
     finished: "Finished", markFinished: "Mark as finished", markUnfinished: "Mark as not finished", left: "{{time}} left",
     title: "Title", author: "Author", narratorField: "Narrator", series: "Series", seriesIndex: "Number", year: "Year", genre: "Genre", description: "Description", language: "Language",
+    findOnline: "Find on audiobook sites",
+  },
+  metadata: {
+    title: "Find on audiobook sites", query: "Search for", search: "Search", nothing: "Nothing that is this book was found.",
+    failed: "Couldn't search {{sources}}", length: "Length", applyTitle: "Take details", apply: "Fill in", back: "Back",
+    cover: "Use this cover", sameAlready: "Everything already matches.",
+    verdict: { SAME_RECORDING: "This recording", SAME_BOOK: "This book, another recording", DOUBTFUL: "Not sure", DIFFERENT: "Another book" },
   },
   player: {
     nothing: "Nothing playing", speed: "Speed", sleep: "Sleep timer", sleepOff: "Off", sleepEndOfChapter: "End of chapter", sleepMinutes: "{{count}} min",
@@ -112,6 +119,13 @@ const ru: typeof en = {
     edit: "Изменить данные", cover: "Сменить обложку", deleteTitle: "Удалить книгу для всех?", deleteText: "Файл будет удалён с сервера.",
     finished: "Прослушана", markFinished: "Отметить прослушанной", markUnfinished: "Снять отметку", left: "Осталось {{time}}",
     title: "Название", author: "Автор", narratorField: "Чтец", series: "Серия", seriesIndex: "Номер", year: "Год", genre: "Жанр", description: "Описание", language: "Язык",
+    findOnline: "Найти на сайтах аудиокниг",
+  },
+  metadata: {
+    title: "Поиск на сайтах аудиокниг", query: "Что искать", search: "Искать", nothing: "Эту книгу не нашли.",
+    failed: "Не удалось поискать на {{sources}}", length: "Длительность", applyTitle: "Взять данные", apply: "Заполнить", back: "Назад",
+    cover: "Взять эту обложку", sameAlready: "Всё уже совпадает.",
+    verdict: { SAME_RECORDING: "Эта запись", SAME_BOOK: "Эта книга, другая запись", DOUBTFUL: "Сомнительно", DIFFERENT: "Другая книга" },
   },
   player: {
     nothing: "Ничего не играет", speed: "Скорость", sleep: "Таймер сна", sleepOff: "Выкл.", sleepEndOfChapter: "Конец главы", sleepMinutes: "{{count}} мин",
