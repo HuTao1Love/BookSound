@@ -23,11 +23,13 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.audio.VoicePreset
+import com.zyagodin.booksound.core.audio.VolumeBoost
 import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.playback.SleepTimerState
 import com.zyagodin.booksound.ui.components.AppBottomSheet
@@ -211,15 +214,25 @@ private fun SleepOption(label: String, onClick: () -> Unit) {
     }
 }
 
-/** Equalizer presets for the narrator's voice; the choice is remembered for the book. */
+/** The book's sound as chosen in [VoiceSheet]. */
+data class BookSound(val preset: VoicePreset, val boostDb: Int, val skipSilence: Boolean)
+
+/**
+ * Equalizer presets for the narrator's voice, the volume boost for a quiet recording and skipping
+ * silence; each choice is remembered for the book.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceSheet(
-    preset: VoicePreset,
-    defaultPreset: VoicePreset,
+    sound: BookSound,
+    isDefault: Boolean,
     onSelect: (VoicePreset) -> Unit,
-    onMakeDefault: (VoicePreset) -> Unit,
+    onBoost: (Int) -> Unit,
+    onSkipSilence: (Boolean) -> Unit,
+    onMakeDefault: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val preset = sound.preset
     AppBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Spacing.lg).padding(bottom = Spacing.xl)) {
             Text(stringResource(R.string.voice_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = Spacing.sm))
@@ -253,10 +266,56 @@ fun VoiceSheet(
                     }
                 }
             }
+            HorizontalDivider(Modifier.padding(vertical = Spacing.md, horizontal = Spacing.sm))
+            Text(stringResource(R.string.boost_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Spacing.sm))
+            Text(
+                stringResource(R.string.boost_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+            ) {
+                VolumeBoost.LEVELS.forEach { db ->
+                    FilterChip(
+                        selected = db == sound.boostDb,
+                        onClick = { onBoost(db) },
+                        label = { Text(boostLabel(db), style = MaterialTheme.typography.labelLarge) },
+                        shape = Radii.pill,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                        modifier = Modifier.heightIn(min = 40.dp),
+                    )
+                }
+            }
+            Surface(
+                onClick = { onSkipSilence(!sound.skipSilence) },
+                shape = Radii.card,
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.sm),
+            ) {
+                Row(Modifier.heightIn(min = 56.dp).padding(horizontal = Spacing.sm, vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.skip_silence_title), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.skip_silence_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(Spacing.md))
+                    Switch(checked = sound.skipSilence, onCheckedChange = onSkipSilence)
+                }
+            }
             Spacer(Modifier.height(Spacing.md))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (preset != defaultPreset) {
-                    QuietButton(stringResource(R.string.voice_make_default), { onMakeDefault(preset) })
+                if (!isDefault) {
+                    QuietButton(stringResource(R.string.voice_make_default), onMakeDefault)
                 } else {
                     Text(stringResource(R.string.voice_is_default), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -264,6 +323,9 @@ fun VoiceSheet(
         }
     }
 }
+
+@Composable
+fun boostLabel(db: Int): String = if (db <= 0) stringResource(R.string.boost_off) else stringResource(R.string.boost_db, db)
 
 @Composable
 fun voicePresetName(preset: VoicePreset): String = stringResource(

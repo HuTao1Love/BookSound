@@ -90,10 +90,17 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
         container.settings.setBookVoicePreset(bookId, preset.takeIf { it != container.settings.state.value.voicePreset })
     }
 
-    fun makeDefaultVoicePreset(bookId: String, preset: VoicePreset) = viewModelScope.launch {
-        container.settings.setVoicePreset(preset)
-        container.settings.setBookVoicePreset(bookId, null)
+    /** Remembers the volume boost for the book; the default level makes the book follow it again. */
+    fun setVolumeBoost(bookId: String, db: Int) = viewModelScope.launch {
+        container.settings.setBookVolumeBoost(bookId, db.takeIf { it != container.settings.state.value.volumeBoostDb })
     }
+
+    /** Remembers skipping silence for the book; the default makes the book follow it again. */
+    fun setSkipSilence(bookId: String, enabled: Boolean) = viewModelScope.launch {
+        container.settings.setBookSkipSilence(bookId, enabled.takeIf { it != container.settings.state.value.skipSilence })
+    }
+
+    fun makeDefaultSound(bookId: String) = viewModelScope.launch { container.settings.makeBookSoundDefault(bookId) }
 
     fun sleepEndOfChapter() = container.sleepTimer.startEndOfChapter()
     fun extendSleep(minutes: Int) = container.sleepTimer.extend(minutes)
