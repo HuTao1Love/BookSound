@@ -1,0 +1,68 @@
+# Checks every branch and pull request before it reaches main (release.yml only runs after the merge).
+#
+# Tests of every module, the web app's type check, and debug builds of the phone and watch apps, so a change
+# that doesn't compile or breaks a test shows up on the branch, not in the release.
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push and its pull request share a group: only the newest run of a branch keeps going.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # gradle/gradle-daemon-jvm.properties asks for JDK 25.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Only main writes the cache; branches read what the releases left behind.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Test
+        run: |
+          chmod +x gradlew
+          ./gradlew :core:test :api:test :server:test :web:typecheck :app:testDebugUnitTest \
+            --continue \
+            "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8"
+
+      - name: Check the web app's API types are generated
+        run: |
+          ./gradlew :api:generateTs
+          git diff --exit-code -- web/src/api/types.gen.ts \
+            || { echo "::error::web/src/api/types.gen.ts is out of date: run ./gradlew :api:generateTs"; exit 1; }
+
+      - name: Build the apps
+        run: |
+          ./gradlew :app:assembleDebug :wear:assembleDebug \
+            "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8"
+
+      - name: Keep the test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+          if-no-files-found: ignore
