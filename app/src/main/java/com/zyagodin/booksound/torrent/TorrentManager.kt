@@ -8,30 +8,22 @@ import com.zyagodin.booksound.core.model.BookMetadata
 import com.zyagodin.booksound.core.model.EmbeddedPicture
 import com.zyagodin.booksound.core.organize.DraftPart
 import com.zyagodin.booksound.core.organize.ImportDraft
-import com.zyagodin.booksound.core.torrent.AudiobookIntegrity
-import com.zyagodin.booksound.core.torrent.IntegrityIssue
-import com.zyagodin.booksound.core.torrent.MergedReview
 import com.zyagodin.booksound.core.torrent.TorrentContentCheck
 import com.zyagodin.booksound.core.torrent.TorrentContentProblem
 import com.zyagodin.booksound.core.torrent.TorrentContentValidator
 import com.zyagodin.booksound.core.torrent.TorrentLink
 import com.zyagodin.booksound.core.torrent.TorrentLinks
-import com.zyagodin.booksound.core.torrent.TorrentReviewMerger
-import com.zyagodin.booksound.core.torrent.TorrentSuggestions
-import com.zyagodin.booksound.cover.CoverImages
 import com.zyagodin.booksound.cover.CoverStore
 import com.zyagodin.booksound.data.library.LibraryRepository
 import com.zyagodin.booksound.importer.AnalysisFailure
 import com.zyagodin.booksound.importer.AnalysisState
 import com.zyagodin.booksound.importer.EditorForm
 import com.zyagodin.booksound.importer.ImportAnalyzer
-import com.zyagodin.booksound.importer.ImportDecision
 import com.zyagodin.booksound.importer.ImportJob
 import com.zyagodin.booksound.importer.ImportManager
 import com.zyagodin.booksound.importer.ImportPlanner
 import com.zyagodin.booksound.importer.ImportSession
 import com.zyagodin.booksound.importer.ImportStage
-import com.zyagodin.booksound.importer.PlanOutcome
 import com.zyagodin.booksound.importer.SelectedCover
 import com.zyagodin.booksound.importer.SkipReason
 import com.zyagodin.booksound.importer.SkippedFile
@@ -55,9 +47,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
-import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -115,6 +105,8 @@ class TorrentManager(
     private val editing = MutableStateFlow<Set<String>>(emptySet())
     private val fetchJobs = ConcurrentHashMap<String, Job>()
     private val verifyJobs = ConcurrentHashMap<String, Job>()
+
+    private val verifier = TorrentVerifier(context, store, library, analyzer, planner)
 
     /** Torrents handed to the engine recently; adding is asynchronous. */
     private val pendingAdds = HashMap<String, Long>()
@@ -199,10 +191,10 @@ class TorrentManager(
                 is TorrentLink.Magnet -> addMagnet(link)
                 is TorrentLink.Web -> {
                     if (!network.online.value) return@withContext AddResult.Rejected(AddError.OFFLINE)
-                    when (val fetched = fetchTorrentFile(link.url)) {
-                        is Fetched.Bytes -> addTorrentBytes(fetched.bytes, null)
-                        is Fetched.Magnet -> addMagnet(fetched.link)
-                        Fetched.Failed -> AddResult.Rejected(AddError.DOWNLOAD_FAILED)
+                    when (val fetched = fetchTorrentFile(http, link.url, MAX_TORRENT_BYTES)) {
+                        is FetchedTorrent.Bytes -> addTorrentBytes(fetched.bytes, null)
+                        is FetchedTorrent.Magnet -> addMagnet(fetched.link)
+                        FetchedTorrent.Failed -> AddResult.Rejected(AddError.DOWNLOAD_FAILED)
                     }
                 }
             }
@@ -252,7 +244,7 @@ class TorrentManager(
                     dataDir = store.newDataDir(id).absolutePath,
                     bookId = UUID.randomUUID().toString(),
                 )
-                val records = withContent(base, meta, check)
+                val records = base.withContent(meta, check) { context.getString(R.string.chapter_number, it) }
                 store.dir(id).mkdirs()
                 store.writeTorrent(records.first().downloadKey, bytes)
                 store.addAll(records)
@@ -260,65 +252,6 @@ class TorrentManager(
                 AddResult.Added(id, records.size)
             }
         }
-    }
-
-    /**
-     * Fills [record] with the torrent's content. A torrent of several books gives one record per
-     * book: [record] becomes the first one (an open editor keeps showing it), the others are new.
-     */
-    private fun withContent(record: TorrentRecord, meta: TorrentMeta, content: TorrentContentCheck): List<TorrentRecord> = when (content) {
-        is TorrentContentCheck.Valid -> listOf(withBook(record, meta, content, 0))
-        is TorrentContentCheck.Collection -> {
-            val group = UUID.randomUUID().toString()
-            content.books.mapIndexed { i, book ->
-                val base = if (i == 0) record else record.copy(id = UUID.randomUUID().toString(), bookId = UUID.randomUUID().toString())
-                withBook(base, meta, book, i).copy(group = group, volume = book.volume, position = i)
-            }
-        }
-        is TorrentContentCheck.Invalid -> throw IllegalArgumentException("Invalid content: ${content.problem}")
-    }
-
-    private fun withBook(record: TorrentRecord, meta: TorrentMeta, content: TorrentContentCheck.Valid, position: Int): TorrentRecord {
-        val suggestion = TorrentSuggestions.build(meta.name, content, position) { context.getString(R.string.chapter_number, it) }
-        return record.copy(
-            name = meta.name,
-            layout = content.layout,
-            files = meta.files.map { StoredFile(it.index, it.path, it.sizeBytes, it.isPadding) },
-            wanted = content.wantedIndices,
-            suggested = StoredMetadata.of(suggestion.metadata),
-            parts = suggestion.parts.map { StoredPart(it.fileIndex, it.path, it.title, it.title, it.sizeBytes) },
-        )
-    }
-
-    private sealed interface Fetched {
-        class Bytes(val bytes: ByteArray) : Fetched
-        class Magnet(val link: TorrentLink.Magnet) : Fetched
-        data object Failed : Fetched
-    }
-
-    private fun fetchTorrentFile(url: String): Fetched = try {
-        http.newCall(Request.Builder().url(url).header("Accept", "application/x-bittorrent, */*").build()).execute().use { response ->
-            // Some sites redirect a download link to a magnet link, which OkHttp doesn't follow.
-            response.header("Location")?.takeIf { it.startsWith("magnet:", ignoreCase = true) }
-                ?.let { TorrentLinks.parseMagnet(it) }
-                ?.let { return Fetched.Magnet(it) }
-            if (!response.isSuccessful) return Fetched.Failed
-            val body = response.body.byteStream()
-            val out = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val n = body.read(buffer)
-                if (n < 0) break
-                out.write(buffer, 0, n)
-                if (out.size() > MAX_TORRENT_BYTES) return Fetched.Failed
-            }
-            Fetched.Bytes(out.toByteArray())
-        }
-    } catch (e: IOException) {
-        Log.w(TAG, "Torrent download failed", e)
-        Fetched.Failed
-    } catch (e: IllegalArgumentException) {
-        Fetched.Failed
     }
 
     // ------------------------------------------------------------------ user actions
@@ -413,7 +346,7 @@ class TorrentManager(
     fun saveReview(id: String, edited: BookMetadata, parts: List<DraftPart>, cover: EmbeddedPicture?, confirm: Boolean) = scope.launch(serial) {
         val record = store[id] ?: return@launch
         if (record.suggested == null) return@launch
-        val byUri = record.parts.associateBy { uriOf(record, it.path) }
+        val byUri = record.parts.associateBy { record.fileUri(it.path) }
         val kept = parts.mapNotNull { p -> byUri[p.sourceId]?.copy(title = p.title.trim().ifEmpty { byUri.getValue(p.sourceId).suggestedTitle }) }
         if (kept.isEmpty()) return@launch
         if (cover != null) {
@@ -486,18 +419,18 @@ class TorrentManager(
                 seriesIndex = m.seriesIndex.orEmpty(),
                 year = m.year.orEmpty(),
                 description = m.description.orEmpty(),
-                parts = record.parts.map { DraftPart(uriOf(record, it.path), it.path.substringAfterLast('/'), it.title, 0L, emptyList()) },
+                parts = record.parts.map { DraftPart(record.fileUri(it.path), it.path.substringAfterLast('/'), it.title, 0L, emptyList()) },
             )
         }
         if (session.cover.value == null && record.hasCustomCover) {
-            customCover(record.id)?.let { session.cover.value = SelectedCover(it, covers.draftFile(session.id, it), null) }
+            store.customCover(record.id)?.let { session.cover.value = SelectedCover(it, covers.draftFile(session.id, it), null) }
         }
     }
 
     /** Download size of each part of the editor's form, by source id. */
     fun partSizes(id: String): Map<String, Long> {
         val record = store[id] ?: return emptyMap()
-        return record.parts.associate { uriOf(record, it.path) to it.size }
+        return record.parts.associate { record.fileUri(it.path) to it.size }
     }
 
     // ------------------------------------------------------------------ reconcile loop
@@ -659,7 +592,8 @@ class TorrentManager(
         when (val check = TorrentContentValidator.validate(meta.files)) {
             is TorrentContentCheck.Invalid -> fail(id, TorrentFailure(TorrentFailureCode.CONTENT_INVALID, problem = check.problem.name, files = check.files))
             is TorrentContentCheck.Valid, is TorrentContentCheck.Collection -> {
-                val records = withContent(record, meta, check).map { it.copy(phase = TorrentPhase.DOWNLOADING, infoHash = meta.infoHash) }
+                val records = record.withContent(meta, check) { context.getString(R.string.chapter_number, it) }
+                    .map { it.copy(phase = TorrentPhase.DOWNLOADING, infoHash = meta.infoHash) }
                 store.dir(id).mkdirs()
                 store.writeTorrent(records.first().downloadKey, bytes)
                 store.update(id) { records.first() }
@@ -676,7 +610,7 @@ class TorrentManager(
         if (verifyJobs[r.id]?.isActive == true) return
         verifyJobs[r.id] = scope.launch(Dispatchers.IO) {
             val outcome = try {
-                verifyAndPlan(r.id)
+                verifier.verifyAndPlan(r.id)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 Log.e(TAG, "Verification failed", t)
@@ -694,70 +628,6 @@ class TorrentManager(
                 }
             }
         }.also { job -> job.invokeOnCompletion { verifyJobs.remove(r.id, job) } }
-    }
-
-    private sealed interface Verification {
-        class Planned(val request: com.zyagodin.booksound.importer.ImportRequest) : Verification
-        class Failed(val failure: TorrentFailure) : Verification
-        data object AlreadyInLibrary : Verification
-    }
-
-    private suspend fun verifyAndPlan(id: String): Verification {
-        val r = store[id] ?: return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING))
-        // A conversion interrupted by a crash may have finished just before it.
-        library.book(r.bookId)?.takeIf { !it.deleted }?.let { return Verification.AlreadyInLibrary }
-
-        val dir = File(r.dataDir)
-        val wantedFiles = r.files.filter { it.index in r.wanted }
-        val missing = wantedFiles.filter { f -> File(dir, f.path).let { !it.isFile || it.length() != f.size } }
-        if (missing.isNotEmpty()) return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING, files = missing.map { it.path }))
-
-        val inputs = wantedFiles.map { f -> File(dir, f.path) to f.path.split('/').dropLast(1) }
-        // A book of a collection is named after its folder, not after the whole torrent.
-        val analysis = analyzer.analyzeLocalFiles(inputs, r.volume ?: r.name)
-        val ready = analysis as? AnalysisState.Ready
-            ?: return Verification.Failed(TorrentFailure(TorrentFailureCode.AUDIOBOOK_INVALID, files = (analysis as? AnalysisState.Failed)?.skipped.orEmpty().map { it.name }))
-        if (ready.skipped.isNotEmpty()) {
-            return Verification.Failed(
-                TorrentFailure(TorrentFailureCode.AUDIOBOOK_INVALID, files = ready.skipped.map { "${it.name} — ${skipLabel(it.reason)}" }),
-            )
-        }
-        val problems = AudiobookIntegrity.check(r.layout ?: return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING)), ready.files)
-        if (problems.isNotEmpty()) {
-            return Verification.Failed(
-                TorrentFailure(TorrentFailureCode.AUDIOBOOK_INVALID, files = problems.map { "${it.fileName} — ${integrityLabel(it.issue)}" }),
-            )
-        }
-
-        val review = r.review() ?: return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING))
-        val pathByUri = r.files.associate { uriOf(r, it.path) to it.path }
-        val merged = when (val m = TorrentReviewMerger.merge(review, ready.draft.metadata, ready.draft.parts) { pathByUri[it] }) {
-            is MergedReview.MissingParts -> return Verification.Failed(TorrentFailure(TorrentFailureCode.FILES_MISSING, files = m.paths))
-            is MergedReview.Ready -> m
-        }
-        val cover = customCover(id) ?: ready.draft.covers.firstNotNullOfOrNull { CoverImages.normalize(it.picture.bytes) }
-        val outcome = planner.plan(
-            ImportPlanner.Input(
-                metadata = merged.metadata,
-                parts = merged.parts,
-                files = ready.files.associateBy { it.id },
-                cover = cover,
-                sourceName = r.volume ?: r.name,
-                isEdit = false,
-                existingBookId = null,
-                heldPermissions = emptyList(),
-                newBookId = r.bookId,
-                torrentId = r.id,
-                strictValidation = true,
-            ),
-            // Unattended: never overwrite anything, add "Title (2)" instead.
-            ImportDecision.KEEP_BOTH,
-        )
-        return when (outcome) {
-            is PlanOutcome.Ready -> Verification.Planned(outcome.request)
-            PlanOutcome.LibraryUnavailable -> Verification.Failed(TorrentFailure(TorrentFailureCode.CONVERSION_FAILED, context.getString(R.string.failure_library)))
-            is PlanOutcome.NeedsDecision -> Verification.Failed(TorrentFailure(TorrentFailureCode.CONVERSION_FAILED, null))
-        }
     }
 
     private fun onImportJobs(jobs: List<ImportJob>) {
@@ -855,31 +725,6 @@ class TorrentManager(
     private fun sharingDownload(r: TorrentRecord): List<TorrentRecord> = listOf(r) + store.records.value.filter {
         it.id != r.id && it.downloadKey == r.downloadKey && (it.phase == TorrentPhase.DOWNLOADING || it.phase == TorrentPhase.FETCHING_METADATA)
     }
-
-    private fun uriOf(r: TorrentRecord, path: String): String = Uri.fromFile(File(r.dataDir, path)).toString()
-
-    private fun customCover(id: String): EmbeddedPicture? {
-        val file = store.coverFile(id).takeIf { it.isFile } ?: return null
-        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
-        return EmbeddedPicture.sniffMimeType(bytes)?.let { EmbeddedPicture(bytes, it) }
-    }
-
-    private fun skipLabel(reason: SkipReason): String = context.getString(
-        when (reason) {
-            SkipReason.UNSUPPORTED -> R.string.skip_unsupported
-            SkipReason.CORRUPTED -> R.string.skip_corrupted
-            SkipReason.UNREADABLE -> R.string.skip_unreadable
-        },
-    )
-
-    private fun integrityLabel(issue: IntegrityIssue): String = context.getString(
-        when (issue) {
-            IntegrityIssue.WRONG_FORMAT -> R.string.integrity_wrong_format
-            IntegrityIssue.NO_AUDIO_STREAM -> R.string.integrity_no_audio
-            IntegrityIssue.NO_DURATION -> R.string.integrity_no_duration
-            IntegrityIssue.IMPLAUSIBLE_BITRATE -> R.string.integrity_implausible
-        },
-    )
 
     private fun formatBytes(bytes: Long): String = android.text.format.Formatter.formatShortFileSize(context, bytes)
 
