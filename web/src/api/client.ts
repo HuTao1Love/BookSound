@@ -87,4 +87,6 @@ export const paths = {
   rescan: "/api/admin/rescan",
   update: "/api/admin/update",
   watchProfiles: "/api/watch-profiles",
+  metadataSearch: "/api/metadata/search",
+  metadataCover: (url: string) => `/api/metadata/cover?url=${encodeURIComponent(url)}`,
 };
