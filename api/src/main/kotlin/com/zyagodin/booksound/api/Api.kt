@@ -42,6 +42,8 @@ object ApiPaths {
     const val ADMIN_UPDATE = "/api/admin/update"
     const val WATCH_PROFILES = "/api/watch-profiles"
     const val PREFERENCES = "/api/preferences"
+    const val METADATA_SEARCH = "/api/metadata/search"
+    const val METADATA_COVER = "/api/metadata/cover"
 
     fun book(id: String) = "$BOOKS/$id"
     fun bookFile(id: String) = "$BOOKS/$id/file"
@@ -69,6 +71,8 @@ data class StatusDto(
 object Features {
     const val TORRENTS = "torrents"
     const val TRANSCODE = "transcode"
+    /** Book details looked up on audiobook sites ([ApiPaths.METADATA_SEARCH]). */
+    const val METADATA = "metadata"
 }
 
 @Serializable
@@ -455,3 +459,69 @@ object EventTypes {
     const val TORRENT_REMOVED = "torrent_removed"
     const val LIBRARY = "library"
 }
+
+// ------------------------------------------------------------------------------------ metadata search
+
+/**
+ * What is known of a book, to look it up on audiobook sites ([ApiPaths.METADATA_SEARCH]). The book itself
+ * need not be on the server: the phone asks for its own books too. The more is given, the better the
+ * server can tell whether a site's book is this one.
+ */
+@Serializable
+data class MetadataSearchRequest(
+    val title: String,
+    val author: String? = null,
+    val narrator: String? = null,
+    val durationMs: Long? = null,
+    /** Searched for instead of the title and author when given. */
+    val query: String? = null,
+)
+
+/** A book as a site describes it. */
+@Serializable
+data class MetadataCandidateDto(
+    /** The site's id ("akniga") and name ("Аудиокниги онлайн (akniga.org)"). */
+    val source: String,
+    val sourceName: String,
+    /** The book's page on the site. */
+    val url: String,
+    val metadata: MetadataDto,
+    val durationMs: Long? = null,
+    /** Fetched through [ApiPaths.METADATA_COVER]: the browser can't load other sites' images into a canvas. */
+    val coverUrl: String? = null,
+)
+
+/** How sure the server is that a site's book is the one searched for. */
+enum class MatchVerdict {
+    /** Same title and author, and the narrator or the length agrees too: the same recording. */
+    SAME_RECORDING,
+    /** Same title and author, but another recording (or nothing to tell): the description fits, the narrator may not. */
+    SAME_BOOK,
+    /** The title fits, but not enough else is known to be sure. */
+    DOUBTFUL,
+    /** Another book. */
+    DIFFERENT,
+}
+
+/** One detail of the book compared with the site's. */
+enum class MatchState { MATCH, CONFLICT, UNKNOWN }
+
+@Serializable
+data class MetadataMatchDto(
+    val candidate: MetadataCandidateDto,
+    val verdict: MatchVerdict,
+    /** 0..1, for ordering. */
+    val score: Double,
+    val title: MatchState,
+    val author: MatchState,
+    val narrator: MatchState,
+    val duration: MatchState,
+)
+
+@Serializable
+data class MetadataSearchResponse(
+    /** Best first. */
+    val matches: List<MetadataMatchDto>,
+    /** Sites that could not be asked (unreachable, or their pages changed). */
+    val failedSources: List<String> = emptyList(),
+)
