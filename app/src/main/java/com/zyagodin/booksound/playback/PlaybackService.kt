@@ -79,7 +79,7 @@ class PlaybackService : MediaSessionService() {
     private var applyingBookSettings = false
     /** Book whose item has reached READY since it was set; only its position is trustworthy. */
     private var readyBookId: String? = null
-    /** Voice equalizer in the audio path; its preset follows the book being played. */
+    /** Voice equalizer and volume boost in the audio path; they follow the book being played. */
     private val voiceEq = VoiceEqAudioProcessor()
 
     override fun onCreate() {
@@ -132,9 +132,12 @@ class PlaybackService : MediaSessionService() {
             shakeToReset = { settings.state.value.shakeToReset },
         )
 
-        // The voice equalizer preset can change from the player sheet or settings at any time.
+        // The book's sound (voice equalizer, volume boost, skipping silence) can change from the player sheet or
+        // settings at any time.
         scope.launch {
-            settings.state.map { it.voicePresetFor(currentBookId) }.distinctUntilChanged().collect { applyVoicePreset() }
+            settings.state.map { Triple(it.voicePresetFor(currentBookId), it.volumeBoostFor(currentBookId), it.skipSilenceFor(currentBookId)) }
+                .distinctUntilChanged()
+                .collect { applySound() }
         }
 
         // A position from the watch arrives in the database; a paused player follows it.
@@ -166,8 +169,11 @@ class PlaybackService : MediaSessionService() {
         arrayOf<Renderer>(MediaCodecAudioRenderer(this, MediaCodecSelector.DEFAULT, handler, audioListener, sink))
     }
 
-    private fun applyVoicePreset() {
-        voiceEq.preset = container.settings.state.value.voicePresetFor(currentBookId)
+    private fun applySound() {
+        val settings = container.settings.state.value
+        voiceEq.preset = settings.voicePresetFor(currentBookId)
+        voiceEq.boostDb = settings.volumeBoostFor(currentBookId)
+        settings.skipSilenceFor(currentBookId).let { if (exoPlayer.skipSilenceEnabled != it) exoPlayer.skipSilenceEnabled = it }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -305,7 +311,7 @@ class PlaybackService : MediaSessionService() {
             if (bookId == currentBookId) return
             currentBookId = bookId
             container.watchRemote.update(bookId, player.isPlaying, player.currentPosition)
-            applyVoicePreset()
+            applySound()
             player.chapters = emptyList()
             if (bookId == null) return
             scope.launch {

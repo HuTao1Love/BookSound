@@ -59,6 +59,18 @@ jobs:
           ./gradlew :app:assembleDebug :wear:assembleDebug \
             "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8"
 
+      # Room writes the schema of a new database version during the build; it has to be committed for the
+      # next version's migration. Printed here so it can be copied when it was built nowhere else.
+      - name: Check the database schemas are committed
+        run: |
+          if [ -n "$(git status --porcelain -- app/schemas wear/schemas)" ]; then
+            git status --porcelain -- app/schemas wear/schemas
+            git ls-files --others --exclude-standard -- app/schemas wear/schemas | xargs -r cat
+            git diff -- app/schemas wear/schemas
+            echo "::error::Commit the database schema files above (app/schemas, wear/schemas)"
+            exit 1
+          fi
+
       - name: Keep the test reports
         if: failure()
         uses: actions/upload-artifact@v4

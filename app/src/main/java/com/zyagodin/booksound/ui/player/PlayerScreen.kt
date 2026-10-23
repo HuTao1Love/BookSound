@@ -113,7 +113,7 @@ private class NowPlaying(
     val details: BookDetails,
     val state: PlayerUiState,
     val chapterIndex: Int,
-    val voicePreset: VoicePreset,
+    val sound: BookSound,
     /** Where the phone plays (Bluetooth headphones…), and the Cast device if casting. */
     val output: AudioOutput,
     val cast: CastUiState,
@@ -186,7 +186,9 @@ fun PlayerScreen(navigator: AppNavigator, onClose: () -> Unit) {
             if (details.chapters.isEmpty()) -1 else details.chapters.indexOfLast { it.startMs <= position }.coerceAtLeast(0)
         }
     }
-    val now = NowPlaying(details, player, chapterIndex, settings.voicePresetFor(details.item.id), output, cast) { previewMs ?: playerState.value.positionMs }
+    val bookId = details.item.id
+    val sound = BookSound(settings.voicePresetFor(bookId), settings.volumeBoostFor(bookId), settings.skipSilenceFor(bookId))
+    val now = NowPlaying(details, player, chapterIndex, sound, output, cast) { previewMs ?: playerState.value.positionMs }
     val callbacks = PlayerCallbacks(
         onClose = onClose,
         onTogglePlay = vm::togglePlay,
@@ -242,10 +244,12 @@ fun PlayerScreen(navigator: AppNavigator, onClose: () -> Unit) {
             hasChapters = details.chapters.size > 1,
         )
         PlayerSheet.VOICE -> VoiceSheet(
-            preset = now.voicePreset,
-            defaultPreset = settings.voicePreset,
-            onSelect = { vm.setVoicePreset(details.item.id, it) },
-            onMakeDefault = { vm.makeDefaultVoicePreset(details.item.id, it) },
+            sound = now.sound,
+            isDefault = settings.soundIsDefault(bookId),
+            onSelect = { vm.setVoicePreset(bookId, it) },
+            onBoost = { vm.setVolumeBoost(bookId, it) },
+            onSkipSilence = { vm.setSkipSilence(bookId, it) },
+            onMakeDefault = { vm.makeDefaultSound(bookId) },
             onDismiss = { sheet = null },
         )
         PlayerSheet.CHAPTERS -> ChaptersSheet(
@@ -436,13 +440,14 @@ private fun PlayerTopBar(now: NowPlaying, cb: PlayerCallbacks) {
     }
 }
 
-/** Voice equalizer; highlighted while a preset is on for this book. */
+/** Voice equalizer, volume boost and skipping silence; highlighted while any of them is on for this book. */
 @Composable
 private fun VoiceButton(now: NowPlaying, cb: PlayerCallbacks) {
-    val on = now.voicePreset != VoicePreset.OFF
+    val sound = now.sound
+    val on = sound.preset != VoicePreset.OFF || sound.boostDb > 0 || sound.skipSilence
     CircleIconButton(
         Icons.Rounded.GraphicEq,
-        stringResource(R.string.voice_title) + if (on) ": " + voicePresetName(now.voicePreset) else "",
+        stringResource(R.string.voice_title) + if (sound.preset != VoicePreset.OFF) ": " + voicePresetName(sound.preset) else "",
         { cb.onSheet(PlayerSheet.VOICE) },
         containerColor = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
         contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
