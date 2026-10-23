@@ -1,8 +1,6 @@
 package com.zyagodin.booksound.ui.detail
 
 import android.widget.Toast
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,38 +15,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Watch
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,18 +53,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.zyagodin.booksound.AppContainer
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.data.library.BookDetails
-import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.playback.PlayerUiState
 import com.zyagodin.booksound.server.ServerTransfer
 import com.zyagodin.booksound.ui.AppNavigator
@@ -88,91 +71,15 @@ import com.zyagodin.booksound.ui.components.LoadingDots
 import com.zyagodin.booksound.ui.components.MessageState
 import com.zyagodin.booksound.ui.components.NameLinksText
 import com.zyagodin.booksound.ui.components.PrimaryButton
-import com.zyagodin.booksound.ui.components.QuietButton
 import com.zyagodin.booksound.ui.components.DeleteFromServerDialog
 import com.zyagodin.booksound.ui.components.RemoveBookDialog
-import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.components.Tag
 import com.zyagodin.booksound.ui.components.seriesLabel
 import com.zyagodin.booksound.ui.navigation.appViewModel
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
-import com.zyagodin.booksound.util.formatClock
 import com.zyagodin.booksound.util.formatDuration
 import com.zyagodin.booksound.util.formatSize
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-
-sealed interface DetailState {
-    data object Loading : DetailState
-    data object Gone : DetailState
-    data class Loaded(val details: BookDetails) : DetailState
-}
-
-class BookDetailViewModel(private val container: AppContainer, private val bookId: String) : ViewModel() {
-    /** The phone's book; a book only on the server has a page too, until it is downloaded and becomes the phone's. */
-    val state: StateFlow<DetailState> = combine(container.library.observeDetails(bookId), container.server.serverDetails(bookId)) { local, remote ->
-        when {
-            local != null && !local.item.entry.book.sync.deleted -> DetailState.Loaded(local)
-            remote != null -> DetailState.Loaded(remote)
-            else -> DetailState.Gone
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailState.Loading)
-
-    /** The book moving to or from the server. */
-    val transfer: StateFlow<ServerTransfer?> = container.server.transfers
-        .map { list -> list.lastOrNull { it.bookId == bookId && it.isActive } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    val player: StateFlow<PlayerUiState> = container.player.state
-    val watchConnected: StateFlow<Boolean> = container.watchSender.watchConnected
-
-    /** Signed in to a server that doesn't have this book yet. */
-    val canUpload: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(container.server.account, container.server.serverBookIds()) { account, ids ->
-        account != null && bookId !in ids
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
-    /** The server has this book. */
-    val onServer: StateFlow<Boolean> = container.server.serverBookIds().map { bookId in it }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
-    /** The user may delete books from the server too (an admin). */
-    val canDeleteOnServer: StateFlow<Boolean> = container.server.canDeleteOnServer
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
-    init {
-        container.watchSender.refreshWatch()
-    }
-
-    fun play() = container.player.play(bookId)
-    fun pause() = container.player.pause()
-    fun playChapter(chapter: Chapter) = container.player.play(bookId, chapter.startMs)
-    fun setFinished(finished: Boolean) = viewModelScope.launch { container.library.setFinished(bookId, finished) }
-    fun rescan() = viewModelScope.launch { container.scanner.scan() }
-    fun sendToWatch(title: String) = container.watchSender.send(bookId, title)
-    fun uploadToServer(title: String) = container.server.upload(bookId, title)
-    fun download() = viewModelScope.launch { container.server.download(bookId) }
-    fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
-
-    fun deleteFromServer() = container.server.deleteFromServer(bookId)
-
-    // The app's scope: the page closes right away.
-    fun remove(deleteFile: Boolean, deleteFromServer: Boolean) = container.appScope.launch {
-        if (deleteFromServer) container.server.deleteFromServer(bookId)
-        if (container.player.state.value.bookId == bookId) container.player.stop()
-        container.library.remove(bookId, deleteFile)
-    }
-
-    fun startEdit(): String {
-        val session = container.importSessions.create(ImportSelection.ExistingBook(bookId))
-        session.analysisJob = container.appScope.launch { container.importAnalyzer.analyze(session) }
-        return session.id
-    }
-}
 
 @Composable
 fun DetailPlaceholder() {
@@ -295,7 +202,7 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
  * is read only where it is shown; the rest follows derived values that change far less often.
  */
 @Stable
-private class LivePlayback(private val bookId: String, private val state: State<PlayerUiState>) {
+internal class LivePlayback(private val bookId: String, private val state: State<PlayerUiState>) {
     val isCurrent by derivedStateOf { state.value.bookId == bookId }
     val playWhenReady by derivedStateOf { isCurrent && state.value.playWhenReady }
     val isPlaying by derivedStateOf { isCurrent && state.value.isPlaying }
@@ -316,7 +223,7 @@ private fun rememberCurrentChapter(details: BookDetails, live: LivePlayback): In
     return index
 }
 
-private class DetailActions(
+internal class DetailActions(
     val onBack: () -> Unit,
     val onPlay: () -> Unit,
     val onPause: () -> Unit,
@@ -549,195 +456,6 @@ private fun PlayBlock(details: BookDetails, live: LivePlayback, actions: DetailA
                 BookProgressBar(position.toFloat() / duration, Modifier.weight(1f))
                 Spacer(Modifier.width(Spacing.md))
                 Text("${(position * 100 / duration)}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-/** A download from or an upload to the server: what it is doing, its progress and a cancel button. */
-@Composable
-private fun TransferProgress(transfer: ServerTransfer, actions: DetailActions) {
-    val percent = ((transfer.progress ?: 0f) * 100).toInt()
-    val download = transfer.direction == ServerTransfer.Direction.DOWNLOAD
-    Surface(shape = Radii.card, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(start = Spacing.lg, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when (transfer.stage) {
-                        ServerTransfer.Stage.QUEUED -> stringResource(R.string.server_stage_queued)
-                        ServerTransfer.Stage.FINISHING -> stringResource(R.string.server_stage_finishing)
-                        else -> stringResource(if (download) R.string.downloading_percent else R.string.uploading_percent, percent)
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                CircleIconButton(
-                    Icons.Rounded.Close,
-                    stringResource(if (download) R.string.action_cancel_download else R.string.action_cancel_upload),
-                    { actions.onCancelTransfer(transfer) },
-                    size = 40.dp,
-                    iconSize = 20.dp,
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                )
-            }
-            val progress = transfer.progress
-            if (progress != null && transfer.stage == ServerTransfer.Stage.RUNNING) {
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(end = Spacing.md))
-            } else {
-                LinearProgressIndicator(Modifier.fillMaxWidth().padding(end = Spacing.md))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatsRow(details: BookDetails) {
-    val context = LocalContext.current
-    Surface(shape = Radii.card, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp)) {
-        Row(Modifier.padding(vertical = Spacing.md), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Stat(stringResource(R.string.stat_length), formatDuration(context, details.item.entry.book.durationMs))
-            Stat(stringResource(R.string.stat_chapters), details.chapters.size.toString())
-            Stat(stringResource(R.string.stat_size), formatSize(context, details.fileSize))
-            details.item.metadata.year?.let { Stat(stringResource(R.string.stat_year), it) }
-        }
-    }
-}
-
-@Composable
-private fun Stat(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleSmall)
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-private fun LazyListScope.infoItems(details: BookDetails, actions: DetailActions, horizontalPadding: androidx.compose.ui.unit.Dp = Spacing.screen) {
-    if (details.item.isMissing) {
-        item {
-            Surface(
-                shape = Radii.card,
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).padding(top = Spacing.xl),
-            ) {
-                Column(Modifier.padding(Spacing.lg)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                        Spacer(Modifier.width(Spacing.sm))
-                        Text(stringResource(R.string.file_missing_title), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                    }
-                    Spacer(Modifier.height(Spacing.xs))
-                    Text(stringResource(R.string.file_missing_message, details.relativePath), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                    Row {
-                        QuietButton(stringResource(R.string.action_rescan), actions.onRescan, icon = Icons.Rounded.Refresh, color = MaterialTheme.colorScheme.onErrorContainer)
-                        QuietButton(stringResource(R.string.action_remove), actions.onRemove, icon = Icons.Rounded.DeleteOutline, color = MaterialTheme.colorScheme.onErrorContainer)
-                    }
-                }
-            }
-        }
-    }
-    details.item.metadata.description?.let { description ->
-        item {
-            var expanded by rememberSaveable { mutableStateOf(false) }
-            Column(Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.xl)) {
-                SectionHeader(stringResource(R.string.section_about))
-                Text(
-                    description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = if (expanded) Int.MAX_VALUE else 5,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.animateContentSize().clickable { expanded = !expanded },
-                )
-                if (!expanded && description.length > 280) {
-                    Text(
-                        stringResource(R.string.action_more),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = Spacing.xs).clickable { expanded = true },
-                    )
-                }
-            }
-        }
-    }
-    if (details.relativePath.isNotEmpty()) {
-        item {
-            Column(Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.lg)) {
-                SectionHeader(stringResource(R.string.section_file))
-                Text(details.relativePath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-private fun LazyListScope.chapterItems(
-    details: BookDetails,
-    currentIndex: Int,
-    live: LivePlayback,
-    actions: DetailActions,
-    horizontalPadding: androidx.compose.ui.unit.Dp = Spacing.screen,
-) {
-    if (details.chapters.isEmpty()) return
-    item {
-        SectionHeader(
-            stringResource(R.string.section_chapters_count, details.chapters.size),
-            Modifier.padding(horizontal = horizontalPadding).padding(top = Spacing.xl),
-        )
-    }
-    itemsIndexed(details.chapters, key = { _, c -> "ch-${c.index}" }) { i, chapter ->
-        ChapterRow(
-            chapter = chapter,
-            number = i + 1,
-            isCurrent = i == currentIndex,
-            isPlaying = i == currentIndex && live.isPlaying,
-            onClick = { actions.onChapter(chapter) },
-            enabled = !details.item.isMissing && !details.item.onServerOnly,
-            modifier = Modifier.padding(horizontal = horizontalPadding - Spacing.sm),
-        )
-    }
-}
-
-@Composable
-fun ChapterRow(
-    chapter: Chapter,
-    number: Int,
-    isCurrent: Boolean,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    progress: Float? = null,
-) {
-    val color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = MaterialTheme.shapes.medium,
-        color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else androidx.compose.ui.graphics.Color.Transparent,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(36.dp)) {
-                    if (isPlaying) {
-                        Icon(Icons.Rounded.GraphicEq, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-                    } else {
-                        Text(number.toString(), style = MaterialTheme.typography.labelMedium, color = if (isCurrent) color else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Text(
-                    chapter.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                    color = color,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(Spacing.md))
-                Text(formatClock(chapter.durationMs), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (progress != null && isCurrent) {
-                Spacer(Modifier.height(Spacing.sm))
-                BookProgressBar(progress, Modifier.padding(start = 36.dp), height = 3.dp)
             }
         }
     }
