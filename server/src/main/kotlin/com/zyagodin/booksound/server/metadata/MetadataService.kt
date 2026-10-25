@@ -10,9 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.io.IOException
 import java.net.ProxySelector
 import java.net.URI
@@ -26,6 +29,15 @@ import java.util.Collections
 interface PageFetcher {
     suspend fun text(url: String): String
     suspend fun bytes(url: String, limit: Long): ByteArray
+
+    /**
+     * Downloads [url] into [target], refusing more than [limit] bytes. A [target] that already has bytes is
+     * continued from where it stopped. [progress] gets the bytes so far and the total when known.
+     */
+    suspend fun download(url: String, target: File, limit: Long, progress: (Long, Long?) -> Unit) {
+        target.writeBytes(bytes(url, limit))
+        progress(target.length(), target.length())
+    }
 }
 
 /**
@@ -153,25 +165,79 @@ class HttpPageFetcher : PageFetcher {
         return bytes
     }
 
-    private suspend fun send(url: String, accept: String): ByteArray = withContext(Dispatchers.IO) {
+    override suspend fun download(url: String, target: File, limit: Long, progress: (Long, Long?) -> Unit) = withContext(Dispatchers.IO) {
+        var attempt = 0
+        while (true) {
+            try {
+                downloadOnce(url, target, limit, progress)
+                return@withContext
+            } catch (e: IOException) {
+                // A dropped connection continues where it stopped; a refusal or a full disk doesn't get better.
+                if (++attempt >= DOWNLOAD_ATTEMPTS || e is RefusedException) throw e
+                log.info("Download of {} interrupted ({}), continuing", url, e.toString())
+                kotlinx.coroutines.delay(2_000L * attempt)
+            }
+        }
+    }
+
+    private suspend fun downloadOnce(url: String, target: File, limit: Long, progress: (Long, Long?) -> Unit) {
+        val have = if (target.isFile) target.length() else 0L
+        val builder = request(url, "*/*", Duration.ofMinutes(30))
+        if (have > 0) builder.header("Range", "bytes=$have-")
+        val response = http.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
+        response.body().use { body ->
+            val status = response.statusCode()
+            // 416: asked to continue past the end, the file is whole.
+            if (status == 416 && have > 0) return
+            if (status !in 200..299) throw RefusedException("HTTP $status from $url")
+            val resumed = status == 206
+            val length = response.headers().firstValueAsLong("Content-Length").let { if (it.isPresent) it.asLong else -1L }
+            val total = if (length >= 0) length + (if (resumed) have else 0) else null
+            if (total != null && total > limit) throw RefusedException("Too large: $url")
+            java.io.FileOutputStream(target, resumed).use { out ->
+                var written = if (resumed) have else 0L
+                val buffer = ByteArray(256 * 1024)
+                val ctx = currentCoroutineContext()
+                while (true) {
+                    ctx.ensureActive()
+                    val n = body.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    written += n
+                    if (written > limit) throw RefusedException("Too large: $url")
+                    progress(written, total)
+                }
+                if (total != null && written < total) throw IOException("Connection closed at $written of $total bytes")
+            }
+        }
+    }
+
+    private fun request(url: String, accept: String, timeout: Duration): HttpRequest.Builder {
         val uri = URI(url)
-        if (uri.scheme != "https" && uri.scheme != "http") throw IOException("Not a web address: $url")
-        val request = HttpRequest.newBuilder(uri)
+        if (uri.scheme != "https" && uri.scheme != "http") throw RefusedException("Not a web address: $url")
+        return HttpRequest.newBuilder(uri)
             .header("User-Agent", USER_AGENT)
             .header("Accept", accept)
             .header("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.5")
-            .timeout(Duration.ofSeconds(15))
+            .timeout(timeout)
             .GET()
-            .build()
-        val response = http.send(request, HttpResponse.BodyHandlers.ofByteArray())
+    }
+
+    private suspend fun send(url: String, accept: String): ByteArray = withContext(Dispatchers.IO) {
+        val response = http.send(request(url, accept, Duration.ofSeconds(15)).build(), HttpResponse.BodyHandlers.ofByteArray())
         if (response.statusCode() !in 200..299) throw IOException("HTTP ${response.statusCode()} from $url")
         response.body()
     }
+
+    /** A download that trying again won't help. */
+    private class RefusedException(message: String) : IOException(message)
 
     private companion object {
         // The desktop layout: the parsers know it (the mobile host serves other markup).
         const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0"
         const val CACHE_SIZE = 200
         const val CACHE_MS = 60 * 60 * 1000L
+        const val DOWNLOAD_ATTEMPTS = 5
+        val log = LoggerFactory.getLogger(HttpPageFetcher::class.java)!!
     }
 }
