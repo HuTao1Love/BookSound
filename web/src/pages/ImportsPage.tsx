@@ -24,13 +24,14 @@ import { uploadFile } from "../api/upload";
 import { PageHeader } from "../components/Ui";
 import { formatBytes } from "../library";
 
-export default function ImportsPage({ torrents }: { torrents: boolean }) {
+export default function ImportsPage({ torrents, sites }: { torrents: boolean; sites: boolean }) {
   const { t } = useTranslation();
   return (
     <Stack spacing={3}>
       <PageHeader title={t("nav.imports")} subtitle={t("imports.subtitle")} />
       <UploadCard />
       {torrents ? <TorrentsCard /> : <Alert severity="info">{t("imports.torrentsUnavailable")}</Alert>}
+      {sites && <SiteCard />}
       <JobsCard />
     </Stack>
   );
@@ -93,6 +94,49 @@ function UploadCard() {
               <LinearProgress variant="determinate" value={(progress.sent / progress.total) * 100} />
             </Box>
           )}
+          {message && <Alert severity={message.ok ? "success" : "error"} onClose={() => setMessage(null)}>{message.text}</Alert>}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+// -------------------------------------------------------------------------------------------- sites
+
+/** A book's page on knigavuhe.org: the server downloads it and the job shows up with the conversions. */
+function SiteCard() {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const add = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const job = await api.post<ImportJobDto>(paths.siteImports, { url: link.trim() });
+      client.setQueryData<ImportJobDto[]>(keys.imports, (old) => [job, ...(old ?? []).filter((j) => j.id !== job.id)]);
+      setLink("");
+      setMessage({ ok: true, text: t("imports.siteAdded", { title: job.title }) });
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={1.5}>
+          <Typography variant="h6">{t("imports.site")}</Typography>
+          <Typography variant="body2" color="text.secondary">{t("imports.siteHint")}</Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" } }}>
+            <TextField size="small" fullWidth placeholder={t("imports.siteLink")} value={link} onChange={(e) => setLink(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && link.trim() && !busy && void add()} />
+            <Button variant="contained" onClick={() => void add()} disabled={!link.trim() || busy} sx={{ whiteSpace: "nowrap", flexShrink: 0 }}>{t("imports.siteAdd")}</Button>
+          </Stack>
           {message && <Alert severity={message.ok ? "success" : "error"} onClose={() => setMessage(null)}>{message.text}</Alert>}
         </Stack>
       </CardContent>

@@ -198,7 +198,7 @@ export interface ImportJobDto {
   finishedAt?: number | null;
 }
 
-export type ImportStage = "QUEUED" | "PREPARING" | "CONVERTING" | "WRITING" | "VERIFYING" | "FINISHING" | "DONE" | "FAILED" | "CANCELLED";
+export type ImportStage = "QUEUED" | "DOWNLOADING" | "PREPARING" | "CONVERTING" | "WRITING" | "VERIFYING" | "FINISHING" | "DONE" | "FAILED" | "CANCELLED";
 
 export interface ImportFromUploadsRequest {
   uploadIds: string[];
@@ -361,3 +361,7 @@ export interface MetadataCandidateDto {
 export type MatchVerdict = "SAME_RECORDING" | "SAME_BOOK" | "DOUBTFUL" | "DIFFERENT";
 
 export type MatchState = "MATCH" | "CONFLICT" | "UNKNOWN";
+
+export interface SiteImportRequest {
+  url: string;
+}

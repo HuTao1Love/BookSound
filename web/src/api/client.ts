@@ -88,5 +88,6 @@ export const paths = {
   update: "/api/admin/update",
   watchProfiles: "/api/watch-profiles",
   metadataSearch: "/api/metadata/search",
+  siteImports: "/api/imports/site",
   metadataCover: (url: string) => `/api/metadata/cover?url=${encodeURIComponent(url)}`,
 };

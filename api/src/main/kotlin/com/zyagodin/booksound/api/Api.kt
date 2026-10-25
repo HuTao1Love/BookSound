@@ -44,6 +44,7 @@ object ApiPaths {
     const val PREFERENCES = "/api/preferences"
     const val METADATA_SEARCH = "/api/metadata/search"
     const val METADATA_COVER = "/api/metadata/cover"
+    const val SITE_IMPORTS = "/api/imports/site"
 
     fun book(id: String) = "$BOOKS/$id"
     fun bookFile(id: String) = "$BOOKS/$id/file"
@@ -73,6 +74,8 @@ object Features {
     const val TRANSCODE = "transcode"
     /** Book details looked up on audiobook sites ([ApiPaths.METADATA_SEARCH]). */
     const val METADATA = "metadata"
+    /** Books downloaded from knigavuhe.org ([ApiPaths.SITE_IMPORTS]). */
+    const val SITE_IMPORT = "site_import"
 }
 
 @Serializable
@@ -291,7 +294,12 @@ data class ImportFromUploadsRequest(
 )
 
 @Serializable
-enum class ImportStage { QUEUED, PREPARING, CONVERTING, WRITING, VERIFYING, FINISHING, DONE, FAILED, CANCELLED }
+enum class ImportStage {
+    QUEUED,
+    /** A book from a site is being downloaded ([ApiPaths.SITE_IMPORTS]). */
+    DOWNLOADING,
+    PREPARING, CONVERTING, WRITING, VERIFYING, FINISHING, DONE, FAILED, CANCELLED,
+}
 
 @Serializable
 data class ImportJobDto(
@@ -517,6 +525,10 @@ data class MetadataMatchDto(
     val narrator: MatchState,
     val duration: MatchState,
 )
+
+/** A book page on knigavuhe.org to download and import; answered with the import job. */
+@Serializable
+data class SiteImportRequest(val url: String)
 
 @Serializable
 data class MetadataSearchResponse(

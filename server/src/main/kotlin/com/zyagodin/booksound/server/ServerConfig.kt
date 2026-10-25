@@ -21,7 +21,7 @@ data class ServerConfig(
     /** Watchtower's HTTP API, e.g. http://watchtower:8080, and its token. */
     val watchtowerUrl: String? = null,
     val watchtowerToken: String? = null,
-    /** Book details may be looked up on audiobook sites (the server then fetches their pages). */
+    /** Book details may be looked up on audiobook sites, and books downloaded from them (the server then fetches their pages). */
     val metadataSearchEnabled: Boolean = true,
 ) {
     val libraryDir get() = File(dataDir, "library")

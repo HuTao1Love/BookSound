@@ -87,6 +87,9 @@ The server is optional: the app works without it exactly as before. With it:
 - **Book details from audiobook sites** (akniga.org, knigavuhe.org): the server searches them and tells for
   each result whether it is the same recording (title, author, and the narrator or the length agree), the
   same book in another recording, or doubtful; the web app's edit dialog fills the chosen details and cover.
+- **Books from knigavuhe.org**: paste a book's page on the web app's *Add* page; the server downloads its chapters
+  (plain mp3 files the site's player lists with their lengths), checks them like a torrent's and makes one M4B with
+  the site's details, cover and a chapter per file.
 
 ### Run it
 
@@ -120,7 +123,7 @@ Settings are environment variables (`/etc/booksound.env` for LXC):
 | `BOOKSOUND_PORT` | `8080` | Web app and API. |
 | `BOOKSOUND_TRUSTED_PROXIES` | none | Addresses allowed to pass the client address and scheme in `X-Forwarded-*` (the router). |
 | `BOOKSOUND_TORRENTS` | on | `off` disables torrents. |
-| `BOOKSOUND_METADATA_SEARCH` | on | `off` stops looking book details up on audiobook sites (the server then fetches no outside pages). |
+| `BOOKSOUND_METADATA_SEARCH` | on | `off` stops looking book details up on audiobook sites and downloading books from knigavuhe.org (the server then fetches no outside pages). |
 | `BOOKSOUND_FFMPEG` | `ffmpeg` | Path to ffmpeg. |
 | `BOOKSOUND_UPDATER` | `systemd` (LXC), none | What installs updates from the admin page: `systemd` or `watchtower`. |
 | `BOOKSOUND_WATCHTOWER_URL`, `_TOKEN` | none | Watchtower's HTTP API, for `BOOKSOUND_UPDATER=watchtower`. |

@@ -22,9 +22,12 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
 
-/** A file of an import source and the folders between the source's root and it. */
+/**
+ * A file of an import source and the folders between the source's root and it. [name] stands for the file's
+ * own name where that isn't the one to read titles from (downloads are stored under plain names).
+ */
 @Serializable
-data class SourceFileRef(val path: String, val relativeDir: List<String> = emptyList())
+data class SourceFileRef(val path: String, val relativeDir: List<String> = emptyList(), val name: String? = null)
 
 /** What a job does; stored with the job so it can start over after a restart. */
 @Serializable
@@ -108,6 +111,9 @@ class ImportService(
 
     /** Runs a watch job; set by the watch copies service. */
     var watchRunner: (suspend (WatchSpec, File, (Float) -> Unit) -> Unit)? = null
+
+    /** Downloads a book from a site into the job's folder and tells how to import it; set by the site imports. */
+    var siteDownloader: (suspend (SiteImportSpec, File, (ImportStage, Float?) -> Unit) -> ImportSpec)? = null
 
     fun start() {
         val stored = db.tx { query("SELECT body FROM import_jobs ORDER BY created_at") { it.str("body")!! } }
@@ -211,6 +217,10 @@ class ImportService(
         try {
             val bookId = when (val spec = job.spec) {
                 is ImportSpec -> pipeline.run(job.id, spec, workDir, report)
+                is SiteImportSpec -> {
+                    val download = siteDownloader ?: throw ImportFailure("Imports from sites are turned off")
+                    pipeline.run(job.id, download(spec, workDir, report), workDir, report)
+                }
                 is WatchSpec -> {
                     report(ImportStage.CONVERTING, 0f)
                     val runner = watchRunner ?: throw ImportFailure("Watch copies are unavailable")
