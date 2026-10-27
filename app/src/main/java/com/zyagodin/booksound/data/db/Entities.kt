@@ -87,3 +87,18 @@ data class BookWithState(
     @ColumnInfo(name = "last_played_at") val lastPlayedAt: Long?,
     @ColumnInfo(name = "chapter_count") val chapterCount: Int,
 )
+
+/**
+ * Where a listening session of a book began: the place to go back to after falling asleep or losing
+ * the thread ("where I started last time"). Only the latest few per book are kept.
+ */
+@Entity(
+    tableName = "listening_starts",
+    primaryKeys = ["book_id", "started_at"],
+    foreignKeys = [ForeignKey(entity = BookEntity::class, parentColumns = ["id"], childColumns = ["book_id"], onDelete = ForeignKey.CASCADE)],
+)
+data class ListeningStartEntity(
+    @ColumnInfo(name = "book_id") val bookId: String,
+    @ColumnInfo(name = "started_at") val startedAt: Long,
+    @ColumnInfo(name = "position_ms") val positionMs: Long,
+)

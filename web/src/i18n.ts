@@ -35,6 +35,13 @@ const en = {
     edit: "Edit details", cover: "Change cover", deleteTitle: "Delete this book for everyone?", deleteText: "The file is removed from the server.",
     finished: "Finished", markFinished: "Mark as finished", markUnfinished: "Mark as not finished", left: "{{time}} left",
     title: "Title", author: "Author", narratorField: "Narrator", series: "Series", seriesIndex: "Number", year: "Year", genre: "Genre", description: "Description", language: "Language",
+    findOnline: "Find on audiobook sites",
+  },
+  metadata: {
+    title: "Find on audiobook sites", query: "Search for", search: "Search", nothing: "Nothing that is this book was found.",
+    failed: "Couldn't search {{sources}}", length: "Length", applyTitle: "Take details", apply: "Fill in", back: "Back",
+    cover: "Use this cover", sameAlready: "Everything already matches.",
+    verdict: { SAME_RECORDING: "This recording", SAME_BOOK: "This book, another recording", DOUBTFUL: "Not sure", DIFFERENT: "Another book" },
   },
   player: {
     nothing: "Nothing playing", speed: "Speed", sleep: "Sleep timer", sleepOff: "Off", sleepEndOfChapter: "End of chapter", sleepMinutes: "{{count}} min",
@@ -49,9 +56,11 @@ const en = {
     jobs: "Conversions", torrents: "Torrents", noJobs: "Nothing is converting", noTorrents: "No torrents", cancel: "Cancel", remove: "Remove",
     review: "Review", reviewTitle: "Book details", files: "Files", convert: "Save and convert", uploading: "Uploading {{name}}…", uploadStarted: "Upload finished, converting",
     sourceName: "Book name", peers_one: "{{count}} peer", peers_other: "{{count}} peers",
-    stage: { QUEUED: "Waiting", PREPARING: "Reading files", CONVERTING: "Converting", WRITING: "Writing", VERIFYING: "Checking", FINISHING: "Finishing", DONE: "Done", FAILED: "Failed", CANCELLED: "Cancelled" },
+    stage: { QUEUED: "Waiting", DOWNLOADING: "Downloading", PREPARING: "Reading files", CONVERTING: "Converting", WRITING: "Writing", VERIFYING: "Checking", FINISHING: "Finishing", DONE: "Done", FAILED: "Failed", CANCELLED: "Cancelled" },
     phase: { FETCHING_METADATA: "Getting file list", AWAITING_REVIEW: "Waiting for review", DOWNLOADING: "Downloading", DOWNLOADED: "Downloaded", VERIFYING: "Checking", CONVERTING: "Converting", COMPLETED: "In the library", FAILED: "Failed", PAUSED: "Paused" },
     torrentsUnavailable: "Torrents are not available on this server.",
+    site: "From knigavuhe.org", siteHint: "A book's page on knigavuhe.org: the server downloads its chapters and makes one M4B with them.",
+    siteLink: "Link to the book's page", siteAdd: "Download", siteAdded: "Downloading “{{title}}”",
     incoming: "Arriving from {{from}}", clearFinished: "Clear finished", open: "Open",
   },
   account: {
@@ -112,6 +121,13 @@ const ru: typeof en = {
     edit: "Изменить данные", cover: "Сменить обложку", deleteTitle: "Удалить книгу для всех?", deleteText: "Файл будет удалён с сервера.",
     finished: "Прослушана", markFinished: "Отметить прослушанной", markUnfinished: "Снять отметку", left: "Осталось {{time}}",
     title: "Название", author: "Автор", narratorField: "Чтец", series: "Серия", seriesIndex: "Номер", year: "Год", genre: "Жанр", description: "Описание", language: "Язык",
+    findOnline: "Найти на сайтах аудиокниг",
+  },
+  metadata: {
+    title: "Поиск на сайтах аудиокниг", query: "Что искать", search: "Искать", nothing: "Эту книгу не нашли.",
+    failed: "Не удалось поискать на {{sources}}", length: "Длительность", applyTitle: "Взять данные", apply: "Заполнить", back: "Назад",
+    cover: "Взять эту обложку", sameAlready: "Всё уже совпадает.",
+    verdict: { SAME_RECORDING: "Эта запись", SAME_BOOK: "Эта книга, другая запись", DOUBTFUL: "Сомнительно", DIFFERENT: "Другая книга" },
   },
   player: {
     nothing: "Ничего не играет", speed: "Скорость", sleep: "Таймер сна", sleepOff: "Выкл.", sleepEndOfChapter: "Конец главы", sleepMinutes: "{{count}} мин",
@@ -126,9 +142,11 @@ const ru: typeof en = {
     jobs: "Конвертация", torrents: "Торренты", noJobs: "Ничего не конвертируется", noTorrents: "Торрентов нет", cancel: "Отменить", remove: "Убрать",
     review: "Проверить", reviewTitle: "Данные книги", files: "Файлы", convert: "Сохранить и конвертировать", uploading: "Загрузка {{name}}…", uploadStarted: "Загружено, идёт конвертация",
     sourceName: "Название книги", peers_one: "{{count}} пир", peers_other: "{{count}} пиров",
-    stage: { QUEUED: "В очереди", PREPARING: "Чтение файлов", CONVERTING: "Конвертация", WRITING: "Запись", VERIFYING: "Проверка", FINISHING: "Завершение", DONE: "Готово", FAILED: "Ошибка", CANCELLED: "Отменено" },
+    stage: { QUEUED: "В очереди", DOWNLOADING: "Скачивание", PREPARING: "Чтение файлов", CONVERTING: "Конвертация", WRITING: "Запись", VERIFYING: "Проверка", FINISHING: "Завершение", DONE: "Готово", FAILED: "Ошибка", CANCELLED: "Отменено" },
     phase: { FETCHING_METADATA: "Получение списка файлов", AWAITING_REVIEW: "Ждёт проверки", DOWNLOADING: "Скачивается", DOWNLOADED: "Скачан", VERIFYING: "Проверка", CONVERTING: "Конвертация", COMPLETED: "В библиотеке", FAILED: "Ошибка", PAUSED: "Пауза" },
     torrentsUnavailable: "Торренты на этом сервере недоступны.",
+    site: "С knigavuhe.org", siteHint: "Страница книги на knigavuhe.org: сервер скачает главы и соберёт из них один M4B.",
+    siteLink: "Ссылка на страницу книги", siteAdd: "Скачать", siteAdded: "Скачивается «{{title}}»",
     incoming: "Загружается с {{from}}", clearFinished: "Очистить завершённые", open: "Открыть",
   },
   account: {
