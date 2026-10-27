@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.bouncycastle.prov)
     implementation(libs.twelvemonkeys.webp)
     implementation(libs.logback.classic)
+    implementation(libs.jsoup)
     implementation(project(":torrent"))
     // Native libtorrent for the Linux images (x86_64; there is no arm64 build) and for running on Windows.
     runtimeOnly(libs.libtorrent4j.linux)

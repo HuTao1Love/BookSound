@@ -23,6 +23,7 @@ private val roots: List<KSerializer<*>> = listOf(
     serializer<WatchProfileDto>(), serializer<WatchFileStatusDto>(), serializer<ServerSettingsDto>(),
     serializer<UserCreateRequest>(), serializer<UserUpdateRequest>(), serializer<PasswordChangeRequest>(),
     serializer<RescanResultDto>(), serializer<EventDto>(), serializer<ServerUpdateDto>(),
+    serializer<MetadataSearchRequest>(), serializer<MetadataSearchResponse>(), serializer<SiteImportRequest>(),
 )
 
 /** Writes TypeScript declarations of the API types to the file named by the first argument. */
