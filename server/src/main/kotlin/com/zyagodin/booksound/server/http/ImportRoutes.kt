@@ -5,6 +5,7 @@ import com.zyagodin.booksound.api.ApiPaths
 import com.zyagodin.booksound.api.ErrorCodes
 import com.zyagodin.booksound.api.ErrorDto
 import com.zyagodin.booksound.api.ImportFromUploadsRequest
+import com.zyagodin.booksound.api.SiteImportRequest
 import com.zyagodin.booksound.api.TorrentReviewRequest
 import com.zyagodin.booksound.api.UploadCreateRequest
 import com.zyagodin.booksound.api.WatchFileStatusDto
@@ -78,6 +79,12 @@ fun Route.importRoutes(ctx: ServerContext) {
             val p = call.user
             val body = call.receive<ImportFromUploadsRequest>()
             call.respond(HttpStatusCode.Created, io { ctx.uploads.importSources(p, body) }.toDto())
+        }
+        post(ApiPaths.SITE_IMPORTS) {
+            val p = call.user
+            val sites = ctx.sites ?: throw notFound()
+            val body = call.receive<SiteImportRequest>()
+            call.respond(HttpStatusCode.Created, sites.add(p, body.url).toDto())
         }
         post("${ApiPaths.IMPORTS}/{id}/cancel") {
             call.user

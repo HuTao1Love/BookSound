@@ -9,14 +9,18 @@ import com.zyagodin.booksound.server.http.authRoutes
 import com.zyagodin.booksound.server.http.importRoutes
 import com.zyagodin.booksound.server.http.installHttp
 import com.zyagodin.booksound.server.http.libraryRoutes
+import com.zyagodin.booksound.server.http.metadataRoutes
 import com.zyagodin.booksound.server.http.webApp
 import com.zyagodin.booksound.server.importer.Ffmpeg
 import com.zyagodin.booksound.server.importer.ImportService
+import com.zyagodin.booksound.server.importer.SiteImportService
 import com.zyagodin.booksound.server.importer.UploadService
 import com.zyagodin.booksound.server.library.Covers
 import com.zyagodin.booksound.server.library.LibraryFiles
 import com.zyagodin.booksound.server.library.LibraryRepository
 import com.zyagodin.booksound.server.library.LibraryService
+import com.zyagodin.booksound.server.metadata.HttpPageFetcher
+import com.zyagodin.booksound.server.metadata.MetadataService
 import com.zyagodin.booksound.server.settings.SettingsStore
 import com.zyagodin.booksound.server.sync.SyncService
 import com.zyagodin.booksound.server.torrent.TorrentService
@@ -49,11 +53,16 @@ class ServerContext(val config: ServerConfig) : AutoCloseable {
     val uploads = UploadService(db, config.uploadsDir, library, imports)
     val watch = WatchVariants(library, settings, ffmpeg, imports, config.derivedDir, scope)
     val updates = UpdateService(config)
+    private val pages = HttpPageFetcher()
+    val metadata: MetadataService? = if (config.metadataSearchEnabled) MetadataService(fetcher = pages) else null
+    val sites: SiteImportService? = if (config.metadataSearchEnabled) SiteImportService(imports, pages, config.workDir) else null
     val torrents: TorrentService? = if (config.torrentsEnabled) TorrentService.create(db, config.torrentsDir, library, imports, settings, events, scope) else null
 
     val features: List<String> get() = buildList {
         if (torrents != null) add(Features.TORRENTS)
         if (ffmpeg.available) add(Features.TRANSCODE)
+        if (metadata != null) add(Features.METADATA)
+        if (sites != null) add(Features.SITE_IMPORT)
     }
 
     fun start() {
@@ -95,6 +104,7 @@ fun Application.booksound(ctx: ServerContext) {
         libraryRoutes(ctx)
         importRoutes(ctx)
         adminRoutes(ctx)
+        metadataRoutes(ctx)
     }
     webApp()
     monitor.subscribe(ApplicationStopping) { ctx.close() }

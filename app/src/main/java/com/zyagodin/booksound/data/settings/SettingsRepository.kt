@@ -59,6 +59,14 @@ data class AppSettings(
     val voicePreset: VoicePreset = VoicePreset.OFF,
     /** Voice equalizer chosen for a particular book (the narrator's voice), by book id. */
     val bookVoicePresets: Map<String, VoicePreset> = emptyMap(),
+    /** Volume boost in dB (one of `VolumeBoost.LEVELS`) for books without their own choice; 0 is off. */
+    val volumeBoostDb: Int = 0,
+    /** Volume boost chosen for a particular book (a quiet recording), by book id. */
+    val bookVolumeBoosts: Map<String, Int> = emptyMap(),
+    /** Long pauses in the recording are skipped, for books without their own choice. */
+    val skipSilence: Boolean = false,
+    /** Skipping silence chosen for a particular book, by book id. */
+    val bookSkipSilence: Map<String, Boolean> = emptyMap(),
     val encoderBitrateKbps: Int = 64,
     val downmixToMono: Boolean = false,
     val autoCoverSearch: Boolean = true,
@@ -85,19 +93,31 @@ data class AppSettings(
     val loaded: Boolean = false,
 ) {
     fun voicePresetFor(bookId: String?): VoicePreset = bookId?.let { bookVoicePresets[it] } ?: voicePreset
+    fun volumeBoostFor(bookId: String?): Int = bookId?.let { bookVolumeBoosts[it] } ?: volumeBoostDb
+    fun skipSilenceFor(bookId: String?): Boolean = bookId?.let { bookSkipSilence[it] } ?: skipSilence
+
+    /** The book's sound is the same as every book without its own choice. */
+    fun soundIsDefault(bookId: String): Boolean =
+        voicePresetFor(bookId) == voicePreset && volumeBoostFor(bookId) == volumeBoostDb && skipSilenceFor(bookId) == skipSilence
 }
 
 const val DEFAULT_PARALLEL_IMPORTS = 2
 
 private const val TEMPLATE_SEPARATOR = "\n"
 
-private fun encodePresets(map: Map<String, VoicePreset>): String = map.entries.joinToString("\n") { "${it.key}=${it.value.name}" }
+/** A per-book choice on disk: one `bookId=value` line per book. */
+private fun <T : Any> encodeBookMap(map: Map<String, T>, write: (T) -> String = { it.toString() }): String =
+    map.entries.joinToString("\n") { "${it.key}=${write(it.value)}" }
 
-private fun decodePresets(text: String?): Map<String, VoicePreset> = text.orEmpty().lineSequence().mapNotNull { line ->
+private fun <T : Any> decodeBookMap(text: String?, read: (String) -> T?): Map<String, T> = text.orEmpty().lineSequence().mapNotNull { line ->
     val id = line.substringBefore('=', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-    val preset = runCatching { VoicePreset.valueOf(line.substringAfter('=')) }.getOrNull() ?: return@mapNotNull null
-    id to preset
+    val value = runCatching { read(line.substringAfter('=')) }.getOrNull() ?: return@mapNotNull null
+    id to value
 }.toMap()
+
+private fun decodePresets(text: String?): Map<String, VoicePreset> = decodeBookMap(text) { VoicePreset.valueOf(it) }
+private fun decodeBoosts(text: String?): Map<String, Int> = decodeBookMap(text) { it.toIntOrNull() }
+private fun decodeSkipSilence(text: String?): Map<String, Boolean> = decodeBookMap(text) { it.toBooleanStrictOrNull() }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -123,6 +143,10 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val sleepNightEnd = intPreferencesKey("sleep_night_end")
         val voicePreset = stringPreferencesKey("voice_preset")
         val bookVoicePresets = stringPreferencesKey("book_voice_presets")
+        val volumeBoost = intPreferencesKey("volume_boost_db")
+        val bookVolumeBoosts = stringPreferencesKey("book_volume_boosts")
+        val skipSilence = booleanPreferencesKey("skip_silence")
+        val bookSkipSilence = stringPreferencesKey("book_skip_silence")
         val bitrate = intPreferencesKey("encoder_bitrate")
         val mono = booleanPreferencesKey("downmix_mono")
         val autoCover = booleanPreferencesKey("auto_cover_search")
@@ -163,6 +187,10 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             sleepNightEndMinute = p[Keys.sleepNightEnd] ?: (7 * 60),
             voicePreset = enumOrDefault(p[Keys.voicePreset], VoicePreset.OFF),
             bookVoicePresets = decodePresets(p[Keys.bookVoicePresets]),
+            volumeBoostDb = p[Keys.volumeBoost] ?: 0,
+            bookVolumeBoosts = decodeBoosts(p[Keys.bookVolumeBoosts]),
+            skipSilence = p[Keys.skipSilence] ?: false,
+            bookSkipSilence = decodeSkipSilence(p[Keys.bookSkipSilence]),
             encoderBitrateKbps = p[Keys.bitrate] ?: 64,
             downmixToMono = p[Keys.mono] ?: false,
             autoCoverSearch = p[Keys.autoCover] ?: true,
@@ -210,9 +238,41 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
 
     /** Remembers [preset] for [bookId]; null goes back to the default preset. */
     suspend fun setBookVoicePreset(bookId: String, preset: VoicePreset?) = edit {
-        val map = decodePresets(it[Keys.bookVoicePresets]).toMutableMap()
-        if (preset == null) map.remove(bookId) else map[bookId] = preset
-        if (map.isEmpty()) it.remove(Keys.bookVoicePresets) else it[Keys.bookVoicePresets] = encodePresets(map)
+        it.putBookValue(Keys.bookVoicePresets, ::decodePresets, bookId, preset) { p -> p.name }
+    }
+    suspend fun setVolumeBoost(db: Int) = edit { it[Keys.volumeBoost] = db }
+
+    /** Remembers the volume boost for [bookId]; null goes back to the default. */
+    suspend fun setBookVolumeBoost(bookId: String, db: Int?) = edit {
+        it.putBookValue(Keys.bookVolumeBoosts, ::decodeBoosts, bookId, db)
+    }
+    suspend fun setSkipSilence(enabled: Boolean) = edit { it[Keys.skipSilence] = enabled }
+
+    /** Remembers skipping silence for [bookId]; null goes back to the default. */
+    suspend fun setBookSkipSilence(bookId: String, enabled: Boolean?) = edit {
+        it.putBookValue(Keys.bookSkipSilence, ::decodeSkipSilence, bookId, enabled)
+    }
+
+    /** Makes the book's sound (voice, boost, skipping silence) the default for all books; the book follows it again. */
+    suspend fun makeBookSoundDefault(bookId: String) = edit {
+        decodePresets(it[Keys.bookVoicePresets])[bookId]?.let { preset -> it[Keys.voicePreset] = preset.name }
+        decodeBoosts(it[Keys.bookVolumeBoosts])[bookId]?.let { db -> it[Keys.volumeBoost] = db }
+        decodeSkipSilence(it[Keys.bookSkipSilence])[bookId]?.let { skip -> it[Keys.skipSilence] = skip }
+        it.putBookValue(Keys.bookVoicePresets, ::decodePresets, bookId, null) { p -> p.name }
+        it.putBookValue(Keys.bookVolumeBoosts, ::decodeBoosts, bookId, null)
+        it.putBookValue(Keys.bookSkipSilence, ::decodeSkipSilence, bookId, null)
+    }
+
+    private fun <T : Any> androidx.datastore.preferences.core.MutablePreferences.putBookValue(
+        key: Preferences.Key<String>,
+        decode: (String?) -> Map<String, T>,
+        bookId: String,
+        value: T?,
+        write: (T) -> String = { v -> v.toString() },
+    ) {
+        val map = decode(this[key]).toMutableMap()
+        if (value == null) map.remove(bookId) else map[bookId] = value
+        if (map.isEmpty()) remove(key) else this[key] = encodeBookMap(map, write)
     }
     suspend fun setEncoderBitrate(kbps: Int) = edit { it[Keys.bitrate] = kbps }
     suspend fun setDownmixToMono(enabled: Boolean) = edit { it[Keys.mono] = enabled }

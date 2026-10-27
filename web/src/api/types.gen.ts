@@ -198,7 +198,7 @@ export interface ImportJobDto {
   finishedAt?: number | null;
 }
 
-export type ImportStage = "QUEUED" | "PREPARING" | "CONVERTING" | "WRITING" | "VERIFYING" | "FINISHING" | "DONE" | "FAILED" | "CANCELLED";
+export type ImportStage = "QUEUED" | "DOWNLOADING" | "PREPARING" | "CONVERTING" | "WRITING" | "VERIFYING" | "FINISHING" | "DONE" | "FAILED" | "CANCELLED";
 
 export interface ImportFromUploadsRequest {
   uploadIds: string[];
@@ -325,3 +325,43 @@ export interface ServerUpdateDto {
 export type UpdateMethod = "SYSTEMD" | "WATCHTOWER" | "MANUAL";
 
 export type UpdateStage = "IDLE" | "REQUESTED" | "INSTALLING" | "FAILED";
+
+export interface MetadataSearchRequest {
+  title: string;
+  author?: string | null;
+  narrator?: string | null;
+  durationMs?: number | null;
+  query?: string | null;
+}
+
+export interface MetadataSearchResponse {
+  matches: MetadataMatchDto[];
+  failedSources?: string[];
+}
+
+export interface MetadataMatchDto {
+  candidate: MetadataCandidateDto;
+  verdict: MatchVerdict;
+  score: number;
+  title: MatchState;
+  author: MatchState;
+  narrator: MatchState;
+  duration: MatchState;
+}
+
+export interface MetadataCandidateDto {
+  source: string;
+  sourceName: string;
+  url: string;
+  metadata: MetadataDto;
+  durationMs?: number | null;
+  coverUrl?: string | null;
+}
+
+export type MatchVerdict = "SAME_RECORDING" | "SAME_BOOK" | "DOUBTFUL" | "DIFFERENT";
+
+export type MatchState = "MATCH" | "CONFLICT" | "UNKNOWN";
+
+export interface SiteImportRequest {
+  url: string;
+}

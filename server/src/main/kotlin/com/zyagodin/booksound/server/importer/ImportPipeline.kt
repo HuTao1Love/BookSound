@@ -49,7 +49,7 @@ class ImportPipeline(
         val (audio, images) = spec.files.map { ref ->
             val f = File(ref.path)
             if (!f.isFile) throw ImportFailure("Source file missing: ${f.name}")
-            SourceCandidate(f.absolutePath, f.name, ref.relativeDir, f.length())
+            SourceCandidate(f.absolutePath, ref.name ?: f.name, ref.relativeDir, f.length())
         }.filter { SourceAnalyzer.isAudioName(it.name) || SourceAnalyzer.isImage(it.name) }
             .partition { SourceAnalyzer.isAudioName(it.name) }
 

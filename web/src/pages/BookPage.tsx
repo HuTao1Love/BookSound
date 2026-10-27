@@ -4,10 +4,12 @@ import EditIcon from "@mui/icons-material/Edit";
 import ImageIcon from "@mui/icons-material/Image";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import GraphicEqRoundedIcon from "@mui/icons-material/GraphicEqRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import ReplayIcon from "@mui/icons-material/Replay";
+import TravelExploreRoundedIcon from "@mui/icons-material/TravelExploreRounded";
 import WatchIcon from "@mui/icons-material/Watch";
 import {
   Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItemButton, ListItemIcon, ListItemText,
@@ -18,9 +20,10 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, paths, request } from "../api/client";
-import { keys, useBook, useMe, useWatchProfiles } from "../api/hooks";
+import { keys, useBook, useMe, useStatus, useWatchProfiles } from "../api/hooks";
 import type { BookDto, MetadataDto, WatchFileStatusDto } from "../api/types.gen";
 import BookCover, { CoverBackdrop } from "../components/BookCover";
+import { MetadataSearchDialog } from "../components/MetadataSearch";
 import { useSidePlayerFits } from "../components/NowPlaying";
 import { ProgressLine, SectionTitle } from "../components/Ui";
 import { chapterAt, formatDuration, isStarted } from "../library";
@@ -223,16 +226,26 @@ function WatchCopyButton({ bookId }: { bookId: string }) {
 
 function EditDialog({ book, onClose, onSaved }: { book: BookDto; onClose: () => void; onSaved: (b: BookDto) => void }) {
   const { t } = useTranslation();
+  const status = useStatus();
   const [form, setForm] = useState<MetadataDto>({ ...book.metadata });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(false);
+  /** A cover found on a site, written into the book after its details are saved. */
+  const [newCover, setNewCover] = useState<string | null>(null);
   const field = (key: keyof MetadataDto, label: string, extra?: object) => (
     <TextField label={label} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value || null })} fullWidth {...extra} />
   );
   const save = async () => {
     setBusy(true);
     try {
-      onSaved(await api.patch<BookDto>(paths.book(book.id), { metadata: { ...form, title: form.title.trim() }, baseRevision: book.stamp.revision }));
+      let saved = await api.patch<BookDto>(paths.book(book.id), { metadata: { ...form, title: form.title.trim() }, baseRevision: book.stamp.revision });
+      if (newCover) {
+        const image = await fetch(paths.metadataCover(newCover), { credentials: "same-origin" });
+        if (!image.ok) throw new Error(t("common.error"));
+        saved = await request<BookDto>("PUT", `${paths.book(book.id)}/cover`, await image.blob(), { headers: { "Content-Type": "application/octet-stream" } });
+      }
+      onSaved(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -245,6 +258,18 @@ function EditDialog({ book, onClose, onSaved }: { book: BookDto; onClose: () => 
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {status.data?.features.includes("metadata") && (
+            <Button startIcon={<TravelExploreRoundedIcon />} onClick={() => setSearching(true)} sx={{ alignSelf: "flex-start" }}>
+              {t("book.findOnline")}
+            </Button>
+          )}
+          {newCover && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box component="img" src={paths.metadataCover(newCover)} alt="" sx={{ width: 48, height: 48, objectFit: "cover", borderRadius: 1 }} />
+              <Typography variant="body2" sx={{ flex: 1 }}>{t("metadata.cover")}</Typography>
+              <IconButton size="small" onClick={() => setNewCover(null)} aria-label={t("common.cancel")}><CloseRoundedIcon fontSize="small" /></IconButton>
+            </Stack>
+          )}
           {field("title", t("book.title"), { required: true })}
           {field("author", t("book.author"))}
           {field("narrator", t("book.narratorField"))}
@@ -263,6 +288,18 @@ function EditDialog({ book, onClose, onSaved }: { book: BookDto; onClose: () => 
         <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant="contained" onClick={save} disabled={busy || !form.title.trim()}>{t("common.save")}</Button>
       </DialogActions>
+      {searching && (
+        <MetadataSearchDialog
+          facts={{ title: book.metadata.title, author: book.metadata.author, narrator: book.metadata.narrator, durationMs: book.durationMs }}
+          current={form}
+          onApply={(changes, cover) => {
+            setForm({ ...form, ...changes });
+            if (cover) setNewCover(cover);
+            setSearching(false);
+          }}
+          onClose={() => setSearching(false)}
+        />
+      )}
     </Dialog>
   );
 }

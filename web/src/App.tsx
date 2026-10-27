@@ -57,7 +57,7 @@ export default function App() {
           <Route path="/series/:name" element={<SeriesPage />} />
           <Route path="/book/:id" element={<BookPage />} />
           <Route path="/player" element={<PlayerPage />} />
-          <Route path="/add" element={<ImportsPage torrents={status.data?.features.includes("torrents") ?? false} />} />
+          <Route path="/add" element={<ImportsPage torrents={status.data?.features.includes("torrents") ?? false} sites={status.data?.features.includes("site_import") ?? false} />} />
           <Route path="/account" element={<AccountPage session={session} />} />
           {session.user.isAdmin && <Route path="/admin" element={<AdminPage />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
