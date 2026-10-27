@@ -544,6 +544,7 @@
     <string name="update_install">Update</string>
     <string name="update_later">Later</string>
     <string name="update_close">Close</string>
+    <string name="update_hide">Hide</string>
     <string name="update_step_downloading_watch">Downloading the watch app…</string>
     <string name="update_step_sending_watch">Sending it to the watch…</string>
     <string name="update_step_downloading_phone">Downloading the update…</string>
