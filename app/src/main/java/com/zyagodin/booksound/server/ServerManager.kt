@@ -14,6 +14,7 @@ import com.zyagodin.booksound.api.ApiJson
 import com.zyagodin.booksound.api.ApiPaths
 import com.zyagodin.booksound.api.BookDto
 import com.zyagodin.booksound.api.DeviceKind
+import com.zyagodin.booksound.api.EventTypes
 import com.zyagodin.booksound.api.TokenResponse
 import com.zyagodin.booksound.api.UploadKind
 import com.zyagodin.booksound.api.UploadResultDto
@@ -164,6 +165,24 @@ class ServerManager(
 
     /** Called to start a sync round after the account or the catalog changed. */
     var requestSync: () -> Unit = {}
+
+    /**
+     * While the app is open: a sync round as soon as the server's library changes (a book added, edited or deleted
+     * on the web or another phone), instead of at the next periodic one. Runs until cancelled.
+     */
+    suspend fun followChanges() {
+        account.map { it != null }.distinctUntilChanged().collectLatest { signedIn ->
+            if (!signedIn) return@collectLatest
+            while (true) {
+                try {
+                    client.events { type -> if (type == EventTypes.LIBRARY) requestSync() }
+                } catch (e: IOException) {
+                    // Offline, or the server restarted: the periodic sync covers the gap.
+                }
+                delay(EVENTS_RETRY_MS)
+            }
+        }
+    }
 
     init {
         scope.launch(Dispatchers.IO) { keepServerCovers() }
@@ -565,5 +584,6 @@ class ServerManager(
         private const val COMPLETE_ATTEMPTS = 3
         private const val TAG = "ServerManager"
         private const val WATCH_COPY_WAIT_MS = 15 * 60 * 1000L
+        private const val EVENTS_RETRY_MS = 30_000L
     }
 }

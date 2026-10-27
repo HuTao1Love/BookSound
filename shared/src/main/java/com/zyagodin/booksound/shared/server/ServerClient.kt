@@ -99,6 +99,21 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
 
     suspend fun delete(path: String): Unit = withContext(Dispatchers.IO) { authorized(path) { it.delete() }.close() }
 
+    /**
+     * Follows the server's events ([ApiPaths.EVENTS]), passing each one's type to [onEvent], until the connection
+     * drops. A heartbeat comes every 20 seconds, so a cancelled caller returns within that.
+     */
+    suspend fun events(onEvent: (String) -> Unit): Unit = withContext(Dispatchers.IO) {
+        authorized(ApiPaths.EVENTS) { it.get().header("Accept", "text/event-stream") }.use { response ->
+            val source = response.body.source()
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val line = source.readUtf8Line() ?: break
+                if (line.startsWith("event:")) onEvent(line.removePrefix("event:").trim())
+            }
+        }
+    }
+
     private suspend fun send(method: String, path: String, body: String): Response = authorized(path) { it.method(method, body.toRequestBody(json)) }
 
     // Reading or closing a response touches the socket: everything here runs off the main thread.
