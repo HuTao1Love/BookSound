@@ -127,7 +127,9 @@ export default function NowPlaying({ side = false }: { side?: boolean }) {
             sx={{ cursor: side ? undefined : "pointer", mt: 1, fontWeight: 700 }}
             onClick={side ? undefined : () => setShowChapters(!showChapters)}
           >
-            {chapter.title} · {t("player.chapter", { n: player.chapterIndex + 1, total: chapters.length })}
+            {/* A title that is only the number ("Chapter 3", "Глава 3") would say it twice. */}
+            {/^\D*\d+\.?$/.test(chapter.title.trim()) ? "" : `${chapter.title} · `}
+            {t("player.chapter", { n: player.chapterIndex + 1, total: chapters.length })}
           </Typography>
         )}
       </Box>
