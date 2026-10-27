@@ -151,8 +151,9 @@ def step(name):
 def prepare():
     adb("install", "-r", "-g", APK)
     shell(f"pm grant {PACKAGE} android.permission.POST_NOTIFICATIONS", check=False)
-    shell("mkdir -p /sdcard/Download/BookSound")
-    adb("push", f"{DEMO}/.", "/sdcard/Download/BookSound/")
+    # The app opens the folder picker in Audiobooks: the library goes there.
+    shell("mkdir -p /sdcard/Audiobooks")
+    adb("push", f"{DEMO}/.", "/sdcard/Audiobooks/")
     # A clean status bar: the same time, full battery and signal, no notifications.
     shell("settings put global sysui_demo_allowed 1")
     for command in (
@@ -169,34 +170,30 @@ def prepare():
 
 
 def pick_folder():
-    """Chooses Download/BookSound in the system folder picker and allows the app to use it."""
+    """Chooses the Audiobooks folder in the system folder picker and allows the app to use it."""
     tap(r"Choose folder")
+    time.sleep(2)
     step("picker")
-    inside = False
-    for _ in range(25):
+    for _ in range(12):
         screen = nodes()
         if matching(r"allow", screen):
             tap_if(r"allow", settle=4)
             return
-        if inside and matching(r"use this folder", screen):
+        if matching(r"Audiobooks", screen) and matching(r"use this folder", screen):
             tap_if(r"use this folder", settle=2)
             continue
-        if not inside and matching(r"BookSound", screen):
-            # The folder in the list (the lowest match: the toolbar may name the app too).
-            target = max(matching(r"BookSound", screen), key=lambda n: center(n)[1])
-            x, y = center(target)
-            shell(f"input tap {x} {y}")
-            time.sleep(2)
-            inside = True
-            continue
-        if matching(r"Download|Downloads", screen):
-            target = max(matching(r"Download|Downloads", screen), key=lambda n: center(n)[1])
+        if matching(r"Audiobooks", screen):
+            # Listed in another folder or in the roots: open it.
+            target = max(matching(r"Audiobooks", screen), key=lambda n: center(n)[1])
             x, y = center(target)
             shell(f"input tap {x} {y}")
             time.sleep(2)
             continue
+        # Elsewhere: the phone's storage from the roots (the drawer opens from the left edge).
         if not tap_if(r"Show roots"):
-            swipe(1600, 600)
+            shell("input swipe 2 1200 800 1200 300")
+            time.sleep(1.5)
+        tap_if(r"sdk_gphone.*|Internal storage|.*phone.*")
     fail("could not pick the folder")
 
 
