@@ -56,8 +56,9 @@ The web app, served by the [server](#server):
   that shows them in order and plays the next unfinished one.
 - **A proper player.** Background playback with notification, lock screen and Bluetooth
   controls, chapters, per-book speed, sleep timer (minutes, end of chapter or book, with fade-out
-  and shake to start it over), smart rewind after a pause, and voice equalizer presets for the
-  narrator, remembered per book.
+  and shake to start it over), smart rewind after a pause, voice equalizer presets for the
+  narrator, a volume boost for quiet recordings and skipping silence, all remembered per book, and
+  "Listening starts": where each time you listened began, to go back there after falling asleep.
 - **Where to listen.** The phone's speaker, Bluetooth headphones, or a Chromecast, TV or speaker
   with Google Cast on the same Wi-Fi; the phone lends the book to it over the local network.
 - **Wear OS watch.** A watch app with its own player, a tile and a complication. Books are sent
@@ -107,6 +108,12 @@ The server is optional: the app works without it exactly as before. With it:
   synced between their phone, watch and browser.
 - **Web app** at the server's address: library, player with chapters, speed, sleep timer and the narrator's
   voice presets, uploads, torrents, and administration.
+- **Book details from audiobook sites** (akniga.org, knigavuhe.org): the server searches them and tells for
+  each result whether it is the same recording (title, author, and the narrator or the length agree), the
+  same book in another recording, or doubtful; the web app's edit dialog fills the chosen details and cover.
+- **Books from knigavuhe.org**: paste a book's page on the web app's *Add* page; the server downloads its chapters
+  (plain mp3 files the site's player lists with their lengths), checks them like a torrent's and makes one M4B with
+  the site's details, cover and a chapter per file.
 
 ### Run it
 
@@ -140,6 +147,7 @@ Settings are environment variables (`/etc/booksound.env` for LXC):
 | `BOOKSOUND_PORT` | `8080` | Web app and API. |
 | `BOOKSOUND_TRUSTED_PROXIES` | none | Addresses allowed to pass the client address and scheme in `X-Forwarded-*` (the router). |
 | `BOOKSOUND_TORRENTS` | on | `off` disables torrents. |
+| `BOOKSOUND_METADATA_SEARCH` | on | `off` stops looking book details up on audiobook sites and downloading books from knigavuhe.org (the server then fetches no outside pages). |
 | `BOOKSOUND_FFMPEG` | `ffmpeg` | Path to ffmpeg. |
 | `BOOKSOUND_UPDATER` | `systemd` (LXC), none | What installs updates from the admin page: `systemd` or `watchtower`. |
 | `BOOKSOUND_WATCHTOWER_URL`, `_TOKEN` | none | Watchtower's HTTP API, for `BOOKSOUND_UPDATER=watchtower`. |

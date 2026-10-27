@@ -59,6 +59,7 @@ sqliteJdbc = "3.53.4.0"
 bouncycastle = "1.86"
 twelvemonkeys = "3.15.3"
 logback = "1.5.18"
+jsoup = "1.22.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -148,6 +149,7 @@ sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version.ref = "sqlit
 bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 twelvemonkeys-webp = { group = "com.twelvemonkeys.imageio", name = "imageio-webp", version.ref = "twelvemonkeys" }
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 libtorrent4j-linux = { group = "org.libtorrent4j", name = "libtorrent4j-linux", version.ref = "libtorrent4j" }
 libtorrent4j-windows = { group = "org.libtorrent4j", name = "libtorrent4j-windows", version.ref = "libtorrent4j" }
 

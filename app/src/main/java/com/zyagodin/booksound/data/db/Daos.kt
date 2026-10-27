@@ -108,3 +108,27 @@ interface PlaybackDao {
     @Query("UPDATE playback_state SET dirty = 0 WHERE book_id = :bookId AND revision = :revision")
     suspend fun markClean(bookId: String, revision: Long)
 }
+
+@Dao
+interface ListeningStartDao {
+    @Query("SELECT * FROM listening_starts WHERE book_id = :bookId ORDER BY started_at DESC")
+    fun observe(bookId: String): Flow<List<ListeningStartEntity>>
+
+    @Query("SELECT * FROM listening_starts WHERE book_id = :bookId ORDER BY started_at DESC LIMIT 1")
+    suspend fun latest(bookId: String): ListeningStartEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(start: ListeningStartEntity)
+
+    @Query("DELETE FROM listening_starts WHERE book_id = :bookId AND started_at = :startedAt")
+    suspend fun delete(bookId: String, startedAt: Long)
+
+    /** Keeps only the latest [keep] starts of the book. */
+    @Query(
+        """
+        DELETE FROM listening_starts WHERE book_id = :bookId AND started_at NOT IN
+            (SELECT started_at FROM listening_starts WHERE book_id = :bookId ORDER BY started_at DESC LIMIT :keep)
+        """,
+    )
+    suspend fun trim(bookId: String, keep: Int)
+}

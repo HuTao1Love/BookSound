@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -96,6 +98,7 @@ import com.zyagodin.booksound.update.UpdateState
 import com.zyagodin.booksound.R
 import com.zyagodin.booksound.importer.ImportPipeline
 import com.zyagodin.booksound.core.audio.VoicePreset
+import com.zyagodin.booksound.core.audio.VolumeBoost
 import com.zyagodin.booksound.data.library.ScanResult
 import com.zyagodin.booksound.data.settings.AppSettings
 import com.zyagodin.booksound.data.settings.ThemeMode
@@ -107,6 +110,7 @@ import com.zyagodin.booksound.ui.components.rememberBackgroundWorkRequest
 import com.zyagodin.booksound.ui.components.SectionHeader
 import com.zyagodin.booksound.ui.navigation.appContainer
 import com.zyagodin.booksound.ui.navigation.appViewModel
+import com.zyagodin.booksound.ui.player.boostLabel
 import com.zyagodin.booksound.ui.player.voicePresetName
 import com.zyagodin.booksound.ui.theme.Radii
 import com.zyagodin.booksound.ui.theme.Spacing
@@ -153,6 +157,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setSmartRewindSeconds(v: Int) = viewModelScope.launch { s.setSmartRewindSeconds(v) }
     fun setSmartRewindAfter(v: Int) = viewModelScope.launch { s.setSmartRewindAfter(v) }
     fun setVoicePreset(v: VoicePreset) = viewModelScope.launch { s.setVoicePreset(v) }
+    fun setVolumeBoost(v: Int) = viewModelScope.launch { s.setVolumeBoost(v) }
+    fun setSkipSilence(v: Boolean) = viewModelScope.launch { s.setSkipSilence(v) }
     fun setSleepMinutes(v: Int) = viewModelScope.launch { s.setSleepTimerMinutes(v) }
     fun setSleepFade(v: Boolean) = viewModelScope.launch { s.setSleepFadeOut(v) }
     fun setShake(v: Boolean) = viewModelScope.launch { s.setShakeToReset(v) }
@@ -170,7 +176,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun checkUpdates() = container.updates.check()
 }
 
-private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, PARALLEL_BOOKS, PARALLEL_CODECS, NIGHT_START, NIGHT_END }
+private enum class ChoiceKind { SKIP_BACK, SKIP_FORWARD, SPEED, SLEEP, BITRATE, REWIND_AMOUNT, REWIND_AFTER, VOICE, BOOST, PARALLEL_BOOKS, PARALLEL_CODECS, NIGHT_START, NIGHT_END }
 
 @Composable
 fun SettingsScreen(navigator: AppNavigator) {
@@ -244,6 +250,8 @@ fun SettingsScreen(navigator: AppNavigator) {
                                 Item(Icons.Rounded.Timer, stringResource(R.string.settings_smart_rewind_after), pauseLabel(settings.smartRewindAfterSeconds), onClick = { choice = ChoiceKind.REWIND_AFTER })
                             }
                             Item(Icons.Rounded.Equalizer, stringResource(R.string.settings_voice_default), voicePresetName(settings.voicePreset), onClick = { choice = ChoiceKind.VOICE })
+                            Item(Icons.AutoMirrored.Rounded.VolumeUp, stringResource(R.string.settings_boost_default), boostLabel(settings.volumeBoostDb), onClick = { choice = ChoiceKind.BOOST })
+                            Toggle(Icons.Rounded.ContentCut, stringResource(R.string.skip_silence_title), stringResource(R.string.skip_silence_hint), settings.skipSilence, vm::setSkipSilence)
                         }
                         Group(stringResource(R.string.settings_group_sleep)) {
                             Item(Icons.Rounded.Bedtime, stringResource(R.string.settings_sleep_default), stringResource(R.string.minutes_short, settings.sleepTimerMinutes), onClick = { choice = ChoiceKind.SLEEP })
@@ -333,6 +341,7 @@ fun SettingsScreen(navigator: AppNavigator) {
         ChoiceKind.REWIND_AMOUNT -> OptionsSheet(stringResource(R.string.settings_smart_rewind_amount), listOf(5, 10, 15, 20, 30), settings.smartRewindSeconds, { stringResource(R.string.seconds_value, it) }, { vm.setSmartRewindSeconds(it); choice = null }) { choice = null }
         ChoiceKind.REWIND_AFTER -> OptionsSheet(stringResource(R.string.settings_smart_rewind_after), listOf(10, 30, 60, 300, 900, 1800), settings.smartRewindAfterSeconds, { pauseLabel(it) }, { vm.setSmartRewindAfter(it); choice = null }) { choice = null }
         ChoiceKind.VOICE -> OptionsSheet(stringResource(R.string.settings_voice_default), VoicePreset.entries, settings.voicePreset, { voicePresetName(it) }, { vm.setVoicePreset(it); choice = null }) { choice = null }
+        ChoiceKind.BOOST -> OptionsSheet(stringResource(R.string.settings_boost_default), VolumeBoost.LEVELS, settings.volumeBoostDb, { boostLabel(it) }, { vm.setVolumeBoost(it); choice = null }) { choice = null }
         ChoiceKind.BITRATE -> OptionsSheet(stringResource(R.string.settings_quality), listOf(48, 64, 96, 128), settings.encoderBitrateKbps, { bitrateLabel(it) }, { vm.setBitrate(it); choice = null }) { choice = null }
         ChoiceKind.PARALLEL_BOOKS -> OptionsSheet(stringResource(R.string.settings_parallel_books), listOf(1, 2, 3), settings.parallelImports, { parallelBooksLabel(it) }, { vm.setParallelImports(it); choice = null }) { choice = null }
         ChoiceKind.PARALLEL_CODECS -> OptionsSheet(stringResource(R.string.settings_parallel_codecs), listOf(0, 1, 2, 3, 4), settings.parallelCodecs, { parallelCodecsLabel(it) }, { vm.setParallelCodecs(it); choice = null }) { choice = null }
