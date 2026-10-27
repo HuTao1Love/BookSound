@@ -316,7 +316,8 @@ fun LibraryScreen(navigator: AppNavigator) {
                 vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
-            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+            onServer = removeItem.location == BookLocation.SYNCED,
+            canDeleteOnServer = canDeleteOnServer,
         )
     }
     val serverItem = deleteOnServerFor?.let { id -> state.items.firstOrNull { it.id == id } }

@@ -674,10 +674,15 @@
     <string name="server_version">Сервер %1$s</string>
     <string name="server_api_outdated">Сервер слишком старый для этой версии приложения, синхронизация остановлена. Обновите его в веб-приложении: Сервер → Установить обновление.</string>
     <string name="server_api_app_outdated">Приложение слишком старое для этого сервера, синхронизация остановлена. Обновите приложение.</string>
-    <string name="remove_delete_from_server">Также удалить с сервера</string>
+    <string name="remove_title_phone">Убрать с этого телефона?</string>
+    <string name="remove_where_phone">Только с этого телефона</string>
+    <string name="remove_where_phone_hint">На сервере книга останется: в библиотеке она будет со значком облака, её можно скачать снова.</string>
+    <string name="remove_where_everywhere">С телефона и с сервера</string>
+    <string name="action_delete_everywhere">Удалить везде</string>
+    <string name="removed_kept_on_server">На сервере она осталась.</string>
     <string name="remove_server_hint">Книга пропадёт с сервера у всех пользователей.</string>
     <string name="action_delete_from_server">Удалить с сервера</string>
     <string name="delete_from_server_title">Удалить с сервера?</string>
-    <string name="delete_from_server_message">«%1$s» будет удалена с сервера вместе с файлом у всех пользователей.</string>
+    <string name="delete_from_server_message">«%1$s» будет удалена с сервера вместе с файлом у всех пользователей. Копии, уже скачанные на телефоны, останутся.</string>
     <string name="server_delete_failed">Не удалось удалить с сервера: %1$s</string>
 </resources>

@@ -179,7 +179,8 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                         navigator.back()
                     },
                     onDismiss = { showRemove = false },
-                    fromServerOption = canDeleteOnServer && onServer,
+                    onServer = onServer,
+                    canDeleteOnServer = canDeleteOnServer,
                 )
             }
             if (showDeleteOnServer) {

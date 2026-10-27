@@ -25,6 +25,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -259,8 +260,9 @@ fun SheetAction(icon: ImageVector, text: String, onClick: () -> Unit, color: Col
 }
 
 /**
- * Confirmation for removing a book. Its file goes too unless unticked. An admin of a server that has the book
- * ([fromServerOption]) can delete it there as well, for every user, so that one starts unticked.
+ * Confirmation for removing a book from the phone. Its file goes too unless unticked. A book the server has too
+ * ([onServer]) stays there, listed with a cloud, which the dialog says; an admin ([canDeleteOnServer]) can choose
+ * to delete it from the server as well, for every user, so removing from the phone only is the first choice.
  */
 @Composable
 fun RemoveBookDialog(
@@ -268,20 +270,39 @@ fun RemoveBookDialog(
     filePath: String?,
     onConfirm: (deleteFile: Boolean, deleteFromServer: Boolean) -> Unit,
     onDismiss: () -> Unit,
-    fromServerOption: Boolean = false,
+    onServer: Boolean = false,
+    canDeleteOnServer: Boolean = false,
 ) {
     var deleteFile by rememberSaveable { mutableStateOf(true) }
-    var deleteFromServer by rememberSaveable { mutableStateOf(false) }
+    var everywhere by rememberSaveable { mutableStateOf(false) }
+    val fromServer = onServer && canDeleteOnServer && everywhere
     ConfirmDialog(
-        title = stringResource(R.string.remove_title),
+        title = stringResource(if (onServer) R.string.remove_title_phone else R.string.remove_title),
         message = stringResource(R.string.remove_message, title),
-        confirmText = stringResource(if (deleteFile) R.string.action_remove_and_delete else R.string.action_remove),
-        onConfirm = { onConfirm(deleteFile, fromServerOption && deleteFromServer) },
+        confirmText = stringResource(
+            when {
+                fromServer -> R.string.action_delete_everywhere
+                deleteFile -> R.string.action_remove_and_delete
+                else -> R.string.action_remove
+            },
+        ),
+        onConfirm = { onConfirm(deleteFile, fromServer) },
         onDismiss = onDismiss,
         dismissText = stringResource(R.string.action_cancel),
         destructive = true,
         extraContent = {
-            CheckRow(deleteFile, { deleteFile = it }, stringResource(R.string.remove_delete_file), filePath)
+            if (onServer && canDeleteOnServer) {
+                OptionRow(!everywhere, { everywhere = false }, stringResource(R.string.remove_where_phone), stringResource(R.string.remove_where_phone_hint), radio = true)
+                OptionRow(everywhere, { everywhere = true }, stringResource(R.string.remove_where_everywhere), stringResource(R.string.remove_server_hint), radio = true)
+            } else if (onServer) {
+                Text(
+                    stringResource(R.string.remove_where_phone_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.sm),
+                )
+            }
+            OptionRow(deleteFile, { deleteFile = !deleteFile }, stringResource(R.string.remove_delete_file), filePath)
             if (!deleteFile) {
                 Text(
                     stringResource(R.string.remove_keep_file_hint),
@@ -290,27 +311,24 @@ fun RemoveBookDialog(
                     modifier = Modifier.padding(top = Spacing.sm),
                 )
             }
-            if (fromServerOption) {
-                CheckRow(deleteFromServer, { deleteFromServer = it }, stringResource(R.string.remove_delete_from_server), stringResource(R.string.remove_server_hint))
-            }
         },
     )
 }
 
 @Composable
-private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, text: String, detail: String?) {
+private fun OptionRow(selected: Boolean, onClick: () -> Unit, text: String, detail: String?, radio: Boolean = false) {
     Surface(
-        onClick = { onChange(!checked) },
+        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         modifier = Modifier.padding(top = Spacing.lg).fillMaxWidth(),
     ) {
         Row(Modifier.padding(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = checked, onCheckedChange = onChange)
+            if (radio) RadioButton(selected = selected, onClick = onClick) else Checkbox(checked = selected, onCheckedChange = { onClick() })
             Column(Modifier.padding(end = Spacing.sm)) {
                 Text(text, style = MaterialTheme.typography.bodyMedium)
                 if (detail != null) {
-                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

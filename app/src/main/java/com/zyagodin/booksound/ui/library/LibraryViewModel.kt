@@ -11,6 +11,7 @@ import com.zyagodin.booksound.core.library.ProgressFilter
 import com.zyagodin.booksound.core.library.SeriesGroup
 import com.zyagodin.booksound.core.library.SortField
 import com.zyagodin.booksound.core.library.defaultDescending
+import com.zyagodin.booksound.data.library.BookLocation
 import com.zyagodin.booksound.data.library.LibraryItem
 import com.zyagodin.booksound.data.library.LocationFilter
 import com.zyagodin.booksound.data.library.ScanResult
@@ -64,11 +65,15 @@ data class SeriesSection(val series: String?, val items: List<LibraryItem>, val 
 
 sealed interface LibraryEvent {
     data class ScanFinished(val result: ScanResult) : LibraryEvent
-    data class Removed(val title: String, val fileDeleted: Boolean, val fileDeleteFailed: Boolean) : LibraryEvent {
-        fun message(context: Context): String = when {
-            fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, title)
-            fileDeleted -> context.getString(R.string.removed_with_file, title)
-            else -> context.getString(R.string.removed_kept_file, title)
+    /** [keptOnServer]: removed from the phone only, so the book is still listed as the server's. */
+    data class Removed(val title: String, val fileDeleted: Boolean, val fileDeleteFailed: Boolean, val keptOnServer: Boolean = false) : LibraryEvent {
+        fun message(context: Context): String {
+            val removed = when {
+                fileDeleteFailed -> context.getString(R.string.removed_file_not_deleted, title)
+                fileDeleted -> context.getString(R.string.removed_with_file, title)
+                else -> context.getString(R.string.removed_kept_file, title)
+            }
+            return if (keptOnServer) removed + " " + context.getString(R.string.removed_kept_on_server) else removed
         }
     }
 }
@@ -184,7 +189,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
-        _events.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
+        _events.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok, item.location == BookLocation.SYNCED && !deleteFromServer))
     }
 
     /** Creates an import session and starts reading the files in the background. */

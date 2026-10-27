@@ -123,7 +123,7 @@ class SeriesViewModel(private val container: AppContainer, series: String) : Vie
         if (deleteFromServer) container.server.deleteFromServer(item.id)
         if (container.player.state.value.bookId == item.id) container.player.stop()
         val ok = container.library.remove(item.id, deleteFile)
-        _removed.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok))
+        _removed.emit(LibraryEvent.Removed(item.metadata.title, deleteFile && ok, deleteFile && !ok, item.location == BookLocation.SYNCED && !deleteFromServer))
     }
 
     fun startEdit(item: LibraryItem): String {
@@ -272,7 +272,8 @@ fun SeriesScreen(series: String, navigator: AppNavigator) {
                 vm.remove(removeItem, deleteFile, deleteFromServer)
             },
             onDismiss = { removeFor = null },
-            fromServerOption = canDeleteOnServer && removeItem.location == BookLocation.SYNCED,
+            onServer = removeItem.location == BookLocation.SYNCED,
+            canDeleteOnServer = canDeleteOnServer,
         )
     }
     val serverItem = deleteOnServerFor?.let { id -> items.firstOrNull { it.id == id } }
