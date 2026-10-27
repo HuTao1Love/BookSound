@@ -436,8 +436,10 @@ internal fun UpdateDialog(state: UpdateState, onUpdate: (UpdateState.Checked) ->
         confirmButton = {
             when {
                 offersUpdate -> TextButton(onClick = { onUpdate(state as UpdateState.Checked) }) { Text(stringResource(R.string.update_install)) }
-                // While downloading the dialog can be hidden; the work goes on.
-                else -> TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_close)) }
+                // While downloading or sending to the watch the dialog can be hidden; the work goes on.
+                else -> TextButton(onClick = onDismiss) {
+                    Text(stringResource(if (state is UpdateState.Working) R.string.update_hide else R.string.update_close))
+                }
             }
         },
         dismissButton = {

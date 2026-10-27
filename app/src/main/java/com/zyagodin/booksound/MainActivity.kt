@@ -35,6 +35,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Books added or deleted on the server show up at once.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { container.server.followChanges() }
+        }
         setContent {
             AppRoot(container, actions.receiveAsFlow())
         }

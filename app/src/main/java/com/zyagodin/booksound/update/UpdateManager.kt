@@ -91,12 +91,27 @@ class UpdateManager(
     val state: StateFlow<UpdateState> = _state
     private var job: Job? = null
 
+    /** The user hid the running job's dialog: its progress and success stay quiet, a failure is still told. */
+    @Volatile private var hidden = false
+    /** What the running job last told, shown again when the user asks while it is hidden. */
+    @Volatile private var last: UpdateState = UpdateState.Idle
+
+    private fun publish(state: UpdateState) {
+        last = state
+        if (!hidden || state is UpdateState.Failed) _state.value = state
+    }
+
     fun check() {
-        if (job?.isActive == true) return
+        if (job?.isActive == true) {
+            hidden = false
+            _state.value = last
+            return
+        }
+        hidden = false
         job = scope.launch(Dispatchers.IO) {
-            _state.value = UpdateState.Checking
-            _state.value = try {
-                val release = latestRelease() ?: return@launch run { _state.value = UpdateState.Failed(UpdateState.Reason.NO_RELEASE) }
+            publish(UpdateState.Checking)
+            val result = try {
+                val release = latestRelease() ?: return@launch publish(UpdateState.Failed(UpdateState.Reason.NO_RELEASE))
                 val phone = BuildConfigInfo.versionName(context)
                 val watch = watchVersion()
                 UpdateState.Checked(
@@ -114,12 +129,14 @@ class UpdateManager(
                 Log.w(TAG, "Update check failed", e)
                 UpdateState.Failed(UpdateState.Reason.NETWORK)
             }
+            publish(result)
         }
     }
 
     /** Installs what [checked] found outdated. */
     fun update(checked: UpdateState.Checked) {
         if (job?.isActive == true) return
+        hidden = false
         job = scope.launch(Dispatchers.IO) {
             val version = checked.release.version.toString()
             val failure = try {
@@ -130,16 +147,16 @@ class UpdateManager(
                     val apk = download(checked.release.phoneApk!!, "BookSound-$version.apk", UpdateState.Step.DOWNLOADING_PHONE)
                     if (ApkInstaller.versionOf(context, apk) == null) throw IOException("Not a BookSound APK")
                     if (watchApk != null) prefs.edit().putString(KEY_PENDING_WATCH, version).apply()
-                    _state.value = UpdateState.Done(watchSent = false, phoneInstalling = true, watchNext = watchApk != null)
+                    publish(UpdateState.Done(watchSent = false, phoneInstalling = true, watchNext = watchApk != null))
                     withContext(Dispatchers.Main) { ApkInstaller.install(context, apk) }
                     null
                 } else if (watchApk != null) {
                     sendToWatch(watchApk, version) ?: run {
-                        _state.value = UpdateState.Done(watchSent = true, phoneInstalling = false)
+                        publish(UpdateState.Done(watchSent = true, phoneInstalling = false))
                         null
                     }
                 } else {
-                    _state.value = UpdateState.Done(watchSent = false, phoneInstalling = false)
+                    publish(UpdateState.Done(watchSent = false, phoneInstalling = false))
                     null
                 }
             } catch (e: IOException) {
@@ -149,7 +166,7 @@ class UpdateManager(
                 Log.w(TAG, "Update failed", e)
                 UpdateState.Reason.INSTALL
             }
-            failure?.let { _state.value = UpdateState.Failed(it) }
+            failure?.let { publish(UpdateState.Failed(it)) }
         }
     }
 
@@ -164,6 +181,7 @@ class UpdateManager(
         val phone = AppVersion.parse(BuildConfigInfo.versionName(context))
         if (pendingVersion == null || phone == null || phone > pendingVersion) return clearPendingWatch()
         if (phone < pendingVersion || job?.isActive == true) return
+        hidden = false
         job = scope.launch(Dispatchers.IO) {
             val watch = watchVersion()
             if (watch == null || !isOlder(watch, pendingVersion)) return@launch clearPendingWatch()
@@ -175,7 +193,7 @@ class UpdateManager(
                         ?.let { download(it, watchApkName(pending), UpdateState.Step.DOWNLOADING_WATCH) }
                     ?: return@launch
                 sendToWatch(apk, pending) ?: run {
-                    _state.value = UpdateState.Done(watchSent = true, phoneInstalling = false)
+                    publish(UpdateState.Done(watchSent = true, phoneInstalling = false))
                     null
                 }
             } catch (e: IOException) {
@@ -185,7 +203,7 @@ class UpdateManager(
                 Log.w(TAG, "Watch update failed", e)
                 UpdateState.Reason.WATCH_FAILED
             }
-            failure?.let { _state.value = UpdateState.Failed(it) }
+            failure?.let { publish(UpdateState.Failed(it)) }
         }
     }
 
@@ -193,8 +211,10 @@ class UpdateManager(
 
     private fun watchApkName(version: String) = "BookSound-Watch-$version.apk"
 
+    /** Hides the dialog; a download or a sending to the watch goes on behind it. */
     fun dismiss() {
-        if (job?.isActive != true) _state.value = UpdateState.Idle
+        hidden = job?.isActive == true
+        _state.value = UpdateState.Idle
     }
 
     private fun isOlder(installed: String, latest: AppVersion): Boolean = AppVersion.parse(installed)?.let { it < latest } ?: true
@@ -231,7 +251,7 @@ class UpdateManager(
         dir.listFiles()?.filter { !it.name.endsWith("-$release") && !it.name.endsWith("-$release.part") }?.forEach { it.delete() }
         val target = File(dir, name)
         if (target.length() == asset.size) return target
-        _state.value = UpdateState.Working(step, 0f)
+        publish(UpdateState.Working(step, 0f))
         downloads.newCall(Request.Builder().url(asset.url).build()).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Download: ${response.code}")
             val tmp = File(dir, "$name.part")
@@ -244,7 +264,7 @@ class UpdateManager(
                         if (n < 0) break
                         output.write(buffer, 0, n)
                         done += n
-                        _state.value = UpdateState.Working(step, if (asset.size > 0) done.toFloat() / asset.size else null)
+                        publish(UpdateState.Working(step, if (asset.size > 0) done.toFloat() / asset.size else null))
                     }
                 }
             }
@@ -286,7 +306,7 @@ class UpdateManager(
         }
         messages.addListener(listener, Uri.parse("wear://*" + WatchPaths.APK_RESULT_PREFIX), MessageClient.FILTER_PREFIX).await()
         try {
-            _state.value = UpdateState.Working(UpdateState.Step.SENDING_WATCH, 0f)
+            publish(UpdateState.Working(UpdateState.Step.SENDING_WATCH, 0f))
             val channel = channels.openChannel(node.id, WatchPaths.APK_PREFIX + version).await()
             try {
                 channels.getOutputStream(channel).await().use { output ->
@@ -298,7 +318,7 @@ class UpdateManager(
                             if (n < 0) break
                             output.write(buffer, 0, n)
                             sent += n
-                            _state.value = UpdateState.Working(UpdateState.Step.SENDING_WATCH, sent.toFloat() / apk.length())
+                            publish(UpdateState.Working(UpdateState.Step.SENDING_WATCH, sent.toFloat() / apk.length()))
                         }
                     }
                 }

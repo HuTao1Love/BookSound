@@ -28,10 +28,12 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
-import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 fun Route.adminRoutes(ctx: ServerContext) {
     authenticate(AUTH) {
@@ -99,13 +101,22 @@ fun Route.adminRoutes(ctx: ServerContext) {
             call.respond(HttpStatusCode.NoContent)
         }
 
-        // Live progress for the web app. Events carry no secrets beyond what the other endpoints show any user.
-        // Proxies (the router's among them) close long responses; the web app then polls instead.
+        // Live progress for the web app, and library changes for the phones. Events carry no secrets beyond what
+        // the other endpoints show any user. Proxies (the router's among them) close long responses; the web app
+        // then polls instead.
         sse(ApiPaths.EVENTS) {
-            heartbeat { period = 20.seconds }
             try {
-                ctx.events.events.collect { event ->
-                    send(ServerSentEvent(data = ApiJson.encodeToString(EventDto.serializer(), event), event = event.type))
+                // Its own heartbeat rather than Ktor's, whose failed write when the client left escapes this catch.
+                coroutineScope {
+                    launch {
+                        while (true) {
+                            delay(20.seconds)
+                            send(ServerSentEvent(comments = "heartbeat"))
+                        }
+                    }
+                    ctx.events.events.collect { event ->
+                        send(ServerSentEvent(data = ApiJson.encodeToString(EventDto.serializer(), event), event = event.type))
+                    }
                 }
             } catch (e: java.io.IOException) {
                 // The client or a proxy went away (ClosedWriteChannelException is one): not an error.
