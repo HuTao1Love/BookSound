@@ -6,16 +6,17 @@
 > code that may not hold up to scrutiny. Use it at your own risk and keep backups of your
 > audiobooks.
 
-A local-first audiobook player for Android. Import M4B/M4A files, folders of MP3s or torrents,
-review and fix the metadata, and BookSound stores every book as a single M4B file (chapters,
-cover, tags) in a folder you choose. No account and no cloud needed; an optional self-hosted
-server adds a shared library, torrents converted at home, a web player and progress sync.
+A local-first audiobook player for Android and Wear OS. Import M4B/M4A files, folders of MP3s or
+torrents, review and fix the metadata, and BookSound stores every book as a single M4B file
+(chapters, cover, tags) in a folder you choose. No account and no cloud needed; an optional
+self-hosted server adds a shared library, torrents converted at home, a web player and progress
+sync between the phone, the watch and the browser.
 
 ## Screenshots
 
 | Library | Series | Book |
 |:---:|:---:|:---:|
-| <img src="screenshots/library.png" width="250" alt="Library with a series"> | <img src="screenshots/series.png" width="250" alt="Series screen"> | <img src="screenshots/detail.png" width="250" alt="Book details"> |
+| <img src="screenshots/library.png" width="250" alt="Library with series"> | <img src="screenshots/series.png" width="250" alt="Series screen"> | <img src="screenshots/detail.png" width="250" alt="Book details"> |
 
 | Player | Narrator's voice | Sleep timer |
 |:---:|:---:|:---:|
@@ -24,6 +25,16 @@ server adds a shared library, torrents converted at home, a web player and progr
 | Import | Review import | Cover search |
 |:---:|:---:|:---:|
 | <img src="screenshots/import.png" width="250" alt="Import"> | <img src="screenshots/review.png" width="250" alt="Review import"> | <img src="screenshots/cover.png" width="250" alt="Cover search"> |
+
+| Where to listen | Server |
+|:---:|:---:|
+| <img src="screenshots/cast.png" width="250" alt="Choosing the phone, Bluetooth or a Cast device"> | <img src="screenshots/server.png" width="250" alt="Server settings on the phone"> |
+
+The web app, served by the [server](#server):
+
+| Library | Book |
+|:---:|:---:|
+| <img src="screenshots/web.png" width="420" alt="Web app library"> | <img src="screenshots/web-book.png" width="420" alt="Web app book page"> |
 
 ## Features
 
@@ -48,16 +59,27 @@ server adds a shared library, torrents converted at home, a web player and progr
   and shake to start it over), smart rewind after a pause, voice equalizer presets for the
   narrator, a volume boost for quiet recordings and skipping silence, all remembered per book, and
   "Listening starts": where each time you listened began, to go back there after falling asleep.
+- **Where to listen.** The phone's speaker, Bluetooth headphones, or a Chromecast, TV or speaker
+  with Google Cast on the same Wi-Fi; the phone lends the book to it over the local network.
+- **Wear OS watch.** A watch app with its own player, a tile and a complication. Books are sent
+  from the phone (or downloaded from the server over Wi-Fi), and the position follows you between
+  the watch and the phone.
 - **Rescans.** Each book carries an ID inside its M4B, so moved files are found again and books
   copied into the folder by hand are picked up.
+- **Updates in the app.** Settings → *Check for updates* installs the latest GitHub release on the
+  phone and then sends the watch app to the watch.
 - Dark and light themes, AMOLED black, English and Russian UI.
 - **Optional server.** A shared library for the family, torrents downloaded and converted on a home
   server, books for phones and watches, listening progress synced per user, and a web app to listen
-  in the browser. See [Server](#server).
+  in the browser. The phone's library shows the server's books next to its own, with a filter for
+  where they are. See [Server](#server).
 
-## Requirements
+## Requirements and installing
 
-Android 13 (API 33) or newer.
+Android 13 (API 33) or newer; the watch app needs Wear OS 4 or newer. The phone app
+(`BookSound-<version>.apk`), the watch app (`BookSound-Watch-<version>.apk`) and the server are
+attached to each [release](https://github.com/HuTao1Love/BookSound/releases). Install the watch
+app once by hand (e.g. `adb install`); after that the phone keeps it updated.
 
 ## Project layout
 
@@ -68,7 +90,9 @@ Android 13 (API 33) or newer.
 | `:torrent` | The libtorrent session wrapper used by the phone app and the server. |
 | `:server` | The optional server: Ktor, SQLite, ffmpeg, libtorrent4j. Serves the web app. |
 | `web/` | The web app: React, Vite, TypeScript, MUI. Built by Gradle (`:web`), which downloads its own Node. |
-| `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Jetpack Compose UI. |
+| `:shared` | Android code used by both the phone and the watch: the audiobook player, the server client and sync backend, APK installation. |
+| `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Google Cast, Jetpack Compose UI. |
+| `:wear` | The Wear OS app: player, tile, complication, books from the phone over the Data Layer or from the server over Wi-Fi, Compose for Wear OS UI. |
 
 ## Server
 
