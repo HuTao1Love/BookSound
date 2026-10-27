@@ -6,10 +6,11 @@
 > code that may not hold up to scrutiny. Use it at your own risk and keep backups of your
 > audiobooks.
 
-A local-first audiobook player for Android. Import M4B/M4A files, folders of MP3s or torrents,
-review and fix the metadata, and BookSound stores every book as a single M4B file (chapters,
-cover, tags) in a folder you choose. No account and no cloud needed; an optional self-hosted
-server adds a shared library, torrents converted at home, a web player and progress sync.
+A local-first audiobook player for Android and Wear OS. Import M4B/M4A files, folders of MP3s or
+torrents, review and fix the metadata, and BookSound stores every book as a single M4B file
+(chapters, cover, tags) in a folder you choose. No account and no cloud needed; an optional
+self-hosted server adds a shared library for the family, torrents and downloads converted at home,
+a web player and listening progress that follows you between the phone, the watch and the browser.
 
 ## Screenshots
 
@@ -50,6 +51,9 @@ server adds a shared library, torrents converted at home, a web player and progr
   "Listening starts": where each time you listened began, to go back there after falling asleep.
 - **Rescans.** Each book carries an ID inside its M4B, so moved files are found again and books
   copied into the folder by hand are picked up.
+- **On the watch.** A Wear OS app plays books sent from the phone (or downloaded from the server,
+  smaller copies made for it if you like), with a tile and a complication; positions go back to the phone.
+- **Chromecast.** Play the book on a TV or a Nest speaker; the phone lends the file over your network.
 - Dark and light themes, AMOLED black, English and Russian UI.
 - **Optional server.** A shared library for the family, torrents downloaded and converted on a home
   server, books for phones and watches, listening progress synced per user, and a web app to listen
@@ -57,7 +61,8 @@ server adds a shared library, torrents converted at home, a web player and progr
 
 ## Requirements
 
-Android 13 (API 33) or newer.
+Android 13 (API 33) or newer; the watch app needs Wear OS 4 or newer. The server runs on any
+Linux machine (Docker or systemd), amd64 or arm64.
 
 ## Project layout
 
@@ -68,7 +73,10 @@ Android 13 (API 33) or newer.
 | `:torrent` | The libtorrent session wrapper used by the phone app and the server. |
 | `:server` | The optional server: Ktor, SQLite, ffmpeg, libtorrent4j. Serves the web app. |
 | `web/` | The web app: React, Vite, TypeScript, MUI. Built by Gradle (`:web`), which downloads its own Node. |
-| `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Jetpack Compose UI. |
+| `:app` | The Android app: Room, DataStore, Storage Access Framework, import pipeline (Media3 Transformer), torrents (libtorrent4j), playback (Media3 ExoPlayer + MediaSessionService), Cast, Jetpack Compose UI. |
+| `:wear` | The Wear OS app: its own player, library, tile and complication; books and positions come from the phone (Data Layer) or the server. |
+| `:shared` | What the phone and the watch share: the player wrapper, the server client and sync backend. |
+| `tools/screenshots` | The demo library and the scripts that take this README's screenshots (`.github/workflows/screenshots.yml`). |
 
 ## Server
 
