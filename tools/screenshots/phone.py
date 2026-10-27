@@ -209,7 +209,10 @@ def home():
 def open_book(title, long=False):
     """Finds a book with the library's search (books without a series sit in a row that scrolls sideways)."""
     home()
-    tap(r"Search")
+    # The search stays open with the last query: clearing closes it, the button opens it again.
+    tap_if(r"Clear")
+    if not any("EditText" in (n.get("class") or "") for n in nodes()):
+        tap(r"Search")
     shell("input text " + title.replace(" ", "%s"))
     time.sleep(2)
     hits = [n for n in matching(re.escape(title)) if "EditText" not in (n.get("class") or "")]
