@@ -197,6 +197,32 @@ def pick_folder():
     fail("could not pick the folder")
 
 
+def home():
+    """Back to the library's top level (its header counts the books)."""
+    for _ in range(5):
+        if matching(r"\d+ audiobooks"):
+            return
+        back()
+    fail("can't get back to the library")
+
+
+def open_book(title, long=False):
+    """Finds a book with the library's search (books without a series sit in a row that scrolls sideways)."""
+    home()
+    tap(r"Search")
+    shell("input text " + title.replace(" ", "%s"))
+    time.sleep(2)
+    hits = [n for n in matching(re.escape(title)) if "EditText" not in (n.get("class") or "")]
+    if not hits:
+        fail(f"search found no {title}")
+    x, y = center(max(hits, key=lambda n: center(n)[1]))
+    if long:
+        shell(f"input swipe {x} {y} {x} {y} 900")
+    else:
+        shell(f"input tap {x} {y}")
+    time.sleep(2)
+
+
 def dismiss_prompts():
     for label in (r"not now", r"later", r"close"):
         tap_if(label)
@@ -204,7 +230,7 @@ def dismiss_prompts():
 
 def listen(title, chapter, resume=False):
     """Opens a book, plays it, jumps to a chapter and pauses: progress and a listening start."""
-    tap(re.escape(title))
+    open_book(title)
     step(f"detail-{title[:10]}")
     tap(r"Resume|Continue|Play" if resume else r"Play")
     time.sleep(3)
@@ -222,7 +248,7 @@ def listen(title, chapter, resume=False):
     shell(f"input tap {x} {y}")
     time.sleep(1.5)
     tap(r"Close player")
-    back()
+    home()
 
 
 def main():
@@ -231,7 +257,7 @@ def main():
     step("start")
     pick_folder()
     step("picked")
-    find(r"Pride and Prejudice", timeout=90)
+    find(r"13 audiobooks", timeout=90)
     dismiss_prompts()
 
     # Some listening: Pride and Prejudice three times (each after another book: new listening starts).
@@ -241,22 +267,19 @@ def main():
     listen("The Sign of the Four", "Chapter 4")
     listen("Pride and Prejudice", "Chapter 26", resume=True)
     for title in ("A Study in Scarlet", "The Time Machine"):
-        long_press(re.escape(title))
+        open_book(title, long=True)
         tap(r"Mark as finished")
-        for _ in range(4):
-            swipe(500, 1900, settle=0.8)
+    home()
+    for _ in range(4):
+        swipe(500, 1900, settle=0.8)
     step("library")
 
     shot("library")
-    x, y = center(reveal(r"Sherlock Holmes"))
+    x, y = center(reveal(r"Open series"))
     shell(f"input tap {x} {y}")
     time.sleep(2)
     shot("series")
-    back()
-    for _ in range(4):
-        swipe(500, 1900, settle=0.8)
-
-    tap(r"Pride and Prejudice")
+    open_book("Pride and Prejudice")
     shot("detail")
     tap(r"Resume|Continue|Play")
     time.sleep(3)
