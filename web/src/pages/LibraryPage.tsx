@@ -1,12 +1,14 @@
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SwapVertRoundedIcon from "@mui/icons-material/SwapVertRounded";
-import { Alert, Box, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useBooks } from "../api/hooks";
 import type { LibraryEntryDto } from "../api/types.gen";
+import ProgressMenu from "../components/ProgressMenu";
 import BookCover from "../components/BookCover";
 import { SeriesCard, Shelf } from "../components/SeriesParts";
 import { EmptyState, PageHeader, PlayButton, ProgressLine, SectionTitle } from "../components/Ui";
@@ -38,15 +40,14 @@ export default function LibraryPage() {
   const [descending, setDescending] = useState(() => stored("library.descending", "true") === "true");
   const [filter, setFilter] = useState<ProgressFilter>(() => stored("library.filter", "ALL"));
 
-  // As on the phone: books outside any series on one shelf, then a card per series.
-  const sections = useMemo(() => groupSeries(applyQuery(books.data ?? [], text, sort, descending, filter)), [books.data, text, sort, descending, filter]);
+  const entries = useMemo(() => applyQuery(books.data ?? [], text, sort, descending, filter), [books.data, text, sort, descending, filter]);
+  const sections = useMemo(() => groupSeries(entries), [entries]);
 
-  // What one was listening to, latest first: the row on top.
+  // Unfinished listening sessions, latest first.
   const listening = useMemo(
     () => (books.data ?? [])
       .filter((e) => e.playback && !e.playback.finished && e.playback.positionMs > 0)
-      .sort((a, b) => (b.playback?.lastPlayedAt ?? 0) - (a.playback?.lastPlayedAt ?? 0))
-      .slice(0, 8),
+      .sort((a, b) => (b.playback?.lastPlayedAt ?? 0) - (a.playback?.lastPlayedAt ?? 0)),
     [books.data],
   );
 
@@ -59,17 +60,18 @@ export default function LibraryPage() {
     <Box>
       <PageHeader
         title={t("nav.library")}
+        actions={<Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => navigate("/add")}>{t("nav.imports")}</Button>}
         subtitle={all.length > 0 ? `${t("library.count", { count: all.length })} · ${t("library.hours", { h: hours })}` : undefined}
       />
 
       {all.length === 0 ? (
         <EmptyState icon={<LibraryBooksRoundedIcon />} title={t("library.empty")} hint={t("library.emptyHint")} />
       ) : (
-        <Stack spacing={4}>
+        <Stack spacing={2.5}>
           {listening.length > 0 && !text.trim() && (
             <Box>
               <SectionTitle>{t("library.continue")}</SectionTitle>
-              <Box sx={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: { xs: "86%", sm: "minmax(340px, 400px)" }, gap: 2, overflowX: "auto", pb: 1, mx: { xs: -2, sm: 0 }, px: { xs: 2, sm: 0 }, scrollSnapType: "x mandatory", "&::-webkit-scrollbar": { display: "none" } }}>
+              <Box sx={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: { xs: "90%", sm: "300px", lg: "calc((100% - 24px) / 3)" }, gap: 1.5, overflowX: "auto", pb: 1, scrollSnapType: "x mandatory", scrollbarWidth: "thin", scrollbarColor: "#555963 transparent", "&::-webkit-scrollbar": { height: 4 }, "&::-webkit-scrollbar-track": { background: "transparent" }, "&::-webkit-scrollbar-thumb": { background: "#555963", borderRadius: 4 } }}>
                 {listening.map((e) => <ContinueCard key={e.book.id} entry={e} />)}
               </Box>
             </Box>
@@ -157,22 +159,22 @@ function ContinueCard({ entry }: { entry: LibraryEntryDto }) {
   const position = isCurrent ? player.positionMs : playback?.positionMs ?? 0;
   return (
     <Box
-      onClick={() => navigate(`/book/${book.id}`)}
-      sx={{ scrollSnapAlign: "start", display: "flex", gap: 2, alignItems: "center", p: 1.5, borderRadius: 4, cursor: "pointer", bgcolor: "surface.main", border: 1, borderColor: "divider", transition: "background-color 160ms", "&:hover": { bgcolor: "surface.high" } }}
+      sx={{ minWidth: 0, scrollSnapAlign: "start", display: "flex", gap: 1.25, alignItems: "center", p: 1.25, borderRadius: 2, bgcolor: "surface.main", border: 1, borderColor: "divider", transition: "background-color 160ms", "&:hover": { bgcolor: "surface.high" } }}
     >
-      <Box sx={{ width: 84, flexShrink: 0 }}>
+      <Box sx={{ width: 48, flexShrink: 0 }}>
         <BookCover book={book} size={256} radius={2} />
       </Box>
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography sx={{ fontWeight: 800, lineHeight: 1.25, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{book.metadata.title}</Typography>
+        <Typography component="a" href={`/book/${book.id}`} onClick={(e) => { e.preventDefault(); navigate(`/book/${book.id}`); }} sx={{ color: "text.primary", textDecoration: "none", "&:hover": { color: "primary.main" }, fontSize: 14, fontWeight: 700, lineHeight: 1.25, display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{book.metadata.title}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap component="div">{book.metadata.author}</Typography>
-        <ProgressLine value={book.durationMs ? position / book.durationMs : 0} sx={{ mt: 1.25 }} />
-        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+        <ProgressLine value={book.durationMs ? position / book.durationMs : 0} sx={{ mt: 0.5 }} />
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.25 }}>
           {t("book.left", { time: formatDuration(Math.max(0, book.durationMs - position), false) })}
         </Typography>
       </Box>
+      <ProgressMenu entry={entry} />
       <PlayButton
-        size={46}
+        size={32}
         playing={isCurrent && player.playing}
         onClick={(e) => { e.stopPropagation(); if (isCurrent) player.toggle(); else player.play(entry); }}
       />

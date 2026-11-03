@@ -236,6 +236,36 @@ class ServerTest {
     }
 
     @Test
+    fun `reset playback clears only the caller progress and appears in sync`() = server {
+        val admin = client.setupAndLogin()
+        val id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        File(dataDir, "library/Reset.m4b").writeBytes(bookFile(id, "Reset"))
+        ctx.library.scan()
+        client.post(ApiPaths.ADMIN_USERS) { bearer(admin); json(UserCreateRequest.serializer(), UserCreateRequest("guest", "guest password")) }
+        val guest = client.post(ApiPaths.LOGIN) { json(LoginRequest.serializer(), LoginRequest("guest", "guest password", "Web", DeviceKind.WEB)) }.body(TokenResponse.serializer())
+        val recent = System.currentTimeMillis()
+        val original = PlaybackDto(id, 800, 1.5f, true, recent, StampDto(7, recent, "other-device"))
+        ctx.library.repo.savePlayback(admin.user.id, original)
+        ctx.library.repo.savePlayback(guest.user.id, original)
+        val before = ctx.sync.pull(guest.user.id, 0, 500).cursor
+        val url = "${ApiPaths.book(id)}/playback/reset"
+        assertEquals(HttpStatusCode.Unauthorized, client.post(url).status)
+        val response = client.post(url) { bearer(guest) }
+        assertEquals(HttpStatusCode.OK, response.status)
+        val reset = response.body(PlaybackDto.serializer())
+        assertEquals(0L, reset.positionMs)
+        assertEquals(false, reset.finished)
+        assertEquals(null, reset.lastPlayedAt)
+        assertEquals(1.5f, reset.speed)
+        assertTrue(reset.stamp.revision > original.stamp.revision)
+        assertEquals(guest.deviceId, reset.stamp.updatedBy)
+        assertEquals(original, ctx.library.repo.playback(admin.user.id, id))
+        val changes = client.get("${ApiPaths.SYNC_PULL}?since=$before") { bearer(guest) }.body(PullResponse.serializer())
+        assertEquals(reset, changes.changes.playback.single())
+        assertEquals(HttpStatusCode.NotFound, client.post("${ApiPaths.BOOKS}/missing/playback/reset") { bearer(guest) }.status)
+    }
+
+    @Test
     fun `books copied into the folder are found by a scan`() = server {
         val tokens = client.setupAndLogin()
         val dir = File(dataDir, "library/Someone/Series").apply { mkdirs() }

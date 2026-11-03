@@ -31,6 +31,7 @@ interface PlayerApi extends PlayerState {
   setSleep: (timer: SleepTimer) => void;
   setPreset: (preset: VoicePreset) => void;
   setFinished: (finished: boolean) => void;
+  resetProgress: (entry: LibraryEntryDto) => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerApi | null>(null);
@@ -68,6 +69,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
   const playback = useRef<PlaybackDto | null>(null);
   const pausedAt = useRef<number | null>(null);
   const lastSave = useRef(0);
+  const saveGeneration = useRef(0);
   const preferences = useRef<PreferencesDto | null>(null);
   const pendingSeek = useRef<number | null>(null);
   // The chapter playback is in, kept apart from the state so a seek doesn't count as reaching the chapter's end.
@@ -83,6 +85,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       // While a book loads the element is not at its position yet (and switching books fires a "pause" for the
       // old file): saving now would store the start of the book over the real position.
       if (!book || pendingSeek.current !== null) return;
+      const generation = saveGeneration.current;
       const now = Date.now();
       const previous = playback.current;
       const record: PlaybackDto = {
@@ -98,6 +101,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
       lastSave.current = now;
       try {
         const result = await api.post<PushResponse>(paths.syncPush, { changes: { books: [], playback: [record] } });
+        if (generation !== saveGeneration.current || stateRef.current.book?.id !== book.id) return;
         const revision = result.accepted[`playback:${book.id}`];
         if (revision !== undefined) playback.current = { ...record, stamp: { ...record.stamp, revision } };
         queryClient.setQueryData<LibraryEntryDto[]>(keys.books, (old) => old?.map((e) => (e.book.id === book.id ? { ...e, playback: playback.current } : e)));
@@ -340,6 +344,32 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
     [equalizer],
   );
 
+  const resetProgress = useCallback(async (entry: LibraryEntryDto) => {
+    const current = stateRef.current.book?.id === entry.book.id;
+    const previousSeek = pendingSeek.current;
+    if (current) {
+      saveGeneration.current++;
+      pendingSeek.current = 0;
+      audio.pause();
+    }
+    try {
+      const reset = await api.post<PlaybackDto>(`${paths.book(entry.book.id)}/playback/reset`);
+      if (stateRef.current.book?.id === entry.book.id) {
+        saveGeneration.current++;
+        playback.current = reset;
+        pendingSeek.current = null;
+        audio.removeAttribute("src");
+        audio.load();
+        update({ book: null, playing: false, positionMs: 0, durationMs: 0, chapterIndex: 0, sleep: { kind: "off" } });
+      }
+      queryClient.setQueryData<LibraryEntryDto[]>(keys.books, (old) => old?.map((e) => e.book.id === entry.book.id ? { ...e, playback: reset } : e));
+      queryClient.setQueryData<LibraryEntryDto>(keys.book(entry.book.id), (old) => old ? { ...old, playback: reset } : { ...entry, playback: reset });
+    } catch (error) {
+      if (current && stateRef.current.book?.id === entry.book.id) pendingSeek.current = previousSeek;
+      throw error;
+    }
+  }, [audio, queryClient]);
+
   const setFinished = useCallback(
     (finished: boolean) => {
       void save({ finished, positionMs: finished ? stateRef.current.book?.durationMs ?? 0 : 0 });
@@ -404,6 +434,7 @@ export function PlayerProvider({ deviceId, children }: { deviceId: string; child
     setSleep: (sleep) => update({ sleep }),
     setPreset,
     setFinished,
+    resetProgress,
   };
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

@@ -1,14 +1,19 @@
 import AddCircleRoundedIcon from "@mui/icons-material/AddCircleRounded";
 import DnsRoundedIcon from "@mui/icons-material/DnsRounded";
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import { groupSeries } from "../library";
+import BookCover from "./BookCover";
+import { StackedCovers } from "./SeriesParts";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
-import { Alert, alpha, Avatar, Badge, Box, Button, ButtonBase, Typography, useMediaQuery, useTheme } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { Alert, alpha, Avatar, Badge, Box, Button, ButtonBase, IconButton, Tooltip, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, paths } from "../api/client";
-import { ACTIVE_STAGES, keys, useImports, useTorrents, useUploads } from "../api/hooks";
+import { ACTIVE_STAGES, keys, useBooks, useImports, useTorrents, useUploads } from "../api/hooks";
 import { API_VERSION, type SessionDto, type StatusDto } from "../api/types.gen";
+import { usePlayer } from "../player/PlayerContext";
 import MiniPlayer from "./MiniPlayer";
 import { SIDE_PLAYER_WIDTH, SidePlayer, useSidePlayer } from "./NowPlaying";
 import { Logo, SIDEBAR_WIDTH } from "./Ui";
@@ -27,11 +32,31 @@ export default function AppShell({ session, children }: { session: SessionDto; f
   const navigate = useNavigate();
   const busy = useBusyCount();
   const side = useSidePlayer();
+  const books = useBooks();
+  const player = usePlayer();
+  const sidebarNow = Date.now();
+  const libraryItems = groupSeries(books.data ?? []).flatMap((section) => section.series === null
+    ? section.books.map((entry) => ({ key: `book:${entry.book.id}`, title: entry.book.metadata.title, subtitle: entry.book.metadata.author, href: `/book/${entry.book.id}`, books: [entry], isSeries: false }))
+    : [{ key: `series:${section.series}`, title: section.series, subtitle: t("library.booksInSeries", { count: section.books.length }), href: `/series/${encodeURIComponent(section.series)}`, books: section.books, isSeries: true }])
+    .sort((a, b) => {
+      const recent = (item: typeof a) => Math.max(0, ...item.books.map((entry) =>
+        player.playing && player.book?.id === entry.book.id ? sidebarNow : entry.playback?.lastPlayedAt ?? 0));
+      return recent(b) - recent(a)
+        || Math.max(...b.books.map((entry) => entry.book.addedAt)) - Math.max(...a.books.map((entry) => entry.book.addedAt));
+    });
+  const client = useQueryClient();
+  const logout = useMutation({
+    mutationFn: () => api.post(paths.logout),
+    onSuccess: () => {
+      client.clear();
+      window.location.href = "/login";
+    },
+  });
 
   const tabs = [
     { path: "/", label: t("nav.library"), icon: <LibraryBooksRoundedIcon /> },
     { path: "/add", label: t("nav.imports"), icon: <AddCircleRoundedIcon />, badge: busy },
-    ...(session.user.isAdmin ? [{ path: "/admin", label: t("nav.admin"), icon: <DnsRoundedIcon /> }] : []),
+    ...(!wide && session.user.isAdmin ? [{ path: "/admin", label: t("nav.admin"), icon: <DnsRoundedIcon /> }] : []),
   ];
   // The account has no tab of its own: it opens from the user's avatar at the bottom.
   const onAccount = location.pathname === "/account";
@@ -54,49 +79,54 @@ export default function AppShell({ session, children }: { session: SessionDto; f
             p: 2, gap: 0.5, bgcolor: "surface.low", borderRight: 1, borderColor: "divider",
           }}
         >
-          <ButtonBase onClick={() => navigate("/")} sx={{ justifyContent: "flex-start", gap: 1.5, px: 1.5, py: 1, mb: 2, borderRadius: 3 }}>
+          <ButtonBase aria-label={`${t("appName")} · ${t("nav.library")}`} aria-current={location.pathname === "/" ? "page" : undefined} onClick={() => navigate("/")} sx={{ justifyContent: "flex-start", gap: 1.5, px: 1.5, py: 1, borderRadius: 3, "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.08) } }}>
             <Logo size={34} />
             <Typography sx={{ fontWeight: 800, fontSize: 19, letterSpacing: "-0.01em" }}>{t("appName")}</Typography>
           </ButtonBase>
-          {tabs.map((tab) => {
-            const selected = current === tab.path;
-            return (
-              <ButtonBase
-                key={tab.path}
-                onClick={() => navigate(tab.path)}
-                sx={{
-                  justifyContent: "flex-start", gap: 1.5, px: 1.75, py: 1.25, borderRadius: 3, fontWeight: 700, fontSize: 15,
-                  color: selected ? "primary.main" : "text.secondary",
-                  bgcolor: selected ? alpha(theme.palette.primary.main, 0.12) : "transparent",
-                  "&:hover": { bgcolor: selected ? alpha(theme.palette.primary.main, 0.16) : alpha(theme.palette.text.primary, 0.05), color: selected ? "primary.main" : "text.primary" },
-                }}
-              >
-                {tab.icon}
-                <Box component="span" sx={{ flex: 1, textAlign: "left" }}>{tab.label}</Box>
-                {!!tab.badge && (
-                  <Box component="span" sx={{ minWidth: 22, height: 22, px: 0.75, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, background: theme.palette.gradient.css, color: theme.palette.gradient.on }}>
-                    {tab.badge}
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", mt: 1, pt: 2, borderTop: 1, borderColor: "divider" }}>
+            <Typography variant="overline" color="text.secondary" sx={{ px: 1.5 }}>{t("library.booksAndSeries")}</Typography>
+            {books.isLoading && <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 1.5 }}>{t("common.loading")}</Typography>}
+            {books.isError && <Typography variant="caption" color="error" sx={{ display: "block", px: 1.5 }}>{t("common.error")}</Typography>}
+            {libraryItems.map((item) => {
+              const href = item.href;
+              const selected = location.pathname === href;
+              return (
+                <ButtonBase key={item.key} component="a" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}
+                  aria-current={selected ? "page" : undefined}
+                  sx={{ width: "100%", justifyContent: "flex-start", gap: 1.25, px: 1, py: 1, borderRadius: 2, textAlign: "left", color: selected ? "primary.main" : "text.primary", bgcolor: selected ? alpha(theme.palette.primary.main, 0.12) : "transparent", "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.08) } }}>
+                  <Box sx={{ width: 42, flexShrink: 0 }}>{item.isSeries ? <StackedCovers books={item.books} size={34} /> : <Box sx={{ width: 34 }}><BookCover book={item.books[0].book} size={128} radius={0.7} /></Box>}</Box>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}>{item.title}</Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap component="div" sx={{ mt: 0.25, lineHeight: 1.4 }}>{item.subtitle}</Typography>
                   </Box>
-                )}
-              </ButtonBase>
-            );
-          })}
-          <Box sx={{ flex: 1 }} />
+                </ButtonBase>
+              );
+            })}
+          </Box>
+          {logout.isError && <Alert severity="error" sx={{ fontSize: 12 }}>{t("common.error")}</Alert>}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, pt: 1, borderTop: 1, borderColor: "divider", flexShrink: 0 }}>
           <ButtonBase
             onClick={() => navigate("/account")}
             aria-label={t("nav.account")}
             sx={{
-              justifyContent: "flex-start", gap: 1.5, p: 1, borderRadius: 3,
+              justifyContent: "flex-start", gap: 1, p: 0.75, borderRadius: 3, flex: 1, minWidth: 0,
               bgcolor: onAccount ? alpha(theme.palette.primary.main, 0.12) : "transparent",
               "&:hover": { bgcolor: onAccount ? alpha(theme.palette.primary.main, 0.16) : alpha(theme.palette.text.primary, 0.05) },
             }}
           >
-            {avatar(34)}
+            {avatar(28)}
             <Box sx={{ minWidth: 0, textAlign: "left" }}>
               <Typography variant="body2" noWrap sx={{ fontWeight: 700 }}>{session.user.name}</Typography>
               <Typography variant="caption" color="text.secondary" noWrap component="div">{session.user.isAdmin ? t("account.admin") : t("account.user")}</Typography>
             </Box>
           </ButtonBase>
+          {session.user.isAdmin && <Tooltip title={t("nav.admin")}>
+            <IconButton size="small" aria-label={t("nav.admin")} aria-current={location.pathname === "/admin" ? "page" : undefined} onClick={() => navigate("/admin")} sx={{ color: location.pathname === "/admin" ? "primary.main" : "text.secondary", bgcolor: location.pathname === "/admin" ? alpha(theme.palette.primary.main, 0.12) : undefined }}><DnsRoundedIcon fontSize="small" /></IconButton>
+          </Tooltip>}
+          <Tooltip title={t("account.signOut")}>
+            <span><IconButton size="small" aria-label={t("account.signOut")} disabled={logout.isPending} onClick={() => logout.mutate()}><LogoutRoundedIcon fontSize="small" /></IconButton></span>
+          </Tooltip>
+          </Box>
         </Box>
       )}
 
