@@ -54,6 +54,13 @@ fun Route.libraryRoutes(ctx: ServerContext) {
             call.respond(entry)
         }
 
+        post("${ApiPaths.BOOKS}/{id}/playback/reset") {
+            val p = call.user
+            val id = call.parameters["id"]!!
+            io { repo.dto(id) } ?: throw notFound()
+            call.respond(io { ctx.sync.resetPlayback(p.userId, id, p.deviceId) })
+        }
+
         patch("${ApiPaths.BOOKS}/{id}") {
             val p = call.user
             val body = call.receive<MetadataPatch>()

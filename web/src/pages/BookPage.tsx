@@ -22,6 +22,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, paths, request } from "../api/client";
 import { keys, useBook, useMe, useStatus, useWatchProfiles } from "../api/hooks";
 import type { BookDto, MetadataDto, WatchFileStatusDto } from "../api/types.gen";
+import ProgressMenu from "../components/ProgressMenu";
 import BookCover, { CoverBackdrop } from "../components/BookCover";
 import { MetadataSearchDialog } from "../components/MetadataSearch";
 import { useSidePlayerFits } from "../components/NowPlaying";
@@ -119,6 +120,7 @@ export default function BookPage() {
                 <IconButton href={`${paths.bookFile(id)}?download=1`} sx={{ border: 1, borderColor: "divider" }}><DownloadIcon /></IconButton>
               </Tooltip>
               <WatchCopyButton bookId={id} />
+              <ProgressMenu entry={entry.data} />
               <Tooltip title={t("common.more")}>
                 <IconButton onClick={(e) => setMore(e.currentTarget)} sx={{ border: 1, borderColor: "divider" }}><MoreHorizRoundedIcon /></IconButton>
               </Tooltip>

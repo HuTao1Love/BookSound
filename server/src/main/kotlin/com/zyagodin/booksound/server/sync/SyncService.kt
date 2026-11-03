@@ -122,6 +122,22 @@ class SyncService(
         return null
     }
 
+    /** An explicit user action bypasses position conflict merging, which favors the furthest position. */
+    fun resetPlayback(userId: String, bookId: String, deviceId: String): PlaybackDto {
+        val previous = repo.playback(userId, bookId)
+        val reset = PlaybackDto(
+            bookId = bookId,
+            positionMs = 0,
+            speed = previous?.speed ?: 1f,
+            finished = false,
+            lastPlayedAt = null,
+            stamp = StampDto((previous?.stamp?.revision ?: 0) + 1, clock(), deviceId),
+        )
+        repo.savePlayback(userId, reset)
+        events.emit(EventDto(EventTypes.LIBRARY))
+        return reset
+    }
+
     fun preferences(userId: String): PreferencesDto = repo.preferences(userId)?.first ?: PreferencesDto(
         defaultSpeed = 1f,
         sleepTimerMinutes = 30,
