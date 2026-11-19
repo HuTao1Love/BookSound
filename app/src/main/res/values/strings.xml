@@ -670,4 +670,10 @@
     <string name="delete_from_server_title">Delete from the server?</string>
     <string name="delete_from_server_message">“%1$s” will be deleted from the server, with its file, for every user.</string>
     <string name="server_delete_failed">Can\'t delete from the server: %1$s</string>
+    <string name="watch_source_title">How to send to the watch</string>
+    <string name="watch_source_server">Download on the watch</string>
+    <string name="watch_source_server_hint">The watch downloads directly from its BookSound server over Wi-Fi or LTE.</string>
+    <string name="watch_source_phone">Send from the phone</string>
+    <string name="watch_source_phone_hint">Transfer through the phone connection without a server download on the watch.</string>
+    <string name="watch_source_unavailable">The watch cannot download from the server. Sign in on the watch or select Send from the phone.</string>
 </resources>

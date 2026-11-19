@@ -1,6 +1,13 @@
 package com.zyagodin.booksound.ui.detail
 
 import android.widget.Toast
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import com.zyagodin.booksound.wear.WatchTransfer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -138,9 +145,10 @@ fun BookDetailScreen(bookId: String, navigator: AppNavigator) {
                     onRescan = vm::rescan,
                     onOpenSeries = navigator::openSeries,
                     onSearch = navigator::searchLibrary,
+                    watchSource = vm.watchSource,
                     onSendToWatch = if (watchConnected) {
-                        {
-                            vm.sendToWatch(title)
+                        { source ->
+                            vm.sendToWatch(title, source)
                             Toast.makeText(context, R.string.watch_send_started, Toast.LENGTH_SHORT).show()
                         }
                     } else null,
@@ -236,7 +244,8 @@ internal class DetailActions(
     /** Searches the library for a name, e.g. the author's. */
     val onSearch: (String) -> Unit,
     /** Null when no watch with BookSound is connected. */
-    val onSendToWatch: (() -> Unit)?,
+    val onSendToWatch: ((WatchTransfer.Source) -> Unit)?,
+    val watchSource: WatchTransfer.Source = WatchTransfer.Source.SERVER,
     /** Null unless signed in to a server that lacks the book. */
     val onUploadToServer: (() -> Unit)? = null,
     /** Downloads a book that is only on the server. */
@@ -306,6 +315,13 @@ private fun TwoColumnDetail(details: BookDetails, live: LivePlayback, actions: D
 
 @Composable
 private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
+    var showWatchSource by rememberSaveable { mutableStateOf(false) }
+    if (showWatchSource) {
+        WatchSourceDialog(initial = actions.watchSource, onDismiss = { showWatchSource = false }, onSend = { source ->
+            showWatchSource = false
+            actions.onSendToWatch?.invoke(source)
+        })
+    }
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = Spacing.md, vertical = Spacing.sm),
@@ -342,12 +358,12 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
                         leadingIcon = { Icon(if (details.item.entry.finished) Icons.Rounded.RadioButtonUnchecked else Icons.Rounded.CheckCircle, null) },
                         onClick = { menu = false; actions.onToggleFinished() },
                     )
-                    actions.onSendToWatch?.let { send ->
+                    actions.onSendToWatch?.let {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.action_send_to_watch)) },
                             leadingIcon = { Icon(Icons.Rounded.Watch, null) },
                             enabled = !details.item.isMissing,
-                            onClick = { menu = false; send() },
+                            onClick = { menu = false; showWatchSource = true },
                         )
                     }
                     actions.onUploadToServer?.let { upload ->
@@ -367,6 +383,37 @@ private fun DetailTopBar(details: BookDetails, actions: DetailActions) {
             }
         }
     }
+}
+
+@Composable
+private fun WatchSourceDialog(initial: WatchTransfer.Source, onDismiss: () -> Unit, onSend: (WatchTransfer.Source) -> Unit) {
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("watch_transfer", android.content.Context.MODE_PRIVATE) }
+    var source by rememberSaveable {
+        mutableStateOf(runCatching { WatchTransfer.Source.valueOf(preferences.getString("source", initial.name)!!) }.getOrDefault(initial))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.watch_source_title)) },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                listOf(WatchTransfer.Source.SERVER, WatchTransfer.Source.PHONE).forEach { option ->
+                    Row(
+                        Modifier.fillMaxWidth().selectable(selected = source == option, role = Role.RadioButton, onClick = { source = option }).padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = source == option, onClick = null)
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(stringResource(if (option == WatchTransfer.Source.SERVER) R.string.watch_source_server else R.string.watch_source_phone))
+                            Text(stringResource(if (option == WatchTransfer.Source.SERVER) R.string.watch_source_server_hint else R.string.watch_source_phone_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSend(source) }) { Text(stringResource(R.string.action_send_to_watch)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
 }
 
 @Composable
