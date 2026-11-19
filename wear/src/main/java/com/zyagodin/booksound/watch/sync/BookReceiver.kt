@@ -5,13 +5,15 @@ import android.net.Uri
 import android.util.Log
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
-import com.zyagodin.booksound.core.wear.WatchBookHeader
 import com.zyagodin.booksound.core.wear.WatchCodec
 import com.zyagodin.booksound.core.wear.WatchPaths
 import com.zyagodin.booksound.core.wear.WatchResult
 import com.zyagodin.booksound.watch.data.WatchLibrary
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
@@ -36,15 +38,18 @@ class BookReceiver(
     private val library: WatchLibrary,
 ) {
     private val dir = File(context.filesDir, "incoming").apply { mkdirs() }
+    private val files = IncomingBookFiles(dir)
+    private val activeChannels = ConcurrentHashMap<String, ChannelClient.Channel>()
+    private val cancelledChannels: MutableSet<ChannelClient.Channel> = ConcurrentHashMap.newKeySet()
     private val channels = Wearable.getChannelClient(context)
     private val messages = Wearable.getMessageClient(context)
     private val mutex = Mutex()
     /** Books refused for lack of space: their audio still arriving is thrown away, not kept for a day. */
     private val refused: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    private fun header(id: String) = File(dir, "$id.header")
-    private fun part(id: String) = File(dir, "$id.part")
-    private fun done(id: String) = File(dir, "$id.done")
+    private fun header(id: String) = files.header(id)
+    private fun part(id: String) = files.part(id)
+    private fun done(id: String) = files.done(id)
 
     /** Books being received, for the UI to show their progress. */
     fun incoming(): List<IncomingBook> = dir.listFiles { f -> f.name.endsWith(".header") }.orEmpty().mapNotNull { file ->
@@ -72,15 +77,21 @@ class BookReceiver(
         }
         refused -= id
         scope.launch {
-            mutex.withLock { header(id).writeBytes(bytes) }
+            mutex.withLock { if (id !in refused) header(id).writeBytes(bytes) }
             finishIfComplete(id, sourceNode)
         }
     }
 
     fun onChannelOpened(channel: ChannelClient.Channel) {
         val id = WatchPaths.bookId(channel.path, WatchPaths.BOOK_PREFIX)?.value ?: return
+        activeChannels[id] = channel
         scope.launch {
+            if (id in refused) {
+                runCatching { channels.close(channel).await() }
+                return@launch
+            }
             mutex.withLock {
+                if (id in refused || activeChannels[id] != channel) return@launch
                 done(id).delete()
                 part(id).delete()
             }
@@ -90,6 +101,10 @@ class BookReceiver(
             } catch (e: Exception) {
                 Log.w(TAG, "Can't receive $id", e)
                 runCatching { channels.close(channel) }
+                if (activeChannels.remove(id, channel)) {
+                    discard(id)
+                    reply(channel.nodeId, id, WatchResult.Failed("receive"))
+                }
             }
         }
     }
@@ -97,6 +112,11 @@ class BookReceiver(
     fun onInputClosed(channel: ChannelClient.Channel, closeReason: Int) {
         val id = WatchPaths.bookId(channel.path, WatchPaths.BOOK_PREFIX)?.value ?: return
         scope.launch {
+            if (cancelledChannels.remove(channel)) return@launch
+            // A callback from an older attempt must not remove a restarted transfer.
+            val active = activeChannels[id]
+            if (active != null && active != channel) return@launch
+            activeChannels.remove(id, channel)
             if (refused.remove(id)) {
                 Log.i(TAG, "Dropping $id, refused for lack of space")
                 discard(id)
@@ -120,35 +140,27 @@ class BookReceiver(
         }
     }
 
-    private suspend fun finishIfComplete(id: String, node: String) {
-        val result = mutex.withLock {
-            if (!header(id).exists() || !done(id).exists()) return
-            val header: WatchBookHeader = WatchCodec.decodeHeader(header(id).readBytes())
-            val size = part(id).length()
-            if (size != header.fileSize) {
-                Log.w(TAG, "$id: got $size bytes of ${header.fileSize}")
-                WatchResult.Failed("size")
-            } else try {
-                library.add(header, part(id))
-                WatchResult.Saved
-            } catch (e: Exception) {
-                Log.e(TAG, "Can't keep $id", e)
-                WatchResult.Failed(e.javaClass.simpleName)
-            }.also {
-                header(id).delete()
-                done(id).delete()
-                part(id).delete()
+    /** Cancels an active or stranded phone transfer, retaining already installed books. */
+    suspend fun cancel(id: String) {
+        refused += id
+        val channel = activeChannels.remove(id)
+        try {
+            if (channel != null) {
+                cancelledChannels += channel
+                withTimeoutOrNull(3_000) { runCatching { channels.close(channel).await() } }
             }
+        } finally {
+            withContext(NonCancellable) { discard(id) }
         }
+    }
+
+    private suspend fun finishIfComplete(id: String, node: String) {
+        val result = mutex.withLock { files.finish(id) { header, audio -> library.add(header, audio) } } ?: return
         Log.i(TAG, "$id: $result")
         reply(node, id, result)
     }
 
-    private suspend fun discard(id: String) = mutex.withLock {
-        header(id).delete()
-        done(id).delete()
-        part(id).delete()
-    }
+    private suspend fun discard(id: String) = mutex.withLock { files.discard(id) }
 
     private fun reply(node: String, id: String, result: WatchResult) {
         scope.launch {

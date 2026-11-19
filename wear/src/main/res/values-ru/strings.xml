@@ -49,4 +49,6 @@
     <string name="server_sign_out_confirm">Нажмите ещё раз, чтобы выйти</string>
     <string name="server_quality">Качество книг</string>
     <string name="server_quality_original">Исходный файл</string>
+    <string name="receiving_cancel_confirm">Нажмите ещё раз, чтобы убрать загрузку</string>
+    <string name="receiving_cancel_hint">Нажмите для отмены</string>
 </resources>
