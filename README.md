@@ -63,8 +63,8 @@ The web app, served by the [server](#server):
   with Google Cast on the same Wi-Fi; the phone lends the book to it over the local network.
 - **Wear OS watch.** A watch app with its own player, a tile and a complication. The watch signs in to the
   server by itself (or with the phone's account) and downloads books over Wi-Fi or LTE without the
-  phone; a book sent from the phone comes from the server too when the watch can reach it, and only
-  otherwise over Bluetooth. The position follows you between the watch and the phone.
+  phone. When sending a book from the phone, choose direct server download on the watch or transfer
+  from the phone; the choice is remembered for the next book. The position follows you between the watch and the phone.
 - **Rescans.** Each book carries an ID inside its M4B, so moved files are found again and books
   copied into the folder by hand are picked up.
 - **Updates in the app.** Settings → *Check for updates* installs the latest GitHub release on the

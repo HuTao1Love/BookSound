@@ -46,20 +46,21 @@ data class WatchTransfer(
     val sentBytes: Long = 0,
     val totalBytes: Long = 0,
     val stage: Stage = Stage.QUEUED,
+    val source: Source = Source.SERVER,
 ) {
-    /** [FROM_SERVER]: the watch took the book over and downloads it from the server by itself. */
-    enum class Stage { QUEUED, SENDING, SAVING, DONE, FROM_SERVER, NO_WATCH, NO_SPACE, FAILED, CANCELLED }
+    enum class Source { SERVER, PHONE }
+
+    /** [Stage.FROM_SERVER] means the watch accepted a direct server download. */
+    enum class Stage { QUEUED, SENDING, SAVING, DONE, FROM_SERVER, SERVER_UNAVAILABLE, NO_WATCH, NO_SPACE, FAILED, CANCELLED }
 
     val isActive: Boolean get() = stage == Stage.QUEUED || stage == Stage.SENDING || stage == Stage.SAVING
     val progress: Float? get() = if (stage == Stage.SENDING && totalBytes > 0) sentBytes.toFloat() / totalBytes else null
 }
 
 /**
- * Sends books to the BookSound app on a Wear OS watch, one at a time. First the watch is asked to download the book
- * from the BookSound server by itself (Wi-Fi or LTE, much faster than Bluetooth); when it can't (not signed in, the
- * book isn't on its server, no network), the phone sends it: a header message with the metadata, chapters, cover
- * and listening position, then the audio file through a Data Layer channel. A book counts as sent only when the
- * watch confirms it saved the whole file.
+ * Sends books using the source selected for each queued transfer. SERVER asks the watch to download directly;
+ * PHONE transfers the audio through the Data Layer without asking the watch's server. Selection is remembered
+ * for the next send, while queued transfers retain their own source.
  */
 class WatchSender(
     private val context: Context,
@@ -68,6 +69,11 @@ class WatchSender(
     /** A smaller copy of the book to send instead of the library file (from the server), or null. */
     private val watchCopy: suspend (bookId: String, onWaiting: () -> Unit) -> java.io.File? = { _, _ -> null },
 ) {
+    private val preferences = context.getSharedPreferences("watch_transfer", Context.MODE_PRIVATE)
+    val preferredSource: WatchTransfer.Source
+        get() = runCatching { WatchTransfer.Source.valueOf(preferences.getString("source", null).orEmpty()) }
+            .getOrDefault(WatchTransfer.Source.SERVER)
+
     private val capabilities = Wearable.getCapabilityClient(context)
     private val messages = Wearable.getMessageClient(context)
     private val channels = Wearable.getChannelClient(context)
@@ -92,13 +98,14 @@ class WatchSender(
     }
 
     /** Queues [bookId]; a book already queued or being sent is not added twice. */
-    fun send(bookId: String, title: String) {
+    fun send(bookId: String, title: String, source: WatchTransfer.Source = preferredSource) {
+        preferences.edit().putString("source", source.name).apply()
         _transfers.update { list ->
             when {
                 list.any { it.bookId == bookId && it.isActive } -> list
                 // A new batch: the results of the previous one were already reported.
-                list.none { it.isActive } -> listOf(WatchTransfer(bookId, title))
-                else -> list.filterNot { it.bookId == bookId } + WatchTransfer(bookId, title)
+                list.none { it.isActive } -> listOf(WatchTransfer(bookId, title, source = source))
+                else -> list.filterNot { it.bookId == bookId } + WatchTransfer(bookId, title, source = source)
             }
         }
         startWorker()
@@ -136,7 +143,7 @@ class WatchSender(
     private suspend fun sendOne(transfer: WatchTransfer) {
         val id = transfer.bookId
         val stage = try {
-            send(id)
+            send(id, transfer.source)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -150,14 +157,16 @@ class WatchSender(
         setStage(id, stage)
     }
 
-    private suspend fun send(id: String): WatchTransfer.Stage {
+    private suspend fun send(id: String, source: WatchTransfer.Source): WatchTransfer.Stage {
         val book = library.book(id)?.takeIf { !it.deleted } ?: return WatchTransfer.Stage.FAILED
         val node = watchNode() ?: return WatchTransfer.Stage.NO_WATCH
-        when (askWatchToDownload(id, node)) {
-            WatchResult.Downloading -> return WatchTransfer.Stage.FROM_SERVER
-            // The server has it, but the watch has no room even for that: the phone's file won't fit either.
-            WatchResult.NoSpace -> return WatchTransfer.Stage.NO_SPACE
-            else -> Unit
+        if (source == WatchTransfer.Source.SERVER) {
+            return when (askWatchToDownload(id, node)) {
+                WatchResult.Downloading -> WatchTransfer.Stage.FROM_SERVER
+                WatchResult.Saved -> WatchTransfer.Stage.DONE
+                WatchResult.NoSpace -> WatchTransfer.Stage.NO_SPACE
+                else -> WatchTransfer.Stage.SERVER_UNAVAILABLE
+            }
         }
         val copy = watchCopy(id) {}
         try {

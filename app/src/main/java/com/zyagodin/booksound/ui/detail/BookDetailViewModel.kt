@@ -7,6 +7,7 @@ import com.zyagodin.booksound.core.model.Chapter
 import com.zyagodin.booksound.data.library.BookDetails
 import com.zyagodin.booksound.importer.ImportSelection
 import com.zyagodin.booksound.playback.PlayerUiState
+import com.zyagodin.booksound.wear.WatchTransfer
 import com.zyagodin.booksound.server.ServerTransfer
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -61,7 +62,8 @@ class BookDetailViewModel(private val container: AppContainer, private val bookI
     fun playChapter(chapter: Chapter) = container.player.play(bookId, chapter.startMs)
     fun setFinished(finished: Boolean) = viewModelScope.launch { container.library.setFinished(bookId, finished) }
     fun rescan() = viewModelScope.launch { container.scanner.scan() }
-    fun sendToWatch(title: String) = container.watchSender.send(bookId, title)
+    val watchSource get() = container.watchSender.preferredSource
+    fun sendToWatch(title: String, source: WatchTransfer.Source) = container.watchSender.send(bookId, title, source)
     fun uploadToServer(title: String) = container.server.upload(bookId, title)
     fun download() = viewModelScope.launch { container.server.download(bookId) }
     fun cancelTransfer(transfer: ServerTransfer) = container.server.cancel(transfer.bookId, transfer.direction)
