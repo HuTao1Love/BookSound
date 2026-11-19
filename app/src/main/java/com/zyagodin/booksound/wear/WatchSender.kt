@@ -47,16 +47,19 @@ data class WatchTransfer(
     val totalBytes: Long = 0,
     val stage: Stage = Stage.QUEUED,
 ) {
-    enum class Stage { QUEUED, SENDING, SAVING, DONE, NO_WATCH, NO_SPACE, FAILED, CANCELLED }
+    /** [FROM_SERVER]: the watch took the book over and downloads it from the server by itself. */
+    enum class Stage { QUEUED, SENDING, SAVING, DONE, FROM_SERVER, NO_WATCH, NO_SPACE, FAILED, CANCELLED }
 
     val isActive: Boolean get() = stage == Stage.QUEUED || stage == Stage.SENDING || stage == Stage.SAVING
     val progress: Float? get() = if (stage == Stage.SENDING && totalBytes > 0) sentBytes.toFloat() / totalBytes else null
 }
 
 /**
- * Sends books to the BookSound app on a Wear OS watch, one at a time: a header message with the
- * metadata, chapters, cover and listening position, then the audio file through a Data Layer
- * channel. A book counts as sent only when the watch confirms it saved the whole file.
+ * Sends books to the BookSound app on a Wear OS watch, one at a time. First the watch is asked to download the book
+ * from the BookSound server by itself (Wi-Fi or LTE, much faster than Bluetooth); when it can't (not signed in, the
+ * book isn't on its server, no network), the phone sends it: a header message with the metadata, chapters, cover
+ * and listening position, then the audio file through a Data Layer channel. A book counts as sent only when the
+ * watch confirms it saved the whole file.
  */
 class WatchSender(
     private val context: Context,
@@ -150,11 +153,31 @@ class WatchSender(
     private suspend fun send(id: String): WatchTransfer.Stage {
         val book = library.book(id)?.takeIf { !it.deleted } ?: return WatchTransfer.Stage.FAILED
         val node = watchNode() ?: return WatchTransfer.Stage.NO_WATCH
+        when (askWatchToDownload(id, node)) {
+            WatchResult.Downloading -> return WatchTransfer.Stage.FROM_SERVER
+            // The server has it, but the watch has no room even for that: the phone's file won't fit either.
+            WatchResult.NoSpace -> return WatchTransfer.Stage.NO_SPACE
+            else -> Unit
+        }
         val copy = watchCopy(id) {}
         try {
             return sendFile(id, book, node, copy)
         } finally {
             copy?.delete()
+        }
+    }
+
+    /** The watch's answer to "take [id] from the server", or null when it didn't answer (an older watch app, say). */
+    private suspend fun askWatchToDownload(id: String, node: Node): WatchResult? {
+        val answer = CompletableDeferred<WatchResult>().also { results[id] = it }
+        return try {
+            messages.sendMessage(node.id, WatchPaths.SERVER_DOWNLOAD_PREFIX + id, ByteArray(0)).await()
+            withTimeoutOrNull(SERVER_ANSWER_TIMEOUT_MS) { answer.await() }
+        } catch (e: ApiException) {
+            Log.w(TAG, "Can't ask the watch about $id", e)
+            null
+        } finally {
+            results.remove(id, answer)
         }
     }
 
@@ -204,7 +227,7 @@ class WatchSender(
             return when (answer) {
                 WatchResult.Saved -> WatchTransfer.Stage.DONE
                 WatchResult.NoSpace -> WatchTransfer.Stage.NO_SPACE
-                is WatchResult.Failed, null -> {
+                WatchResult.Downloading, is WatchResult.Failed, null -> {
                     Log.w(TAG, "Watch didn't save $id: $answer")
                     WatchTransfer.Stage.FAILED
                 }
@@ -250,5 +273,7 @@ class WatchSender(
         private const val COVER_EDGE = 256
         /** The watch moves the file into its library and answers; a minute is plenty. */
         private const val RESULT_TIMEOUT_MS = 60_000L
+        /** The watch asks its server whether it has the book; past this the phone sends it over Bluetooth. */
+        private const val SERVER_ANSWER_TIMEOUT_MS = 20_000L
     }
 }

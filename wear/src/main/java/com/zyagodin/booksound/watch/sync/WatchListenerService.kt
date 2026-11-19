@@ -16,6 +16,7 @@ class WatchListenerService : WearableListenerService() {
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path.startsWith(WatchPaths.HEADER_PREFIX)) container.receiver.onHeader(event.data, event.sourceNodeId)
         if (event.path == WatchPaths.SERVER_AUTH_PATH) container.server.onLogin(event.data)
+        WatchPaths.bookId(event.path, WatchPaths.SERVER_DOWNLOAD_PREFIX)?.let { container.server.onPhoneOffersBook(it.value, event.sourceNodeId) }
     }
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {

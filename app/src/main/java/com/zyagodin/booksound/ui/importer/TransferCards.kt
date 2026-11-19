@@ -78,6 +78,7 @@ fun WatchTransfer.toRow(onCancel: () -> Unit) = TransferRow(
             WatchTransfer.Stage.SENDING -> progress?.let { "${(it * 100).toInt()}%" } ?: "…"
             WatchTransfer.Stage.SAVING -> stringResource(R.string.watch_stage_saving)
             WatchTransfer.Stage.DONE -> stringResource(R.string.server_stage_done)
+            WatchTransfer.Stage.FROM_SERVER -> stringResource(R.string.watch_stage_from_server)
             WatchTransfer.Stage.NO_WATCH -> stringResource(R.string.transfer_no_watch)
             WatchTransfer.Stage.NO_SPACE -> stringResource(R.string.transfer_no_space)
             WatchTransfer.Stage.FAILED -> stringResource(R.string.watch_failed_title)

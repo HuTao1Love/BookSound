@@ -2,7 +2,7 @@
     <string name="now_playing">Сейчас играет</string>
     <string name="on_phone">На телефоне</string>
     <string name="phone_unreachable">Телефон не ответил</string>
-    <string name="library_empty">Отправьте книгу с телефона: откройте её в BookSound, ⋮ → Отправить на часы.</string>
+    <string name="library_empty">Скачайте книгу с сервера BookSound ниже или отправьте её с телефона: откройте в BookSound, ⋮ → Отправить на часы.</string>
     <string name="receiving">Получение · %1$d%%</string>
     <string name="book_progress">%1$d%% · ещё %2$s</string>
     <string name="book_finished">Прослушана</string>
@@ -32,8 +32,21 @@
     <string name="server_all_here">Все книги сервера уже на часах.</string>
     <string name="server_sign_out">Выйти</string>
     <string name="server_downloading">Скачивание с сервера</string>
-    <string name="server_not_connected">Часы используют аккаунт телефона. Войдите на телефоне: Настройки → Сервер BookSound.</string>
+    <string name="server_not_connected">Войдите на часах, чтобы скачивать книги по Wi-Fi или LTE без телефона, или используйте аккаунт телефона.</string>
     <string name="server_sign_in_phone">Войти через телефон</string>
     <string name="server_asking_phone">Спрашиваю телефон… Если он вошёл на сервер, часы подключатся через пару секунд.</string>
     <string name="server_phone_missing">Телефон с BookSound недоступен.</string>
+    <string name="server_sign_in_watch">Войти на часах</string>
+    <string name="server_address">Адрес сервера</string>
+    <string name="server_user">Имя пользователя</string>
+    <string name="server_password">Пароль</string>
+    <string name="server_sign_in">Войти</string>
+    <string name="server_signing_in">Вход…</string>
+    <string name="server_cancel">Отмена</string>
+    <string name="server_wrong_password">Неверное имя или пароль</string>
+    <string name="server_too_many_attempts">Слишком много попыток, попробуйте позже</string>
+    <string name="server_unreachable">Сервер недоступен. Проверьте адрес и Wi-Fi или LTE на часах.</string>
+    <string name="server_sign_out_confirm">Нажмите ещё раз, чтобы выйти</string>
+    <string name="server_quality">Качество книг</string>
+    <string name="server_quality_original">Исходный файл</string>
 </resources>

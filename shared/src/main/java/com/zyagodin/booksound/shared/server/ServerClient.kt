@@ -64,6 +64,8 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     /** The same account over one network (e.g. a watch's Wi-Fi), without binding the whole app to it. */
     fun over(network: android.net.Network): ServerClient = ServerClient(
         http.newBuilder()
+            // Sockets pooled by the default client may belong to Bluetooth or another network.
+            .connectionPool(okhttp3.ConnectionPool())
             .socketFactory(network.socketFactory)
             .dns { host -> network.getAllByName(host).toList() }
             .build(),
@@ -84,9 +86,20 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
     /** Takes over a login handed over by the phone (a watch's own device and tokens). */
     fun adopt(url: String, tokens: TokenResponse) = store.save(accountOf(normalizeUrl(url), tokens))
 
-    suspend fun logout() {
-        runCatching { send("POST", ApiPaths.LOGOUT, "{}") }
-        store.clear()
+    suspend fun logout(clearImmediately: Boolean = false) {
+        if (!clearImmediately) {
+            runCatching { send("POST", ApiPaths.LOGOUT, "{}").close() }
+            store.clear()
+            return
+        }
+        val previous = store.takeAndClear() ?: return
+        val token = previous.accessToken ?: return
+        // Revoke using the captured token. Local sign-out already completed, including when offline.
+        runCatching {
+            execute(Request.Builder().url(endpoint(previous.url, ApiPaths.LOGOUT))
+                .header("Authorization", "Bearer $token")
+                .post("{}".toRequestBody(json)).build()).close()
+        }
     }
 
     suspend fun <T> get(path: String, serializer: KSerializer<T>): T = decode(serializer, authorized(path) { it.get() })
@@ -245,11 +258,13 @@ class ServerClient(http: OkHttpClient, private val store: ServerAccountStore) {
             val response = execute(Request.Builder().url(endpoint(latest.url, ApiPaths.REFRESH)).post(body.toRequestBody(json)).build(), checkStatus = false)
             if (response.code == 401) {
                 response.close()
-                store.clear()
+                store.clearIfCurrent(latest)
                 throw SignedOutException()
             }
             val tokens = decode(TokenResponse.serializer(), checked(response))
-            accountOf(latest.url, tokens).also(store::save).accessToken!!
+            val refreshed = accountOf(latest.url, tokens)
+            if (!store.replaceIfCurrent(latest, refreshed)) throw SignedOutException()
+            refreshed.accessToken!!
         }
     }
 

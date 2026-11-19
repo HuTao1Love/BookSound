@@ -70,8 +70,16 @@ class WatchProtocolTest {
     }
 
     @Test
+    fun `server download offers require exactly one book id`() {
+        assertEquals(BookId("abc"), WatchPaths.bookId(WatchPaths.SERVER_DOWNLOAD_PREFIX + "abc", WatchPaths.SERVER_DOWNLOAD_PREFIX))
+        assertNull(WatchPaths.bookId(WatchPaths.SERVER_DOWNLOAD_PREFIX, WatchPaths.SERVER_DOWNLOAD_PREFIX))
+        assertNull(WatchPaths.bookId(WatchPaths.SERVER_DOWNLOAD_PREFIX + "a/b", WatchPaths.SERVER_DOWNLOAD_PREFIX))
+        assertEquals(WatchResult.Failed("unsupported"), WatchResult.decode("failed:unsupported".toByteArray()))
+    }
+
+    @Test
     fun `results round trip`() {
-        listOf(WatchResult.Saved, WatchResult.NoSpace, WatchResult.Failed("size")).forEach {
+        listOf(WatchResult.Saved, WatchResult.NoSpace, WatchResult.Downloading, WatchResult.Failed("size")).forEach {
             assertEquals(it, WatchResult.decode(it.encode()))
         }
     }

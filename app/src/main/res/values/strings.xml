@@ -632,6 +632,7 @@
     <string name="transfer_from_server">From the server</string>
     <string name="transfer_to_watch">To the watch</string>
     <string name="transfer_no_watch">No watch connected</string>
+    <string name="watch_stage_from_server">The watch downloads it from the server</string>
     <string name="transfer_no_space">Not enough space on the watch</string>
     <string name="server_stage_finishing">Adding to the server library…</string>
     <string name="server_group_everything">Whole library</string>

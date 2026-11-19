@@ -62,6 +62,22 @@ class ServerAccountStore(context: Context) {
         _account.value = account
     }
 
+    /** A refresh finishing after sign-out or account replacement must not restore the old session. */
+    @Synchronized
+    fun replaceIfCurrent(previous: ServerAccount, next: ServerAccount): Boolean {
+        if (current != previous) return false
+        save(next)
+        return true
+    }
+
+    @Synchronized
+    fun takeAndClear(): ServerAccount? = current.also { clear() }
+
+    @Synchronized
+    fun clearIfCurrent(previous: ServerAccount) {
+        if (current == previous) clear()
+    }
+
     /** Position in the server's change feed; reset with the account, so another server is read from the start. */
     var cursor: String?
         get() = prefs.getString("cursor", null)

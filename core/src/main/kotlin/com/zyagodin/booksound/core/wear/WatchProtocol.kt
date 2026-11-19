@@ -44,6 +44,13 @@ object WatchPaths {
     const val RESULT_PREFIX = "/booksound/result/"
     const val POSITION_PREFIX = "/booksound/position/"
 
+    /**
+     * Message phone → watch, empty body: "download this book from the server yourself". Sent before a book goes over
+     * Bluetooth; the watch answers on [RESULT_PREFIX] + id with [WatchResult.Downloading] when it took the book over,
+     * or anything else (or nothing, an older watch app) and the phone sends the file itself.
+     */
+    const val SERVER_DOWNLOAD_PREFIX = "/booksound/server-download/"
+
     /** Data item with the watch app's version name, so the phone can tell when it is outdated. */
     const val WATCH_INFO_PATH = "/booksound/watch-info"
     /** Channel carrying a new watch app APK; the last path segment is its version. */
@@ -100,11 +107,14 @@ data class PhoneBook(
 sealed interface WatchResult {
     data object Saved : WatchResult
     data object NoSpace : WatchResult
+    /** The watch downloads the book from the server by itself (Wi-Fi or LTE). */
+    data object Downloading : WatchResult
     data class Failed(val reason: String) : WatchResult
 
     fun encode(): ByteArray = when (this) {
         Saved -> "saved"
         NoSpace -> "no_space"
+        Downloading -> "downloading"
         is Failed -> "failed:$reason"
     }.toByteArray(Charsets.UTF_8)
 
@@ -112,6 +122,7 @@ sealed interface WatchResult {
         fun decode(bytes: ByteArray): WatchResult = when (val text = bytes.toString(Charsets.UTF_8)) {
             "saved" -> Saved
             "no_space" -> NoSpace
+            "downloading" -> Downloading
             else -> Failed(text.removePrefix("failed:"))
         }
     }

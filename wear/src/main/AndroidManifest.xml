@@ -67,6 +67,8 @@
                     android:scheme="wear" />
                 <!-- The login to the user's server, handed over by the phone. -->
                 <data android:pathPrefix="/booksound/server-auth" />
+                <!-- "Take this book from the server": the phone asks before sending it over Bluetooth. -->
+                <data android:pathPrefix="/booksound/server-download/" />
             </intent-filter>
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />

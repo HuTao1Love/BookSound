@@ -3,7 +3,7 @@
     <string name="now_playing">Now playing</string>
     <string name="on_phone">On phone</string>
     <string name="phone_unreachable">The phone didn\'t answer</string>
-    <string name="library_empty">Send a book from the phone: open it in BookSound, ⋮ → Send to watch.</string>
+    <string name="library_empty">Download a book from your BookSound server below, or send one from the phone: open it in BookSound, ⋮ → Send to watch.</string>
     <string name="receiving">Receiving · %1$d%%</string>
     <string name="book_progress">%1$d%% · %2$s left</string>
     <string name="book_finished">Finished</string>
@@ -34,8 +34,21 @@
     <string name="server_all_here">Every book of the server is on the watch.</string>
     <string name="server_sign_out">Sign out</string>
     <string name="server_downloading">Downloading from the server</string>
-    <string name="server_not_connected">The watch uses the phone’s account. Sign in on the phone: Settings → BookSound server.</string>
+    <string name="server_not_connected">Sign in on the watch to download books over Wi-Fi or LTE without the phone, or use the phone’s account.</string>
     <string name="server_sign_in_phone">Sign in via the phone</string>
     <string name="server_asking_phone">Asking the phone… If it is signed in, the watch connects in a moment.</string>
     <string name="server_phone_missing">The phone with BookSound is out of reach.</string>
+    <string name="server_sign_in_watch">Sign in on the watch</string>
+    <string name="server_address">Server address</string>
+    <string name="server_user">User name</string>
+    <string name="server_password">Password</string>
+    <string name="server_sign_in">Sign in</string>
+    <string name="server_signing_in">Signing in…</string>
+    <string name="server_cancel">Cancel</string>
+    <string name="server_wrong_password">Wrong user name or password</string>
+    <string name="server_too_many_attempts">Too many attempts; try again later</string>
+    <string name="server_unreachable">The server is out of reach. Check the address and the watch’s Wi-Fi or LTE.</string>
+    <string name="server_sign_out_confirm">Tap again to sign out</string>
+    <string name="server_quality">Book quality</string>
+    <string name="server_quality_original">Original file</string>
 </resources>
