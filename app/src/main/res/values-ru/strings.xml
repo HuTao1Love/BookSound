@@ -640,6 +640,7 @@
     <string name="transfer_from_server">С сервера</string>
     <string name="transfer_to_watch">На часы</string>
     <string name="transfer_no_watch">Часы не подключены</string>
+    <string name="watch_stage_from_server">Часы скачивают её с сервера</string>
     <string name="transfer_no_space">На часах не хватает места</string>
     <string name="server_stage_finishing">Сервер добавляет книгу…</string>
     <string name="server_group_everything">Вся библиотека</string>

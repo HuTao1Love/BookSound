@@ -127,7 +127,7 @@ class WatchTransferService : Service() {
         if (container.appVisible || !canNotify()) return
         val shown = transfers.filter { it.stage != WatchTransfer.Stage.CANCELLED }
         if (shown.isEmpty()) return
-        val failed = shown.filter { it.stage != WatchTransfer.Stage.DONE }
+        val failed = shown.filter { it.stage != WatchTransfer.Stage.DONE && it.stage != WatchTransfer.Stage.FROM_SERVER }
         val title = if (failed.isEmpty()) getString(R.string.watch_sent_title) else getString(R.string.watch_failed_title)
         val notification = NotificationCompat.Builder(this, CHANNEL_RESULT)
             .setSmallIcon(R.drawable.ic_notification)
