@@ -68,6 +68,7 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     implementation(project(":shared"))
 
     implementation(platform(libs.androidx.compose.bom))

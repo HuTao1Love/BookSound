@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -70,6 +71,13 @@ fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBoo
     LaunchedEffect(phoneBook) { phoneExpected = null }
     val scope = rememberCoroutineScope()
     val listState = rememberTransformingLazyColumnState()
+    var cancelIncoming by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(cancelIncoming) {
+        if (cancelIncoming != null) {
+            delay(4_000)
+            cancelIncoming = null
+        }
+    }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(state = listState, contentPadding = contentPadding) {
@@ -128,12 +136,23 @@ fun LibraryScreen(container: WatchContainer, onOpenPlayer: () -> Unit, onOpenBoo
             }
             items(incoming, key = { "in-" + it.id }) { book ->
                 Button(
-                    onClick = {},
+                    onClick = {
+                        if (cancelIncoming == book.id) {
+                            cancelIncoming = null
+                            scope.launch {
+                                withContext(Dispatchers.IO) { container.receiver.cancel(book.id) }
+                                incoming = withContext(Dispatchers.IO) { container.receiver.incoming() }
+                            }
+                        } else cancelIncoming = book.id
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(),
                     border = ButtonDefaults.outlinedButtonBorder(enabled = true),
-                    icon = { Icon(Icons.Rounded.Downloading, contentDescription = null) },
-                    secondaryLabel = { Text(stringResource(R.string.receiving, (book.progress * 100).roundToInt())) },
+                    icon = { Icon(if (cancelIncoming == book.id) Icons.Rounded.Close else Icons.Rounded.Downloading, contentDescription = null) },
+                    secondaryLabel = {
+                        Text(if (cancelIncoming == book.id) stringResource(R.string.receiving_cancel_confirm)
+                        else stringResource(R.string.receiving, (book.progress * 100).roundToInt()) + " · " + stringResource(R.string.receiving_cancel_hint))
+                    },
                     label = { Text(book.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 )
             }

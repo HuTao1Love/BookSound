@@ -51,4 +51,6 @@
     <string name="server_sign_out_confirm">Tap again to sign out</string>
     <string name="server_quality">Book quality</string>
     <string name="server_quality_original">Original file</string>
+    <string name="receiving_cancel_confirm">Tap again to remove this transfer</string>
+    <string name="receiving_cancel_hint">Tap to cancel</string>
 </resources>

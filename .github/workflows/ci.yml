@@ -44,7 +44,7 @@ jobs:
       - name: Test
         run: |
           chmod +x gradlew
-          ./gradlew :core:test :api:test :server:test :web:typecheck :app:testDebugUnitTest \
+          ./gradlew :core:test :api:test :server:test :web:typecheck :app:testDebugUnitTest :wear:testDebugUnitTest \
             --continue \
             "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8"
 
